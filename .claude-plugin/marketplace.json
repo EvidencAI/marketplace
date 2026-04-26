@@ -1,24 +1,24 @@
 {
-  "name": "evidencai-plugins",
-  "owner": {
-    "name": "Stéphane Commenge — EvidencAI"
-  },
-  "metadata": {
-    "description": "Plugins EvidencAI pour Claude — mémoire persistante, veille, gouvernance IA",
-    "homepage": "https://mnemos.evidencai.com"
-  },
-  "plugins": [
-    {
-      "name": "mnemos",
-      "source": "./plugins/mnemos",
-      "description": "Mémoire persistante intelligente. 37 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
-      "version": "0.6.8"
+    "name": "evidencai-plugins",
+    "owner": {
+        "name": "Stéphane Commenge — EvidencAI"
     },
-    {
-      "name": "mon-greffier",
-      "source": "./plugins/mon-greffier",
-      "description": "Assistant du juge consulaire au Tribunal de Commerce. Authentification OAuth 2.1 explicite (authServerMetadataUrl) pour compatibilité Cowork. Rédaction de jugements commerciaux en 5 phases avec vérification juridique Legifrance et Judilibre via PISTE. Backend Supabase self-hosted EvidencAI (Scaleway Coolify).",
-      "version": "7.1.0"
-    }
-  ]
+    "metadata": {
+        "description": "Plugins EvidencAI pour Claude — mémoire persistante, veille, gouvernance IA",
+        "homepage": "https://mnemos.evidencai.com"
+    },
+    "plugins": [
+        {
+            "name": "mnemos",
+            "source": "./plugins/mnemos",
+            "description": "Mémoire persistante intelligente. 37 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
+            "version": "0.6.8"
+        },
+        {
+            "name": "mon-greffier",
+            "source": "./plugins/mon-greffier",
+            "description": "Assistant du juge consulaire au Tribunal de Commerce. L'authentification passe par un connecteur personnalisé Cowork (à ajouter dans Paramètres → Connecteurs avec l'URL https://api.mongreffier.evidencai.com/mcp), en attendant la correction du bug d'auth des plugins. Rédaction de jugements commerciaux en 5 phases avec vérification juridique Légifrance et Judilibre via PISTE. Backend Supabase self-hosted EvidencAI (Scaleway).",
+            "version": "8.0.0"
+        }
+    ]
 }

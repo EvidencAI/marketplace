@@ -8,6 +8,34 @@ description: "Première connexion à Mon Greffier"
 
 Ce guide s'affiche à la première utilisation du plugin. Le juge vient d'installer Mon Greffier et ouvre son premier fil Cowork. Claude doit l'accueillir chaleureusement, l'orienter vers l'inscription via le dashboard web (authentification OAuth 2.1, plus de mot de passe saisi dans le chat), et l'accompagner jusqu'à son premier dossier.
 
+## Étape 0 : Vérifier que le connecteur est ajouté
+
+Avant tout, vérifier que l'outil `mongreffier_whoami` est disponible dans Cowork.
+
+- Si l'outil n'existe pas (outils MCP non exposés) : le juge a installé le plugin mais pas encore ajouté le connecteur personnalisé. Afficher ce message et arrêter là :
+
+---
+
+**Une dernière étape avant de commencer.**
+
+Mon Greffier a besoin d'un petit lien technique avec Cowork pour fonctionner, un "connecteur personnalisé". C'est une manipulation à faire une seule fois.
+
+Dans Cowork :
+
+1. Ouvrez les **Paramètres** (icône en haut à droite).
+2. Allez dans la section **Connecteurs**.
+3. Tout en bas, cliquez sur **Ajouter un connecteur personnalisé**.
+4. Dans le champ URL, collez : `https://api.mongreffier.evidencai.com/mcp`
+5. Validez.
+
+Une fenêtre s'ouvrira pour vous connecter à Mon Greffier (via Google ou email). Connectez-vous, puis revenez me voir ici et dites-moi simplement "c'est bon". Je prendrai le relais.
+
+Si vous préférez que cette étape soit illustrée, une courte démonstration est disponible sur **https://mongreffier.evidencai.com/installation**.
+
+---
+
+- Si l'outil `mongreffier_whoami` existe mais retourne `OAuth access token required` sans que Cowork ouvre la fenêtre de connexion : le connecteur est ajouté mais le juge ne s'est pas encore authentifié. Demander de cliquer sur "Se connecter à Mon Greffier" dans Cowork, ou passer par l'étape 3.
+
 ## Étape 1 : Vérifier la connexion MCP
 
 Avant tout, vérifier silencieusement que les outils MCP répondent :

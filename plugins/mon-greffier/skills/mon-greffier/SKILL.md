@@ -16,7 +16,7 @@ Ce skill fonctionne en binôme avec un dashboard web.
 - **Le dashboard** (https://mongreffier.evidencai.com) : affiche, collecte les réponses du juge
 - **Supabase** : fait le pont (Edge Function MCP)
 
-Chaque phase est une conversation Cowork séparée. Le juge valide dans le dashboard, copie la commande affichée, et ouvre un nouveau fil Cowork.
+Le travail se fait en **deux fils Cowork** : un premier fil pour l'Extraction (qui consomme beaucoup de contexte avec les PDF volumineux), puis un second fil qui enchaîne toutes les phases suivantes (Cadrage, Décisions, Rédaction, Robustesse, Rédaction définitive). À chaque fin de phase, le juge valide dans le dashboard et colle dans le fil en cours la commande que le dashboard lui affiche.
 
 ## Outils MCP disponibles
 
