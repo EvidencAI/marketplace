@@ -20,6 +20,7 @@ Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil
 | Mode A | Outils MCP natifs mnemos_* (préféré) |
 | Mode B | Fallback → voir FALLBACK-MODE-B.md |
 
+OUTILS : fournis par le connecteur custom claude.ai "Mnemos" (33 outils, edge function). `quick_boot` et `admin` N'EXISTENT PAS côté connecteur : ne jamais les appeler.
 USERID : Mode A → userId:USER_ALIAS (identifiant court, ex: "stephane", défini à l'onboarding). Mode B (curl) → userId:USER_UUID.
 Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, FALLBACK-MODE-B.md, SYNC-MAIL-AGENDA-PROMPT.md
 
@@ -28,7 +29,7 @@ Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, FALLBACK-MODE-
 ## POST-COMPACTION
 
 Après toute compression de contexte :
-1. Appeler `mnemos_quick_boot(userId:USER_ALIAS)` (fallback : `mnemos_get_profile`)
+1. Appeler `mnemos_get_profile(userId:USER_ALIAS)` puis suivre le protocole REPRISE POST-COMPRESSION ci-dessous
 2. RELIRE ce skill en entier
 3. Résumer ce qui a été retrouvé, demander confirmation
 NE JAMAIS continuer en se fiant uniquement au résumé compressé.
@@ -39,10 +40,9 @@ NE JAMAIS continuer en se fiant uniquement au résumé compressé.
 
 Triggers : "ouvre un fil", "mnemos in", "session start", "lance Mnemos", ou appel implicite du skill.
 
-### Étape 1 : Quick Boot
-Appeler `mnemos_quick_boot(userId:USER_ALIAS)`.
-Retourne : profil, espaces actifs (top 5), atomes épinglés (top 8), dernier handover, mémoire transversale.
-Si quick_boot indisponible → `mnemos_get_profile(userId:USER_ALIAS)`.
+### Étape 1 : Boot
+Appeler `mnemos_session_start(userId:USER_ALIAS, sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé.
+Retourne : profil, espaces actifs, 3 derniers handovers, atomes épinglés.
 Si profil vide ou erreur "user not found" → LIRE **ONBOARDING.md** et suivre le flow.
 
 ### Étape 2 : Bloc d'accueil
@@ -65,8 +65,7 @@ Sur quel espace on travaille ?
 ```
 
 Le lien Dashboard DOIT apparaître à chaque ouverture de fil.
-Espace déjà mentionné ("mnemos in X") → appeler `session_start(userId:USER_ALIAS, spaceId:X)` directement.
-Sinon → attendre la réponse, puis `session_start(userId:USER_ALIAS, spaceId:X)`.
+Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(userId:USER_ALIAS, sessionId:même valeur, spaceId:X)` pour attacher la session à l'espace.
 Note : userId est TOUJOURS requis dans les appels MCP, sauf si la doc de l'outil le marque explicitement optionnel.
 Résolution nom : `list_spaces` + matching souple insensible à la casse.
 
@@ -104,9 +103,7 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mnemos out
 ## COMPORTEMENT AUTOMATIQUE
 
 ### Extraction d'atomes
-L'extraction est **automatique** via le transcript-watcher intégré au bundle MCP.
-Le watcher parse les échanges, bufferise, et déclenche l'extraction Haiku en arrière-plan.
-Pas d'action LLM requise. Pas de log_exchange à appeler.
+ÉTAT ACTUEL (depuis la migration cloud du 08/07/2026) : le transcript-watcher local est HORS SERVICE en session cloud, il n'y a PAS d'extraction automatique. La collecte repose sur : (1) la création proactive d'atomes ci-dessous, (2) le handover et la mémoire de clôture. Un automatisme v3 côté serveur est en conception (étape 4 du plan). Ne pas promettre d'extraction automatique à l'utilisateur.
 
 ### Création proactive d'atomes
 Si l'utilisateur exprime une décision, leçon, contradiction, intention, fait notable...
@@ -123,8 +120,8 @@ Exemples — ça n'en mérite PAS :
 - Discussion technique transitoire qui sera dans le handover de clôture
 
 ### Hygiène mémoire
-`triage_atoms` : quand > 30% d'atomes basse confiance, ou sur demande via `admin(action:"triage_atoms")`.
-`garbage_collect` et `health_check` : automatisés via pg_cron, aussi déclenchables manuellement via `admin(action:"garbage_collect")` et `admin(action:"health_check")`. Détails dans REFERENCE.md.
+`triage_atoms` : quand > 30% d'atomes basse confiance, ou sur demande.
+`garbage_collect` et `health_check` : automatisés via pg_cron, aussi appelables directement (outils du même nom). Détails dans REFERENCE.md.
 
 ---
 
@@ -132,7 +129,7 @@ Exemples — ça n'en mérite PAS :
 
 | L'utilisateur dit | Action |
 |-------------------|--------|
-| (auto au 1er message) | quick_boot |
+| (auto au 1er message) | session_start (sans spaceId) |
 | mnemos in X, ouvre X | session_start(spaceId:X) |
 | mnemos out, fin de fil | session_end + write_memory |
 | retiens que..., décision:, fait:, j'ai appris | create_atom_manual (type selon contenu) |
@@ -141,11 +138,11 @@ Exemples — ça n'en mérite PAS :
 | crée dossier X | create_space(name:X) |
 | analyse les tensions | cross_insights |
 | brief matinal | get_context(mode:"morning") |
-| stats, état mémoire | admin(action:"get_stats") |
+| stats, état mémoire | get_stats |
 | mon profil, qui suis-je | get_profile |
 | montre la mémoire de X | read_memory(spaceId:X, type:"codex") |
 | injecte ce document | ingest_document |
-| diagnostic, santé | admin(action:"health_check") |
+| diagnostic, santé | health_check |
 | contact:, qui est X | upsert_contact / search_contacts |
 | mnemos help | afficher cette table en blocs thématiques |
 
