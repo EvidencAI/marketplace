@@ -1,9 +1,9 @@
 {
   "name": "mnemos",
-  "version": "0.6.8",
-  "description": "Mémoire persistante intelligente pour Claude. 32 outils MCP : graphe de connaissances (10 types d'atomes, espaces, connexions), rappel contextuel automatique, neurone cross-insights, quick_boot, extraction continue via transcript-watcher avec déduplication et supersession temporelle, GC v2 pgvector, auth (login/signup/logout), collecte mail/agenda (macOS scheduled task + connecteurs Anthropic), quotas par plan (Free/Pro/Max). Multi-tenant Supabase + Stripe.",
+  "version": "0.7.0",
+  "description": "Mémoire persistante intelligente pour Claude. Plugin = skills et commandes ; les 33 outils MCP sont fournis par le connecteur custom claude.ai \"Mnemos\" (edge function Supabase). Graphe de connaissances (10 types d'atomes, espaces, connexions), rappel contextuel, neurone cross-insights, quick_boot, GC v2 pgvector, collecte mail/agenda (macOS scheduled task + connecteurs Anthropic), quotas par plan (Free/Pro/Max). Multi-tenant Supabase + Stripe.",
   "author": {
-    "name": "EvidencAI v0.6.8"
+    "name": "EvidencAI v0.7.0"
   },
   "keywords": [
     "memory",
@@ -15,16 +15,5 @@
     "cross-insights",
     "quotas",
     "saas"
-  ],
-  "mcpServers": {
-    "mnemos": {
-      "command": "node",
-      "args": [
-        "mcp-server/index.cjs"
-      ],
-      "env": {
-        "SUPABASE_URL": "https://hpbsowihyydzdnxuzoxs.supabase.co"
-      }
-    }
-  }
+  ]
 }
