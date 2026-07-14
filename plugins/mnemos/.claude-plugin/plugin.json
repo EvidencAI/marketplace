@@ -1,7 +1,7 @@
 {
   "name": "mnemos",
   "version": "0.8.0",
-  "description": "Mémoire persistante intelligente pour Claude. Plugin = skills, commandes et hooks ; les 35 outils MCP sont fournis par le connecteur custom claude.ai \"Mnemos\" (edge function Supabase). Graphe de connaissances (10 types d'atomes, espaces, connexions), watcher v3 embarqué (hooks UserPromptSubmit et Stop : injection FACE-A par message + collecte automatique des échanges), rappel contextuel, neurone cross-insights, GC v2 pgvector, collecte mail/agenda (macOS scheduled task + connecteurs Anthropic), quotas par plan (Free/Pro/Max). Multi-tenant Supabase + Stripe.",
+  "description": "Mémoire persistante pour Claude. Plugin = skills, commandes et hooks ; les 35 outils MCP sont fournis par le connecteur custom claude.ai Mnemos (edge function Supabase). Graphe de connaissances (10 types d'atomes, espaces, connexions), watcher v3 embarqué : injection FACE-A par message et collecte automatique des échanges. Rappel contextuel, neurone cross-insights, collecte mail/agenda, quotas par plan. Multi-tenant Supabase + Stripe.",
   "author": {
     "name": "EvidencAI"
   },
