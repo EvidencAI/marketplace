@@ -21,6 +21,8 @@ Où trouver ces valeurs :
 
 Premier setup : voir ONBOARDING.md.
 
+Dette technique (mono-tenant) : dans ce déploiement, toute valeur de `userId` qui n'est pas un UUID valide est silencieusement remplacée par l'utilisateur unique configuré côté serveur (filet de sécurité mono-tenant, pas une résolution d'alias par nom comme pour les espaces). Ce n'est pas un défaut à corriger maintenant, mais si Mnemos devient multi-utilisateur un jour, ce mécanisme devra être revu AVANT : sinon un `userId` mal formé de n'importe quel appelant finirait associé au mauvais compte.
+
 ---
 
 ## 10 types d'atomes (heuristique de typage)
@@ -44,13 +46,12 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 
 ## Outils MCP (référence rapide)
 
-35 outils exposés au LLM, regroupés par domaine :
+34 outils exposés au LLM, regroupés par domaine :
 
-**Auth** (4) : login, signup, logout, whoami
 **Espaces** (4) : list_spaces, create_space, update_space, suggest_spaces
 **Atomes** (4) : search_atoms, create_atom_manual, update_atom, toggle_pin_atom
-**Contexte** (2) : get_context (6 modes : auto, onboard, recall, briefing, morning, explore), recall (rappel FACE-A automatique, hook UserPromptSubmit)
-**Admin** (1) : admin (actions : get_stats, triage_atoms, garbage_collect, health_check)
+**Contexte** (2) : get_context (5 modes : auto, onboard, recall, briefing, explore), recall (rappel FACE-A automatique, hook UserPromptSubmit)
+**Maintenance** (4) : get_stats, health_check, triage_atoms, garbage_collect
 **Sessions** (2) : session_start, session_end
 **Mémoire** (2) : write_memory, read_memory
 **Profil** (3) : get_profile, update_profile, get_calibration
@@ -64,13 +65,14 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 **Feedback** (1) : submit_feedback
 
 Note : log_exchange et extract_atoms sont appelés automatiquement par les hooks du watcher v3 (UserPromptSubmit/Stop). Le LLM n'a pas besoin de les appeler en routine, mais ils sont disponibles si nécessaire (debug, extraction manuelle).
-Note : get_stats, health_check, triage_atoms, garbage_collect ne sont PAS des outils standalone. Ils s'appellent via `mnemos_admin(action:"nom_action")`.
+Note : get_stats, health_check, triage_atoms, garbage_collect sont des outils standalone (`mnemos_get_stats`, `mnemos_health_check`, `mnemos_triage_atoms`, `mnemos_garbage_collect`). Il n'existe plus de dispatcher `mnemos_admin`.
 
 Note spaceId : Mode A accepte le **nom**. Mode B exige le **UUID**.
+Note read_memory/write_memory : acceptent désormais le **nom** d'espace (comme les autres outils avec résolution de nom), en plus de l'UUID.
 
 ---
 
-## get_context — 6 modes
+## get_context — 5 modes
 
 | Mode | Atomes | Usage |
 |------|--------|-------|
@@ -78,8 +80,26 @@ Note spaceId : Mode A accepte le **nom**. Mode B exige le **UUID**.
 | onboard | 25 | Ouverture de fil |
 | recall | 8 | Rappel ponctuel |
 | briefing | 15 | Résumé projet |
-| morning | complet | Brief matinal (insights + mails + RDV) |
 | explore | 20 | Brainstorm, exploration |
+
+---
+
+## ingest_events — format des événements
+
+Chaque élément du tableau `events` :
+
+| Champ | Requis | Type | Exemple |
+|-------|--------|------|---------|
+| source | oui | string | "gmail" |
+| event_type | oui | string | "email" |
+| event_id | oui | string | identifiant unique (dédup) |
+| event_timestamp | oui | string ISO 8601 | "2026-07-14T09:00:00Z" |
+| subject | non | string | — |
+| body_preview | non | string | — |
+| participants | non | array de strings | — |
+| metadata | non | objet libre | — |
+
+En cas d'erreur d'insertion sur un ou plusieurs événements, la réponse inclut désormais un tableau `errorDetails` (`{event_id, message}` par événement en échec), en plus du compteur `errors`.
 
 ---
 
@@ -100,7 +120,7 @@ Note : le cosine est inadapté pour détecter la supersession (vocabulaire oppos
 GC v2 pgvector : calculs de similarité côté PostgreSQL. 3 étapes : lifecycle insights, archivage obsolètes, déduplication (>=0.95 fusion auto, 0.85-0.95 rapport). Consolidation orphelins par espace. Fonctions SQL : `find_duplicate_atoms`, `find_orphan_atoms`, `find_orphan_pairs_by_space`.
 
 ### health_check (pg_cron quotidien 5h UTC)
-Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, purge connexions obsolètes. Aussi appelable manuellement : `mnemos_admin(action:"health_check", userId:USER_ALIAS, repair:true)`.
+Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, purge connexions obsolètes. Aussi appelable manuellement : `mnemos_health_check(userId:USER_ALIAS, repair:true)`.
 
 ---
 
