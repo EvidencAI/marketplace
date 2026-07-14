@@ -17,8 +17,10 @@ if [ ! -f "$TOKEN_PATH" ]; then
 fi
 
 # Le fichier jeton porte des lignes de commentaire (#...) avant la ligne du
-# jeton lui-meme : on ignore les lignes vides et celles commencant par #,
-# la premiere ligne restante (trimmee) est le jeton.
+# jeton, qui est elle-meme au format NOM_VARIABLE=valeur : on ignore les
+# lignes vides et celles commencant par #, et sur la premiere ligne valide
+# restante on ne garde que la partie apres le premier '=' (ou la ligne
+# entiere si elle ne contient pas de '=').
 TOKEN_CONTENT="$(python3 -c "
 import sys
 token = ''
@@ -27,7 +29,7 @@ with open(sys.argv[1], 'r', encoding='utf-8') as f:
         stripped = line.strip()
         if not stripped or stripped.startswith('#'):
             continue
-        token = stripped
+        token = stripped.split('=', 1)[1] if '=' in stripped else stripped
         break
 if not token:
     sys.exit(1)
