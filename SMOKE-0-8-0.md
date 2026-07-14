@@ -8,7 +8,7 @@ une fois le zip installé.
 ## Étape 0 : installation
 
 1. Dans Claude Desktop, supprimer le plugin Mnemos existant (version
-   0.7.3-test).
+   0.7.3-test, la version de test installée actuellement).
 2. Installer `plugin-mnemos0.8.0.zip` (dans `MNEMOS 07 26/plugin/`).
 3. Redémarrer Claude Desktop si nécessaire.
 4. Ouvrir un fil Cowork neuf (le plugin ne se charge pas dans un fil déjà
@@ -39,8 +39,9 @@ une fois le zip installé.
 
 ## Vérification 4 : rollback
 
-- Confirmer que le zip de la version précédente (0.7.1) est toujours
-  disponible en local, au cas où il faudrait revenir en arrière.
+- Confirmer que le zip de la dernière version de production (0.7.1, avant la
+  0.7.3-test) est toujours disponible en local, au cas où il faudrait revenir
+  en arrière.
 - Confirmer que le jeton hook de la version 0.8.0 peut être révoqué seul,
   sans impact sur les autres clés (Supabase, Anthropic, Voyage) ni sur les
   autres installations.
