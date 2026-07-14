@@ -1,0 +1,15 @@
+{
+  "session_id": "726ec160-e1f5-5bd0-b3e7-3de9785ea2be",
+  "transcript_path": "plugins/mnemos/hooks/tests/fixtures/transcript-missing-last-user.jsonl",
+  "cwd": "/home/claude",
+  "prompt_id": "67128ddd-4af5-4069-902c-42043a237e6f",
+  "permission_mode": "default",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "ok",
+  "background_tasks": [],
+  "session_crons": []
+}
