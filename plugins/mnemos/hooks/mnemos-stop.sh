@@ -105,7 +105,9 @@ try:
                 continue
             if entry.get("type") != "user":
                 continue
-            message = entry.get("message") or {}
+            message = entry.get("message")
+            if not isinstance(message, dict):
+                continue
             content = message.get("content")
             if not isinstance(content, str):
                 continue
