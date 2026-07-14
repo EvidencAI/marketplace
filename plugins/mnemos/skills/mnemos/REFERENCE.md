@@ -44,14 +44,13 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 
 ## Outils MCP (référence rapide)
 
-32 outils exposés au LLM (v0.4.2), regroupés par domaine :
+35 outils exposés au LLM, regroupés par domaine :
 
 **Auth** (4) : login, signup, logout, whoami
 **Espaces** (3) : list_spaces, create_space, update_space
 **Atomes** (4) : search_atoms, create_atom_manual, update_atom, toggle_pin_atom
 **Contexte** (1) : get_context (6 modes : auto, onboard, recall, briefing, morning, explore)
 **Admin** (1) : admin (actions : get_stats, triage_atoms, garbage_collect, health_check)
-**Boot** (1) : quick_boot (contexte rapide en un appel)
 **Sessions** (2) : session_start, session_end
 **Mémoire** (2) : write_memory, read_memory
 **Profil** (2) : get_profile, update_profile

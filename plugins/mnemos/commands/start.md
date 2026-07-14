@@ -1,6 +1,6 @@
 ---
 description: Start Mnemos — persistent memory for Claude
-allowed-tools: ["plugin:mnemos:mnemos - mnemos_whoami", "plugin:mnemos:mnemos - mnemos_login", "plugin:mnemos:mnemos - mnemos_signup", "plugin:mnemos:mnemos - mnemos_quick_boot", "plugin:mnemos:mnemos - mnemos_session_start", "plugin:mnemos:mnemos - mnemos_get_profile", "plugin:mnemos:mnemos - mnemos_get_stats", "plugin:mnemos:mnemos - mnemos_list_spaces", "plugin:mnemos:mnemos - mnemos_read_memory", "plugin:mnemos:mnemos - mnemos_search_atoms", "Read"]
+allowed-tools: ["plugin:mnemos:mnemos - mnemos_whoami", "plugin:mnemos:mnemos - mnemos_login", "plugin:mnemos:mnemos - mnemos_signup", "plugin:mnemos:mnemos - mnemos_session_start", "plugin:mnemos:mnemos - mnemos_get_profile", "plugin:mnemos:mnemos - mnemos_get_stats", "plugin:mnemos:mnemos - mnemos_list_spaces", "plugin:mnemos:mnemos - mnemos_read_memory", "plugin:mnemos:mnemos - mnemos_search_atoms", "Read"]
 argument-hint: [espace] ou "help"
 ---
 
@@ -38,7 +38,7 @@ Dashboard : https://mnemos.evidencai.com
 ### 2. Utilisateur connecte — traiter les arguments
 
 Si `$ARGUMENTS` est vide ou absent :
-- Executer `mnemos_quick_boot(userId: <userId du whoami>)`
+- Executer `mnemos_session_start(userId: <userId du whoami>)`
 - Afficher le bloc d'accueil avec espaces, commandes, lien Dashboard.
 - Demander "Sur quel espace on travaille ?"
 
@@ -59,7 +59,7 @@ Si `$ARGUMENTS` = "signup" :
 - Si echec : afficher l'erreur
 
 Si `$ARGUMENTS` = un nom d'espace (ex: "Developpement Mnemos", "CodirIA") :
-- Executer quick_boot(userId) + session_start(spaceId: $ARGUMENTS)
+- Executer session_start(userId, spaceId: $ARGUMENTS)
 - Charger read_memory(spaceId, type:"all")
 - Afficher le contexte et demander confirmation
 

@@ -1,6 +1,6 @@
 # Mnemos — Onboarding nouvel utilisateur
 
-Ce flow se déclenche quand `quick_boot` retourne un profil vide ou une erreur "user not found".
+Ce flow se déclenche quand `mnemos_session_start` retourne un profil vide ou une erreur "user not found".
 Le LLM DOIT lire ce fichier et suivre les étapes dans l'ordre.
 
 ---

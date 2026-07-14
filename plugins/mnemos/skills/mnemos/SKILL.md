@@ -20,7 +20,7 @@ Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil
 | Mode A | Outils MCP natifs mnemos_* (préféré) |
 | Mode B | Fallback → voir FALLBACK-MODE-B.md |
 
-OUTILS : fournis par le connecteur custom claude.ai "Mnemos" (33 outils, edge function). `quick_boot` et `admin` N'EXISTENT PAS côté connecteur : ne jamais les appeler.
+OUTILS : fournis par le connecteur custom claude.ai "Mnemos" (35 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. `mnemos_admin` regroupe get_stats, triage_atoms, garbage_collect, health_check.
 USERID : Mode A → userId:USER_ALIAS (identifiant court, ex: "stephane", défini à l'onboarding). Mode B (curl) → userId:USER_UUID.
 Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, FALLBACK-MODE-B.md, SYNC-MAIL-AGENDA-PROMPT.md
 
@@ -42,7 +42,7 @@ Triggers : "ouvre un fil", "mnemos in", "session start", "lance Mnemos", ou appe
 
 ### Étape 1 : Boot
 Appeler `mnemos_session_start(userId:USER_ALIAS, sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé.
-Retourne : profil, espaces actifs, 3 derniers handovers, atomes épinglés.
+Retourne : profil, espaces actifs, 3 derniers handovers, atomes épinglés, codex de l'espace « Mémoire générale » (injecté systématiquement au boot).
 Si profil vide ou erreur "user not found" → LIRE **ONBOARDING.md** et suivre le flow.
 
 ### Étape 2 : Bloc d'accueil
@@ -94,7 +94,7 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mnemos out
 
 1. **workSummary** (600-800 mots) : résumé narratif exhaustif. Inclure : décisions (avec contexte), problèmes résolus (comment), travail produit, limitations, prochaines étapes, questions ouvertes.
 2. **Handover** : `mnemos_session_end(userId:USER_ALIAS, workSummary:...)`
-3. **Mémoire** : lire `read_memory(userId:USER_ALIAS, spaceId:"[espace actif]", type:"codex")` → rédiger document COMPLET (800-1200 mots, réécriture totale, pas un append) → `write_memory(userId:USER_ALIAS, spaceId:"[espace actif]", type:"codex", content:...)`. Structure : État actuel / Architecture / Décisions actives / Limitations / Prochaines étapes.
+3. **Mémoire** : le codex de l'espace est régénéré automatiquement par `session_end` (Haiku, en tâche de fond, fail-soft). Aucun appel `read_memory`/`write_memory` manuel n'est nécessaire pour cette étape.
 4. **Vérifier** succès handover + mémoire. Si échec → voir REFERENCE.md § Gestion des erreurs.
 5. **Confirmer** : "Session clôturée. Handover (XXX mots) et mémoire mise à jour pour [espace]."
 
@@ -103,7 +103,7 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mnemos out
 ## COMPORTEMENT AUTOMATIQUE
 
 ### Extraction d'atomes
-ÉTAT ACTUEL (depuis la migration cloud du 08/07/2026) : le transcript-watcher local est HORS SERVICE en session cloud, il n'y a PAS d'extraction automatique. La collecte repose sur : (1) la création proactive d'atomes ci-dessous, (2) le handover et la mémoire de clôture. Un automatisme v3 côté serveur est en conception (étape 4 du plan). Ne pas promettre d'extraction automatique à l'utilisateur.
+Depuis le watcher v3 embarqué dans le plugin (0.8.0), la collecte est automatique : chaque échange est capturé puis transformé en atomes sans action de l'utilisateur (voir § Watcher v3 ci-dessous). La création proactive d'atomes ci-dessous reste recommandée pour les décisions importantes, mais n'est plus le seul canal d'alimentation de la mémoire.
 
 ### Création proactive d'atomes
 Si l'utilisateur exprime une décision, leçon, contradiction, intention, fait notable...
@@ -122,6 +122,13 @@ Exemples — ça n'en mérite PAS :
 ### Hygiène mémoire
 `triage_atoms` : quand > 30% d'atomes basse confiance, ou sur demande.
 `garbage_collect` et `health_check` : automatisés via pg_cron, aussi appelables directement (outils du même nom). Détails dans REFERENCE.md.
+
+### Watcher v3 (hooks du plugin)
+Deux hooks embarqués dans le plugin assurent la mémoire automatique, sans action de l'utilisateur :
+- **À chaque message utilisateur** : rappel contextuel FACE-A injecté avant la réponse.
+- **À la fin de chaque échange** : l'échange est collecté automatiquement pour alimenter les atomes.
+
+Un journal technique est tenu dans `/tmp/mnemos-hook.log` (diagnostic local). Les deux hooks ignorent les notifications système et les messages trop courts pour être utiles. Limite connue : un rappel planifié (wakeup) au libellé libre peut ne pas être filtré et apparaître comme un message utilisateur normal.
 
 ---
 
