@@ -20,7 +20,7 @@ Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil
 | Mode A | Outils MCP natifs mnemos_* (préféré) |
 | Mode B | Fallback → voir FALLBACK-MODE-B.md |
 
-OUTILS : fournis par le connecteur custom claude.ai "Mnemos" (35 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. `mnemos_admin` regroupe get_stats, triage_atoms, garbage_collect, health_check.
+OUTILS : fournis par le connecteur custom claude.ai "Mnemos" (34 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
 USERID : Mode A → userId:USER_ALIAS (identifiant court, ex: "stephane", défini à l'onboarding). Mode B (curl) → userId:USER_UUID.
 Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, FALLBACK-MODE-B.md, SYNC-MAIL-AGENDA-PROMPT.md
 
@@ -144,7 +144,7 @@ Un journal technique est tenu dans `/tmp/mnemos-hook.log` (diagnostic local). Le
 | mes espaces, mes dossiers | list_spaces |
 | crée dossier X | create_space(name:X) |
 | analyse les tensions | cross_insights |
-| brief matinal | get_context(mode:"morning") |
+| brief matinal | get_context(mode:"auto") (brief complet à venir, chantier dédié) |
 | stats, état mémoire | get_stats |
 | mon profil, qui suis-je | get_profile |
 | montre la mémoire de X | read_memory(spaceId:X, type:"codex") |
