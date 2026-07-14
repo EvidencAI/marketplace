@@ -33,3 +33,7 @@ fichier de commande (commands/start.md, frontmatter + 2 lignes de corps).
   connecteur : ne jamais l'appeler"). Aucune occurrence imprévue.
 - Tests unitaires plugins/mnemos/hooks/tests/run-unit-tests.sh : 21/21 verts
   (ces modifications ne touchent aucun script de hook, résultat attendu).
+
+## Validation de l'exception (CLAUDE.md §Exception)
+Exception "coder en direct" validée par Stéphane le 14/07/2026, story S4, sur la
+base du diff relu et des tests verts ci-dessus. Pas de reprise via Qwen.
