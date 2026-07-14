@@ -19,7 +19,7 @@ cleanup_and_exit() {
   done
   exit 0
 }
-trap cleanup_and_exit EXIT
+trap cleanup_and_exit EXIT INT TERM
 
 START_MS="$(python3 -c 'import time; print(int(time.time()*1000))')"
 
@@ -143,7 +143,8 @@ try:
 except Exception:
     content = ""
 
-if content.startswith("[SYSTEM NOTIFICATION - NOT USER INPUT]") or "<task-notification>" in content:
+trimmed = content.strip()
+if trimmed.startswith("[SYSTEM NOTIFICATION - NOT USER INPUT]") or "<task-notification>" in content:
     print("FILTERED")
 else:
     print("OK")
@@ -153,6 +154,36 @@ PYEOF
 if [ "$FILTER_DECISION" != "OK" ]; then
   DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
   mnemos_log "stop" "log_exchange" "$DURATION_MS" "filtered-system" 0
+  exit 0
+fi
+
+# Un message user ou assistant vide ne doit pas etre archive (l'edge ne
+# valide rien cote serveur sur ces champs, ce serait deposé tel quel).
+EMPTY_CHECK="$(python3 - "$LAST_USER_FILE" "$ASSISTANT_FILE" <<'PYEOF'
+import sys
+
+user_path, assistant_path = sys.argv[1], sys.argv[2]
+
+def read_file(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+user_message = read_file(user_path)
+assistant_response = read_file(assistant_path)
+
+if user_message.strip() == "" or assistant_response.strip() == "":
+    print("EMPTY")
+else:
+    print("OK")
+PYEOF
+)"
+
+if [ "$EMPTY_CHECK" != "OK" ]; then
+  DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
+  mnemos_log "stop" "log_exchange" "$DURATION_MS" "empty-message" 0
   exit 0
 fi
 
@@ -196,10 +227,12 @@ with open(body_path, "w", encoding="utf-8") as f:
     json.dump(payload, f)
 PYEOF
 
+CFGFILE="$(mktemp /tmp/mnemos-hook-stop-cfg.XXXXXX)"
+CLEANUP_FILES+=("$CFGFILE")
 RESP_FILE="$(mktemp /tmp/mnemos-hook-stop-resp.XXXXXX)"
 CLEANUP_FILES+=("$RESP_FILE")
 
-mnemos_curl_post "$BODY_FILE" > "$RESP_FILE" 2>/dev/null
+mnemos_curl_post "$BODY_FILE" "$CFGFILE" "$RESP_FILE"
 CURL_RC="${MNEMOS_LAST_CURL_RC:-1}"
 HTTP_CODE="${MNEMOS_LAST_HTTP_CODE:-000}"
 RESP_SIZE="$(wc -c < "$RESP_FILE" 2>/dev/null | tr -d ' ')"

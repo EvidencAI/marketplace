@@ -16,14 +16,22 @@ if [ ! -f "$TOKEN_PATH" ]; then
   exit 1
 fi
 
+# Le fichier jeton porte des lignes de commentaire (#...) avant la ligne du
+# jeton lui-meme : on ignore les lignes vides et celles commencant par #,
+# la premiere ligne restante (trimmee) est le jeton.
 TOKEN_CONTENT="$(python3 -c "
 import sys
+token = ''
 with open(sys.argv[1], 'r', encoding='utf-8') as f:
-    content = f.read().strip()
-    if not content:
-        print('', file=sys.stderr)
-        sys.exit(1)
-    print(content)
+    for line in f:
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        token = stripped
+        break
+if not token:
+    sys.exit(1)
+print(token)
 " "$TOKEN_PATH" 2>/dev/null)"
 
 if [ -z "$TOKEN_CONTENT" ]; then
@@ -36,6 +44,9 @@ mnemos_secure_curl() {
   local body_file="$1"
   local cfgfile resp_file http_code curl_rc
   cfgfile="$(mktemp /tmp/mnemos-integ-cfg.XXXXXX)"
+  # Nettoyage garanti a la sortie de CETTE fonction (meme sur un kill en
+  # plein curl) : le cfgfile contient le jeton en clair.
+  trap 'rm -f "$cfgfile"' RETURN
   chmod 600 "$cfgfile"
   cat > "$cfgfile" <<CFGEOF
 header = "Authorization: Bearer ${TOKEN_CONTENT}"
@@ -44,7 +55,6 @@ CFGEOF
   resp_file="$(mktemp /tmp/mnemos-integ-resp.XXXXXX)"
   http_code="$(curl -s --max-time 3 -K "$cfgfile" -X POST --data-binary "@${body_file}" -o "$resp_file" -w '%{http_code}' "$EDGE_URL" 2>/dev/null)"
   curl_rc=$?
-  rm -f "$cfgfile"
   echo "$http_code" "$curl_rc" "$resp_file"
 }
 
@@ -69,6 +79,8 @@ BODYEOF
     return 1
   fi
 
+  # Ne jamais afficher le contenu du bloc FACE-A (memoire potentiellement
+  # sensible) : uniquement une information de taille, non le texte lui-meme.
   local content
   content="$(python3 - "$resp_file" <<'PYEOF'
 import json, sys
@@ -77,11 +89,14 @@ try:
         data = json.load(f)
     if 'result' in data and 'content' in data['result'] and len(data['result']['content']) > 0:
         text = data['result']['content'][0].get('text', '')
-        print(text[:200] if text else 'recal : reponse vide (rien de pertinent trouve)')
+        if text:
+            print(f"recall : bloc non vide ({len(text)} caracteres)")
+        else:
+            print("recall : bloc vide (rien de pertinent trouve)")
     else:
-        print('recall : reponse vide (rien de pertinent trouve)')
+        print("recall : bloc vide (rien de pertinent trouve)")
 except Exception as e:
-    print(f'recall : erreur parsing JSON: {e}')
+    print(f"recall : erreur parsing JSON: {e}")
 PYEOF
 )"
   rm -f "$resp_file"
@@ -157,15 +172,24 @@ BODYEOF
     return 1
   fi
 
-  # Le rejet doit etre un HTTP 200 avec error dans le corps
+  # Le rejet doit etre un HTTP 200 avec un objet error JSON-RPC precis
+  # (code -32601 ou message "not allowed for hook token"), pas juste la
+  # presence generique d'une cle "error" (qui pourrait apparaitre pour une
+  # tout autre raison et donner une fausse assurance).
   local has_error
   has_error="$(python3 - "$resp_file" <<'PYEOF'
 import json, sys
 try:
     with open(sys.argv[1], 'r', encoding='utf-8') as f:
         data = json.load(f)
-    if 'error' in data:
-        print('true')
+    err = data.get('error')
+    if isinstance(err, dict):
+        code = err.get('code')
+        message = err.get('message', '')
+        if code == -32601 or 'not allowed for hook token' in message:
+            print('true')
+        else:
+            print('false')
     else:
         print('false')
 except Exception:
@@ -175,10 +199,10 @@ PYEOF
   rm -f "$resp_file"
 
   if [ "$has_error" = "true" ]; then
-    echo "PASS: forbidden_tool : rejet correct (HTTP 200 avec error dans le corps)"
+    echo "PASS: forbidden_tool : rejet correct (HTTP 200, error.code=-32601)"
     return 0
   else
-    echo "FAIL: forbidden_tool : rejet incorrect (HTTP $http_code, corps sans 'error')"
+    echo "FAIL: forbidden_tool : rejet incorrect ou absent (HTTP $http_code, corps sans error.code=-32601)"
     return 1
   fi
 }

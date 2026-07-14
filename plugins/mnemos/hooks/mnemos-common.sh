@@ -44,17 +44,30 @@ mnemos_resolve_space_id() {
   fi
 
   if [ -n "$cache_file" ] && [ -f "$cache_file" ]; then
-    python3 - "$cache_file" <<'PYEOF'
+    local cached_value
+    cached_value="$(python3 - "$cache_file" <<'PYEOF'
 import json, sys
 path = sys.argv[1]
 try:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    print(data.get("spaceId", "") or "")
+    print("HIT:" + (data.get("spaceId", "") or ""))
 except Exception:
-    print("")
+    print("MISS")
 PYEOF
-    return 0
+)"
+    case "$cached_value" in
+      HIT:*)
+        echo "${cached_value#HIT:}"
+        return 0
+        ;;
+      *)
+        # Cache illisible ou JSON invalide (ex. fichier tronque par un kill
+        # en plein ecriture) : on ne retourne PAS "" immediatement, on
+        # retombe sur le parsing du transcript comme si le cache n'existait
+        # pas.
+        ;;
+    esac
   fi
 
   if [ -z "$transcript_path" ] || [ ! -f "$transcript_path" ]; then
@@ -99,48 +112,57 @@ PYEOF
 )"
 
   if [ -n "$space_id" ] && [ -n "$cache_file" ]; then
+    # Ecriture atomique : on ecrit dans un fichier temporaire puis on
+    # renomme (os.replace) vers le chemin final, pour qu'un kill en plein
+    # ecriture ne laisse jamais un cache tronque a la place du bon.
     python3 - "$cache_file" "$space_id" <<'PYEOF'
-import json, sys
+import json, os, sys
 path, space_id = sys.argv[1], sys.argv[2]
+tmp_path = path + ".tmp"
 try:
-    with open(path, "w", encoding="utf-8") as f:
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump({"spaceId": space_id}, f)
+    os.replace(tmp_path, path)
 except Exception:
-    pass
+    try:
+        os.remove(tmp_path)
+    except Exception:
+        pass
 PYEOF
   fi
 
   echo "$space_id"
 }
 
-# mnemos_curl_post <body_file>
+# mnemos_curl_post <body_file> <cfgfile> <resp_file>
 # POST body_file (fichier contenant le JSON-RPC deja construit) vers
-# MNEMOS_EDGE_URL. Le jeton d'authentification vit dans la variable globale
-# MNEMOS_HOOK_TOKEN, qui DOIT deja etre definie par le script appelant AVANT
-# d'appeler cette fonction (ne pas la definir ici, ne pas lui donner de
-# valeur par defaut). Ecrit le CORPS de la reponse (sans le code HTTP) sur
-# stdout. Definit les variables globales MNEMOS_LAST_HTTP_CODE (code HTTP,
-# "000" si inconnu) et MNEMOS_LAST_CURL_RC (code de retour de curl).
+# MNEMOS_EDGE_URL. cfgfile et resp_file DOIVENT etre crees (mktemp) et
+# ajoutes a CLEANUP_FILES par le script APPELANT avant l'appel : cette
+# fonction ne cree ni ne supprime plus aucun fichier temporaire elle-meme,
+# pour qu'un kill (SIGTERM/SIGINT) en plein curl soit quand meme couvert
+# par le trap de nettoyage du script appelant (cfgfile contient le jeton en
+# clair, resp_file peut contenir du contenu memoire/PII).
+# Le jeton d'authentification vit dans la variable globale MNEMOS_HOOK_TOKEN,
+# qui DOIT deja etre definie par le script appelant AVANT d'appeler cette
+# fonction (ne pas la definir ici, ne pas lui donner de valeur par defaut).
+# Le corps de la reponse est ecrit directement dans resp_file (via curl -o),
+# cette fonction n'ecrit rien sur stdout. Definit les variables globales
+# MNEMOS_LAST_HTTP_CODE (code HTTP, "000" si inconnu) et MNEMOS_LAST_CURL_RC
+# (code de retour de curl).
 # Securite obligatoire : le jeton ne doit JAMAIS apparaitre en argument sur
 # la ligne de commande curl (visible dans `ps aux`). Utiliser un fichier de
 # config curl temporaire (-K), cree via heredoc bash (jamais via echo/printf
-# avec le token en argument), chmod 600, supprime immediatement apres l'appel.
-# curl --max-time 3 systematiquement.
+# avec le token en argument), chmod 600. curl --max-time 3 systematiquement.
 mnemos_curl_post() {
-  local body_file="$1"
-  local cfgfile resp_file http_code curl_rc
-  cfgfile="$(mktemp /tmp/mnemos-hook-cfg.XXXXXX)"
+  local body_file="$1" cfgfile="$2" resp_file="$3"
+  local http_code curl_rc
   chmod 600 "$cfgfile"
   cat > "$cfgfile" <<CFGEOF
 header = "Authorization: Bearer ${MNEMOS_HOOK_TOKEN}"
 header = "Content-Type: application/json"
 CFGEOF
-  resp_file="$(mktemp /tmp/mnemos-hook-resp.XXXXXX)"
   http_code="$(curl -s --max-time 3 -K "$cfgfile" -X POST --data-binary "@${body_file}" -o "$resp_file" -w '%{http_code}' "$MNEMOS_EDGE_URL" 2>/dev/null)"
   curl_rc=$?
-  rm -f "$cfgfile"
   MNEMOS_LAST_HTTP_CODE="${http_code:-000}"
   MNEMOS_LAST_CURL_RC="$curl_rc"
-  cat "$resp_file" 2>/dev/null
-  rm -f "$resp_file"
 }

@@ -2,6 +2,20 @@
 
 Choix d'implémentation non évidents, non couverts mot à mot par la story, tranchés pendant l'exécution. Aucune décision produit : uniquement des choix techniques d'implémentation.
 
+## Second passage : 7 corrections post-revue (commit de correction)
+
+Après revue et tests d'exécution réels par le coordinateur (recall/log_exchange/outil interdit/port fermé réellement testés en 4/4 vert), 7 corrections ont été appliquées en diff chirurgical direct sur les fichiers déjà générés :
+
+1. **Extraction du jeton cassée** : `HOOK-KEY.txt` porte 3 lignes de commentaire (`#...`) avant la ligne du jeton. `f.read().strip()` capturait tout le fichier, pas seulement le jeton — le zip produit par `build-plugin-zip.sh` aurait été non fonctionnel en prod. Corrigé dans `build-plugin-zip.sh` et `run-integration-tests.sh` : lecture ligne par ligne, ignore les lignes vides et celles commençant par `#`, prend la première ligne valide restante.
+2. **Fichiers porteurs du jeton/PII non couverts par un kill signal** : `trap cleanup_and_exit EXIT` ne se déclenche pas sur un SIGTERM non piégé (Cowork tue les hooks vers 9-10s). Étendu en `trap cleanup_and_exit EXIT INT TERM` dans les deux hooks. `mnemos_curl_post` (mnemos-common.sh) ne crée plus ses propres cfgfile/resp_file en interne : elle reçoit désormais ces chemins en arguments, créés et enregistrés dans `CLEANUP_FILES` par l'appelant AVANT l'appel curl, pour qu'un kill en plein appel réseau déclenche quand même leur suppression via le trap du script appelant. Même principe dans `run-integration-tests.sh` (`mnemos_secure_curl`) via un `trap 'rm -f "$cfgfile"' RETURN` local à la fonction.
+3. **Cache spaceId non atomique / sans repli si corrompu** : écriture désormais dans un fichier `.tmp` puis `os.replace()` (atomique). Si la lecture du cache existant échoue (JSON invalide, fichier tronqué), la fonction ne retourne plus `""` immédiatement : elle retombe sur le parsing du transcript comme si le cache n'existait pas.
+4. **Incohérence trim entre filtre de longueur et filtres de préfixe** : `len(trimmed) < 10` utilisait `prompt.strip()` mais les `startswith(...)` testaient le prompt brut, laissant passer un prompt précédé d'un espace/saut de ligne. Tous les `startswith(...)` utilisent désormais `trimmed` (le test `"<task-notification>" in prompt` reste sur le brut, un `in` n'est pas sensible à un espace de tête). Même correction sur le filtre système de `mnemos-stop.sh`.
+5. **Message vide archivable au Stop** : ajout d'une vérification juste avant construction du body JSON-RPC — si `userMessage` ou `assistantResponse` est vide après trim, log `empty-message` et `exit 0` sans appel réseau (l'edge ne valide rien côté serveur sur ces champs).
+6. **Assertion "outil interdit" trop faible** : `run-integration-tests.sh` vérifiait seulement la présence d'une clé `error` générique. Resserré : vérifie que `error.code == -32601` ou que `error.message` contient `"not allowed for hook token"`.
+7. **PII affichée dans le test d'intégration recall** : `test_recall` affichait jusqu'à 200 caractères du bloc FACE-A réel (contenu mémoire potentiellement sensible) sur stdout. Remplacé par une sortie non sensible (nombre de caractères uniquement, jamais le contenu).
+
+Vérifications manuelles ciblées après correction (en plus des 15/15 tests unitaires) : cache atomique sans résidu `.tmp`, repli correct sur un cache corrompu, `empty-message` loggé sans appel réseau sur assistant vide, filtre `<system-reminder>` précédé d'un espace de tête désormais bien filtré.
+
 ## Algorithme "dernier message user" au Stop (mnemos-stop.sh)
 
 Point ambigu dans la spec technique : "le dernier message dont type=='user' ET content est une string". Deux lectures possibles :

@@ -19,7 +19,7 @@ cleanup_and_exit() {
   done
   exit 0
 }
-trap cleanup_and_exit EXIT
+trap cleanup_and_exit EXIT INT TERM
 
 START_MS="$(python3 -c 'import time; print(int(time.time()*1000))')"
 
@@ -62,13 +62,13 @@ trimmed = prompt.strip()
 decision = "OK"
 if len(trimmed) < 10:
     decision = "FILTERED"
-elif prompt.startswith("<uploaded_files>"):
+elif trimmed.startswith("<uploaded_files>"):
     decision = "FILTERED"
-elif prompt.startswith("<system-reminder>"):
+elif trimmed.startswith("<system-reminder>"):
     decision = "FILTERED"
-elif prompt.startswith("This session is being continued"):
+elif trimmed.startswith("This session is being continued"):
     decision = "FILTERED"
-elif prompt.startswith("[SYSTEM NOTIFICATION - NOT USER INPUT]"):
+elif trimmed.startswith("[SYSTEM NOTIFICATION - NOT USER INPUT]"):
     decision = "FILTERED"
 elif "<task-notification>" in prompt:
     decision = "FILTERED"
@@ -120,10 +120,12 @@ with open(body_path, "w", encoding="utf-8") as f:
     json.dump(payload, f)
 PYEOF
 
+CFGFILE="$(mktemp /tmp/mnemos-hook-ups-cfg.XXXXXX)"
+CLEANUP_FILES+=("$CFGFILE")
 RESP_FILE="$(mktemp /tmp/mnemos-hook-ups-resp.XXXXXX)"
 CLEANUP_FILES+=("$RESP_FILE")
 
-mnemos_curl_post "$BODY_FILE" > "$RESP_FILE"
+mnemos_curl_post "$BODY_FILE" "$CFGFILE" "$RESP_FILE"
 CURL_RC="${MNEMOS_LAST_CURL_RC:-1}"
 HTTP_CODE="${MNEMOS_LAST_HTTP_CODE:-000}"
 

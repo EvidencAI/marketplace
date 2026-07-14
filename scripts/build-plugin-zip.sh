@@ -18,10 +18,18 @@ if [ ! -f "$TOKEN_PATH" ]; then
   exit 1
 fi
 
+# Le fichier jeton porte des lignes de commentaire (#...) avant la ligne du
+# jeton lui-meme : on ignore les lignes vides et celles commencant par #,
+# la premiere ligne restante (trimmee) est le jeton.
 TOKEN_CONTENT="$(python3 -c "
 import sys
 with open(sys.argv[1], 'r', encoding='utf-8') as f:
-    print(f.read().strip())
+    for line in f:
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        print(stripped)
+        break
 " "$TOKEN_PATH" 2>/dev/null)"
 
 if [ -z "$TOKEN_CONTENT" ]; then
