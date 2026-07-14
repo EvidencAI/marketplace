@@ -58,6 +58,12 @@ try:
 except Exception:
     pass
 
+# "Rappel interne :" est un prefixe conventionnel de nos automatismes
+# internes (wakeups send_later) : verifie en reel le 14/07, ces flux ne
+# portent NULLE PART le prefixe "[SYSTEM NOTIFICATION - NOT USER INPUT]" au
+# niveau des hooks (uniquement au niveau conversationnel du modele). Limite
+# assumee : un wakeup au libelle libre (pas prefixe "Rappel interne :")
+# passera quand meme ce filtre.
 trimmed = prompt.strip()
 decision = "OK"
 if len(trimmed) < 10:
@@ -69,6 +75,8 @@ elif trimmed.startswith("<system-reminder>"):
 elif trimmed.startswith("This session is being continued"):
     decision = "FILTERED"
 elif trimmed.startswith("[SYSTEM NOTIFICATION - NOT USER INPUT]"):
+    decision = "FILTERED"
+elif trimmed.startswith("Rappel interne :"):
     decision = "FILTERED"
 elif "<task-notification>" in prompt:
     decision = "FILTERED"
@@ -105,7 +113,12 @@ try:
 except Exception:
     prompt = ""
 
-arguments = {"userId": "stephane", "query": prompt}
+# Plafonne la query envoyee a l'embedding a 2000 caracteres (evite d'envoyer
+# un gros collage de document entier), sans toucher au prompt original
+# utilise par ailleurs pour le filtrage.
+query = prompt[:2000]
+
+arguments = {"userId": "stephane", "query": query}
 if space_id:
     arguments["spaceId"] = space_id
 
@@ -146,7 +159,13 @@ case "$HTTP_CODE" in
     ;;
 esac
 
-TEXT="$(python3 - "$RESP_FILE" <<'PYEOF'
+# L'edge renvoie les erreurs d'execution d'outil en HTTP 200 avec
+# result.content[0].text = message d'erreur ET result.isError = true
+# (verifie sur tools.ts, bloc catch et cas "Unknown tool"). Si isError est
+# vrai, on ne renvoie RIEN sur stdout (Q10 : fail silencieux obligatoire,
+# jamais de texte d'erreur injecte dans le contexte du modele) et on
+# distingue le statut logge ("tool-error") plutot que "ok"/"empty".
+STATUS_AND_TEXT="$(python3 - "$RESP_FILE" <<'PYEOF'
 import json, sys
 
 resp_path = sys.argv[1]
@@ -154,23 +173,45 @@ try:
     with open(resp_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 except Exception:
+    print("empty")
+    sys.exit(0)
+
+result = data.get("result")
+if not isinstance(result, dict):
+    print("empty")
+    sys.exit(0)
+
+if result.get("isError"):
+    print("tool-error")
     sys.exit(0)
 
 try:
-    text = data["result"]["content"][0]["text"]
+    text = result["content"][0]["text"]
 except Exception:
     text = ""
 
 if isinstance(text, str) and text != "":
+    print("ok")
     sys.stdout.write(text)
+else:
+    print("empty")
 PYEOF
 )"
 
-if [ -n "$TEXT" ]; then
-  mnemos_log "userpromptsubmit" "recall" "$DURATION_MS" "ok" "$RESP_SIZE"
-  printf '%s' "$TEXT"
-else
-  mnemos_log "userpromptsubmit" "recall" "$DURATION_MS" "empty" "$RESP_SIZE"
-fi
+STATUS="$(printf '%s\n' "$STATUS_AND_TEXT" | head -n 1)"
+TEXT="$(printf '%s\n' "$STATUS_AND_TEXT" | tail -n +2)"
+
+case "$STATUS" in
+  ok)
+    mnemos_log "userpromptsubmit" "recall" "$DURATION_MS" "ok" "$RESP_SIZE"
+    printf '%s' "$TEXT"
+    ;;
+  tool-error)
+    mnemos_log "userpromptsubmit" "recall" "$DURATION_MS" "tool-error" "$RESP_SIZE"
+    ;;
+  *)
+    mnemos_log "userpromptsubmit" "recall" "$DURATION_MS" "empty" "$RESP_SIZE"
+    ;;
+esac
 
 exit 0

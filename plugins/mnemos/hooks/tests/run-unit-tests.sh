@@ -67,6 +67,7 @@ assert() {
   local expected_exit_code="$3"
   local expected_stdout="$4"
   local expect_curl_call="$5" # "yes" ou "no"
+  local custom_response="${6:-}" # chemin optionnel vers un corps de reponse canned personnalise (remplace la reponse recall par defaut)
 
   local temp_dir
   temp_dir="$(mktemp -d)"
@@ -79,10 +80,15 @@ assert() {
   local response_file="$temp_dir/response.json"
   local stdin_file="$temp_dir/stdin.json"
 
-  # Ecrire la reponse canned
-  cat > "$response_file" <<'EOF'
+  # Ecrire la reponse canned (ou la reponse personnalisee si fournie, ex
+  # pour simuler un result.isError=true)
+  if [ -n "$custom_response" ] && [ -f "$custom_response" ]; then
+    cp "$custom_response" "$response_file"
+  else
+    cat > "$response_file" <<'EOF'
 {"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"FACE-A CANNED TEXT"}]},"id":1}
 EOF
+  fi
 
   # Ecrire le corps de reponse pour mnemos_log_exchange
   local log_exchange_response="$temp_dir/log_exchange_response.json"
@@ -236,6 +242,19 @@ EOF
         # Pour ce test, vérifier le userMessage
         if [ "$user_message" != "ok" ]; then
           echo "FAIL $test_name : expected userMessage 'ok', got '$user_message'"
+          return 1
+        fi
+      elif [ "$test_name" = "mnemos-stop-13" ]; then
+        if [ "$user_message" != "lance la commande de build stp" ]; then
+          echo "FAIL $test_name : expected userMessage 'lance la commande de build stp', got '$user_message'"
+          return 1
+        fi
+      elif [ "$test_name" = "mnemos-stop-tool-heavy" ] || [ "$test_name" = "mnemos-stop-tool-heavy-no-promptid" ]; then
+        # Test de non-regression : avec l'ancienne logique (arret sur la
+        # derniere entree user tout court), ces deux cas auraient echoue en
+        # MISSING car le transcript se termine par un tool_result.
+        if [ "$user_message" != "peux-tu lister les fichiers du dossier hooks et me dire s'il y a des tests ?" ]; then
+          echo "FAIL $test_name : expected userMessage 'peux-tu lister les fichiers du dossier hooks et me dire s'il y a des tests ?', got '$user_message'"
           return 1
         fi
       fi
@@ -402,12 +421,20 @@ assert "mnemos-stop-12" \
   "" \
   "no" || FAILED_TESTS=$((FAILED_TESTS+1))
 
+# Ce fixture (transcript-missing-last-user.jsonl) se termine par un
+# tool_result, mais contient bien un vrai message user en tete d'echange
+# ("lance la commande de build stp"). Avec l'ancien algorithme (arret sur
+# la seule derniere entree user), ce message etait perdu a tort (MISSING).
+# Avec le nouvel algorithme (repli b, on remonte l'historique), il est
+# retrouve : ce n'est donc plus un cas "MISSING" mais un cas de repli
+# reussi. Le vrai test du chemin retry-puis-abandon (aucun message user nul
+# part dans le fichier) est couvert plus bas par un transcript synthetique.
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 assert "mnemos-stop-13" \
   'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-stop-missing-user.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-stop.sh"' \
   0 \
   "" \
-  "no" || FAILED_TESTS=$((FAILED_TESTS+1))
+  "yes" || FAILED_TESTS=$((FAILED_TESTS+1))
 
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 assert "mnemos-stop-14" \
@@ -415,6 +442,95 @@ assert "mnemos-stop-14" \
   0 \
   "" \
   "yes" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+# Non-regression : transcript se terminant par un tool_result (cas reel
+# majoritaire des tours Cowork qui utilisent des outils). Avec l'ancienne
+# logique de find_last_user (arret sur la seule derniere entree user), ces
+# deux cas echouaient en MISSING. promptId present dans le stdin : doit
+# retrouver le vrai message user via le critere (a).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "mnemos-stop-tool-heavy" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-stop-tool-heavy.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-stop.sh"' \
+  0 \
+  "" \
+  "yes" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+# Meme transcript mais SANS prompt_id dans le stdin : doit retrouver le
+# meme message user via le repli (b), en remontant l'historique.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "mnemos-stop-tool-heavy-no-promptid" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-stop-tool-heavy-no-promptid.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-stop.sh"' \
+  0 \
+  "" \
+  "yes" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+# Filtre "Rappel interne :" (wakeups send_later, ne portent pas le prefixe
+# "[SYSTEM NOTIFICATION - NOT USER INPUT]" au niveau des hooks).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "mnemos-userpromptsubmit-rappel-interne" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-ups-rappel-interne.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-userpromptsubmit.sh"' \
+  0 \
+  "" \
+  "no" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "mnemos-stop-rappel-interne" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-stop-rappel-interne.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-stop.sh"' \
+  0 \
+  "" \
+  "no" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+# Cas synthetique : transcript sans AUCUNE entree type=user a content
+# string (uniquement une entree tool_result). C'est le seul vrai test du
+# chemin retry-puis-abandon (MISSING), plus aucune fixture fournie ne le
+# couvre depuis le fix du nouvel algorithme find_last_user (voir
+# commentaire sur mnemos-stop-13 plus haut).
+temp_synthetic_transcript="$(mktemp)"
+cat > "$temp_synthetic_transcript" <<'EOF'
+{"type": "assistant", "sessionId": "synthetic-no-user-msg", "session_id": "synthetic-no-user-msg", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_syn1", "name": "Bash", "input": {"command": "echo hi"}}]}, "uuid": "a1", "parentUuid": null, "timestamp": "2026-07-14T20:00:00.000Z"}
+{"type": "user", "sessionId": "synthetic-no-user-msg", "session_id": "synthetic-no-user-msg", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_syn1", "content": [{"type": "text", "text": "hi"}]}]}, "uuid": "u1", "parentUuid": "a1", "timestamp": "2026-07-14T20:00:01.000Z"}
+EOF
+
+temp_synthetic_stop_stdin="$(mktemp)"
+cat > "$temp_synthetic_stop_stdin" <<EOF
+{
+  "session_id": "synthetic-no-user-msg",
+  "transcript_path": "$temp_synthetic_transcript",
+  "cwd": "/home/claude",
+  "prompt_id": "synthetic-no-user-msg-prompt",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "hi",
+  "background_tasks": [],
+  "session_crons": []
+}
+EOF
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "mnemos-stop-truly-missing-synthetic" \
+  "cat '$temp_synthetic_stop_stdin' | PATH='$FAKE_BIN_DIR:$PATH' '$REPO_ROOT/plugins/mnemos/hooks/mnemos-stop.sh'" \
+  0 \
+  "" \
+  "no" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+rm -f "$temp_synthetic_transcript" "$temp_synthetic_stop_stdin"
+
+# result.isError=true (panne edge, quota epuise, outil inconnu) : le texte
+# d'erreur ne doit JAMAIS etre injecte sur stdout (Q10, fail silencieux).
+tool_error_response="$(mktemp)"
+cat > "$tool_error_response" <<'EOF'
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\"error\":\"Unknown error\",\"tool\":\"mnemos_recall\"}"}],"isError":true},"id":1}
+EOF
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "mnemos-userpromptsubmit-tool-error" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-ups-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-userpromptsubmit.sh"' \
+  0 \
+  "" \
+  "yes" \
+  "$tool_error_response" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+rm -f "$tool_error_response"
 
 # Compter les tests passés a partir des compteurs reels (pas un grep sur le
 # code source du script).
