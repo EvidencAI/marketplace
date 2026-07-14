@@ -44,17 +44,16 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 
 ## Outils MCP (référence rapide)
 
-32 outils exposés au LLM (v0.4.2), regroupés par domaine :
+35 outils exposés au LLM, regroupés par domaine :
 
 **Auth** (4) : login, signup, logout, whoami
-**Espaces** (3) : list_spaces, create_space, update_space
+**Espaces** (4) : list_spaces, create_space, update_space, suggest_spaces
 **Atomes** (4) : search_atoms, create_atom_manual, update_atom, toggle_pin_atom
-**Contexte** (1) : get_context (6 modes : auto, onboard, recall, briefing, morning, explore)
+**Contexte** (2) : get_context (6 modes : auto, onboard, recall, briefing, morning, explore), recall (rappel FACE-A automatique, hook UserPromptSubmit)
 **Admin** (1) : admin (actions : get_stats, triage_atoms, garbage_collect, health_check)
-**Boot** (1) : quick_boot (contexte rapide en un appel)
 **Sessions** (2) : session_start, session_end
 **Mémoire** (2) : write_memory, read_memory
-**Profil** (2) : get_profile, update_profile
+**Profil** (3) : get_profile, update_profile, get_calibration
 **Contacts** (2) : upsert_contact, search_contacts
 **Ingestion** (3) : ingest_document, ingest_events, process_events
 **Insights** (2) : cross_insights, analyze_space
@@ -62,8 +61,9 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 **Connexions** (1) : create_connection
 **Extraction** (2) : log_exchange, extract_atoms (aussi utilisés automatiquement par le transcript-watcher)
 **Sync** (1) : sync_status
+**Feedback** (1) : submit_feedback
 
-Note : log_exchange et extract_atoms sont appelés automatiquement par le transcript-watcher. Le LLM n'a pas besoin de les appeler en routine, mais ils sont disponibles si nécessaire (debug, extraction manuelle).
+Note : log_exchange et extract_atoms sont appelés automatiquement par les hooks du watcher v3 (UserPromptSubmit/Stop). Le LLM n'a pas besoin de les appeler en routine, mais ils sont disponibles si nécessaire (debug, extraction manuelle).
 Note : get_stats, health_check, triage_atoms, garbage_collect ne sont PAS des outils standalone. Ils s'appellent via `mnemos_admin(action:"nom_action")`.
 
 Note spaceId : Mode A accepte le **nom**. Mode B exige le **UUID**.
