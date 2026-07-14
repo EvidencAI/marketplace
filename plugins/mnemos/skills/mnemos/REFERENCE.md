@@ -63,7 +63,7 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 **Sync** (1) : sync_status
 **Feedback** (1) : submit_feedback
 
-Note : log_exchange et extract_atoms sont appelés automatiquement par le transcript-watcher. Le LLM n'a pas besoin de les appeler en routine, mais ils sont disponibles si nécessaire (debug, extraction manuelle).
+Note : log_exchange et extract_atoms sont appelés automatiquement par les hooks du watcher v3 (UserPromptSubmit/Stop). Le LLM n'a pas besoin de les appeler en routine, mais ils sont disponibles si nécessaire (debug, extraction manuelle).
 Note : get_stats, health_check, triage_atoms, garbage_collect ne sont PAS des outils standalone. Ils s'appellent via `mnemos_admin(action:"nom_action")`.
 
 Note spaceId : Mode A accepte le **nom**. Mode B exige le **UUID**.

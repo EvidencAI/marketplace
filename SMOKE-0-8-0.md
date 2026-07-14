@@ -25,11 +25,17 @@ une fois le zip installé.
 
 ## Vérification 2 : collecte automatique (raw_exchanges → atomes)
 
-- Après au moins 3 échanges dans ce fil, attendre environ 10 minutes.
+- Avant les échanges de test, ouvrir un espace dans ce fil (`mnemos in
+  [espace]` ou équivalent, pour déclencher `mnemos_session_start` avec un
+  `spaceId`). Sans ce boot, les échanges tombent par défaut dans l'espace
+  « Non affecté » : c'est le comportement attendu dans ce cas, pas un échec.
+- Après au moins 3 échanges dans ce fil (une fois l'espace ouvert), attendre
+  environ 10 minutes.
 - Vérifier en base que les lignes `raw_exchanges` correspondant à ce fil sont
   bien présentes avec `processed=true`.
-- Vérifier que des atomes sont apparus dans `auto_buffer`, dans le bon
-  espace (celui du fil de test).
+- Vérifier que des atomes sont apparus dans `auto_buffer`, dans l'espace
+  ouvert à l'étape précédente (ou dans « Non affecté » si aucun espace n'a
+  été ouvert).
 
 ## Vérification 3 : santé générale
 
