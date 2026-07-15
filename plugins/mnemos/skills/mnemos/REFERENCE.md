@@ -46,7 +46,7 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 
 ## Outils MCP (référence rapide)
 
-34 outils exposés au LLM, regroupés par domaine :
+35 outils exposés au LLM, regroupés par domaine :
 
 **Espaces** (4) : list_spaces, create_space, update_space, suggest_spaces
 **Atomes** (4) : search_atoms, create_atom_manual, update_atom, toggle_pin_atom
@@ -56,7 +56,7 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 **Mémoire** (2) : write_memory, read_memory
 **Profil** (3) : get_profile, update_profile, get_calibration
 **Contacts** (2) : upsert_contact, search_contacts
-**Ingestion** (3) : ingest_document, ingest_events, process_events
+**Ingestion** (4) : ingest_document, ingest_events, process_events, collect_events (collecte cloud automatique mail/agenda, S7, voir § Collecte cloud)
 **Insights** (2) : cross_insights, analyze_space
 **Documents** (1) : list_documents
 **Connexions** (1) : create_connection
@@ -90,8 +90,8 @@ Chaque élément du tableau `events` :
 
 | Champ | Requis | Type | Exemple |
 |-------|--------|------|---------|
-| source | oui | string | "gmail" |
-| event_type | oui | string | "email" |
+| source | oui | string, valeurs contraintes (voir ci-dessous) | "gmail" |
+| event_type | oui | string, valeurs contraintes (voir ci-dessous) | "mail_received" |
 | event_id | oui | string | identifiant unique (dédup) |
 | event_timestamp | oui | string ISO 8601 | "2026-07-14T09:00:00Z" |
 | subject | non | string | — |
@@ -99,7 +99,34 @@ Chaque élément du tableau `events` :
 | participants | non | array de strings | — |
 | metadata | non | objet libre | — |
 
+**Valeurs contraintes (CHECK en base, table `source_events`)** — toute autre valeur est rejetée silencieusement à l'insertion (comptée dans `errors`, pas d'exception) :
+- `source` : `gmail`, `google_calendar`, `outlook`, `microsoft_calendar`, `imap_ovh`
+- `event_type` : `mail_received`, `mail_sent`, `meeting_created`, `meeting_updated`, `meeting_cancelled`
+
 En cas d'erreur d'insertion sur un ou plusieurs événements, la réponse inclut désormais un tableau `errorDetails` (`{event_id, message}` par événement en échec), en plus du compteur `errors`.
+
+---
+
+## Collecte cloud mail/agenda (S7)
+
+Depuis le sprint S7, la collecte mail/agenda tourne côté serveur Mnemos,
+sans aucun prérequis Mac ni Cowork ouvert. Deux connecteurs actifs :
+
+- **Google Workspace** (`stephane@commenge.net`) : mail (4h glissantes,
+  plafond de rattrapage 7j) + agenda (fenêtre ±5j), via OAuth 2.0. Refresh
+  token chiffré dans Supabase Vault.
+- **OVH IMAP** (`s.c@naturedeaux.com`) : mail seul (l'offre MXPLAN 25 ne
+  propose pas de CalDAV). Client IMAP minimal (identifiants stables via
+  UID), mot de passe d'application chiffré dans Supabase Vault.
+
+Les deux comptes sont représentés dans une table `sources` (multi-compte,
+observable : `last_sync_at`, `last_sync_status`, `consecutive_errors` par
+source). Un seul job pg_cron (`mnemos-collect-google`, toutes les 2h,
+appelle l'outil `mnemos_collect_events`) traite en réalité **toutes** les
+sources actives, malgré son nom historique — il ne se limite pas à Google.
+
+Aucun secret Google/OVH n'est stocké en clair : uniquement dans Supabase
+Vault, référencé depuis `sources.vault_secret_id`.
 
 ---
 

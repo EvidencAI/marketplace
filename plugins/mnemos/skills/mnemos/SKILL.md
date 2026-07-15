@@ -20,7 +20,7 @@ Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil
 | Mode A | Outils MCP natifs mnemos_* (préféré) |
 | Mode B | Fallback → voir FALLBACK-MODE-B.md |
 
-OUTILS : fournis par le connecteur custom claude.ai "Mnemos" (34 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
+OUTILS : fournis par le connecteur custom claude.ai "Mnemos" (35 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
 USERID : Mode A → userId:USER_ALIAS (identifiant court, ex: "stephane", défini à l'onboarding). Mode B (curl) → userId:USER_UUID.
 Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, FALLBACK-MODE-B.md, SYNC-MAIL-AGENDA-PROMPT.md
 
@@ -161,13 +161,25 @@ Un journal technique est tenu dans `/tmp/mnemos-hook.log` (diagnostic local). Le
 |---------|-------|-----------|
 | Supabase pg_cron | garbage_collect | Dimanche 5h FR |
 | Supabase pg_cron | health_check (Edge Function health-cron) | Quotidien 5h UTC |
-| Cowork scheduled-tasks | mnemos-sync-mail-agenda (macOS uniquement) | Toutes les 2h (quand Cowork ouvert) |
+| Supabase pg_cron | mnemos-collect-google (collecte cloud mail/agenda : Google Workspace + IMAP OVH, malgré son nom historique) | Toutes les 2h, indépendant du Mac/Cowork |
+| Cowork scheduled-tasks | mnemos-sync-mail-agenda (macOS, legacy) | Toutes les 2h (quand Cowork ouvert) |
 
 Note : au premier run d'une tâche Cowork, l'utilisateur doit approuver les outils MCP une fois ("Toujours autorisé").
 
-### Compatibilité cross-platform (mail/agenda)
-- **macOS** : collecte automatique via scheduled task (AppleScript → Mail.app + Calendar.app). Voir ONBOARDING.md étape 4.
-- **Windows/Linux** : pas de scheduled task mail/agenda. Utiliser les connecteurs Anthropic natifs (gmail_*, gcal_*) en conversation directe. Le LLM peut collecter à la demande : gmail_search_messages → gcal_list_events → mnemos_ingest_events → mnemos_process_events.
+### Collecte mail/agenda : cloud (recommandé) vs legacy Mac
+Depuis S7, la collecte mail/agenda tourne côté serveur Mnemos
+(`mnemos-collect-google`, pg_cron toutes les 2h) : **fonctionne sur
+n'importe quelle plateforme, Mac éteint ou non, Cowork ouvert ou non.**
+Détail architecture : REFERENCE.md § Collecte cloud mail/agenda.
+
+La tâche Cowork macOS historique (`mnemos-sync-mail-agenda`) reste active
+en parallèle pendant la période de transition (double-collecte, dédup
+automatique côté serveur, aucun doublon observé) : sa mise en pause est un
+geste manuel de l'utilisateur dans l'UI Scheduled, pas automatique. Ne pas
+la présumer désactivée sans confirmation explicite.
+Windows/Linux : la collecte cloud fonctionne nativement, aucune tâche
+locale requise (contrairement à avant S7 où seuls les connecteurs
+Anthropic natifs en conversation directe étaient disponibles hors macOS).
 
 ---
 
