@@ -55,7 +55,7 @@ header = "Authorization: Bearer ${TOKEN_CONTENT}"
 header = "Content-Type: application/json"
 CFGEOF
   resp_file="$(mktemp /tmp/mnemos-integ-resp.XXXXXX)"
-  http_code="$(curl -s --max-time 3 -K "$cfgfile" -X POST --data-binary "@${body_file}" -o "$resp_file" -w '%{http_code}' "$EDGE_URL" 2>/dev/null)"
+  http_code="$(curl -s --max-time 5 -K "$cfgfile" -X POST --data-binary "@${body_file}" -o "$resp_file" -w '%{http_code}' "$EDGE_URL" 2>/dev/null)"
   curl_rc=$?
   echo "$http_code" "$curl_rc" "$resp_file"
 }

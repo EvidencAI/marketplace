@@ -152,7 +152,7 @@ PYEOF
 # Securite obligatoire : le jeton ne doit JAMAIS apparaitre en argument sur
 # la ligne de commande curl (visible dans `ps aux`). Utiliser un fichier de
 # config curl temporaire (-K), cree via heredoc bash (jamais via echo/printf
-# avec le token en argument), chmod 600. curl --max-time 3 systematiquement.
+# avec le token en argument), chmod 600. curl --max-time 5 systematiquement.
 mnemos_curl_post() {
   local body_file="$1" cfgfile="$2" resp_file="$3"
   local http_code curl_rc
@@ -161,7 +161,7 @@ mnemos_curl_post() {
 header = "Authorization: Bearer ${MNEMOS_HOOK_TOKEN}"
 header = "Content-Type: application/json"
 CFGEOF
-  http_code="$(curl -s --max-time 3 -K "$cfgfile" -X POST --data-binary "@${body_file}" -o "$resp_file" -w '%{http_code}' "$MNEMOS_EDGE_URL" 2>/dev/null)"
+  http_code="$(curl -s --max-time 5 -K "$cfgfile" -X POST --data-binary "@${body_file}" -o "$resp_file" -w '%{http_code}' "$MNEMOS_EDGE_URL" 2>/dev/null)"
   curl_rc=$?
   MNEMOS_LAST_HTTP_CODE="${http_code:-000}"
   MNEMOS_LAST_CURL_RC="$curl_rc"
