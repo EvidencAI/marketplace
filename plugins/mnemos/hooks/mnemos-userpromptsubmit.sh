@@ -103,10 +103,10 @@ SPACE_ID="$(mnemos_resolve_space_id "$SESSION_ID" "$TRANSCRIPT_PATH")"
 BODY_FILE="$(mktemp /tmp/mnemos-hook-ups-body.XXXXXX)"
 CLEANUP_FILES+=("$BODY_FILE")
 
-python3 - "$PROMPT_FILE" "$SPACE_ID" "$BODY_FILE" <<'PYEOF'
+python3 - "$PROMPT_FILE" "$SPACE_ID" "$SESSION_ID" "$BODY_FILE" <<'PYEOF'
 import json, sys
 
-prompt_path, space_id, body_path = sys.argv[1], sys.argv[2], sys.argv[3]
+prompt_path, space_id, session_id, body_path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 try:
     with open(prompt_path, "r", encoding="utf-8") as f:
         prompt = f.read()
@@ -121,6 +121,8 @@ query = prompt[:2000]
 arguments = {"userId": "stephane", "query": query}
 if space_id:
     arguments["spaceId"] = space_id
+if session_id:
+    arguments["sessionId"] = session_id
 
 payload = {
     "jsonrpc": "2.0",
