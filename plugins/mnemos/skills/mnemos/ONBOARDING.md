@@ -84,7 +84,7 @@ Après la création, expliquer : "Au premier lancement automatique, tu devras ap
 
 ## Étape 5 : Dashboard
 
-"Ton dashboard Mnemos est ici : https://mnemos.evidencai.com
+"Ton dashboard Mnemos est ici : https://mnemos.cloud
 Il te permet de visualiser tes espaces, atomes, connexions et l'activité de ta mémoire."
 
 ---

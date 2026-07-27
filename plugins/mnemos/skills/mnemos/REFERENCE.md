@@ -168,7 +168,7 @@ Trois couches de code, une seule base Supabase :
 - **Bundle** (actif) : ~/mnemos-mcp/index.cjs (fichier unique CJS, ~3.2 MB, inclut transcript-watcher)
 - **Config** : claude_desktop_config.json (macOS: ~/Library/Application Support/Claude/ · Windows: %APPDATA%\Claude\ · Linux: ~/.config/claude/)
 - **Distribution** : plugin Cowork (~16 Ko, skills only) + bundle via Supabase Storage (install.sh)
-- **Dashboard** : https://mnemos.evidencai.com (Vercel)
+- **Dashboard** : https://mnemos.cloud (Coolify)
 - **Supabase** : pgvector, Voyage AI voyage-3-lite 512 dim, Haiku extraction
 - **Edge Function** : https://SUPABASE_PROJECT_REF.supabase.co/functions/v1/mnemos-mcp
 - **Transcript-watcher** : intégré au bundle, parse les sessions Cowork, extrait les atomes automatiquement. Standalone supprimé (26/03/2026).
