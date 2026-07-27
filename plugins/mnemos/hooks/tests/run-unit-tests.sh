@@ -532,6 +532,68 @@ assert "mnemos-userpromptsubmit-tool-error" \
 
 rm -f "$tool_error_response"
 
+# ---------------------------------------------------------------------------
+# FILTRE DU BRUIT (27/07/2026, fil 20).
+#
+# Les cas FILTRES assertent DEUX choses ensemble : stdout vide ET aucun appel
+# curl. Le stdout vide seul ne prouverait rien (le hook sort aussi vide quand
+# l'edge repond en erreur : 4e des cinq formes du test qui ne peut pas
+# echouer). C'est l'absence d'appel reseau qui prouve que le filtre a mordu.
+#
+# Les DEUX derniers cas sont les garde-fous inverses : un message court mais
+# porteur d'une vraie question, et un message qui COMMENCE par un marqueur
+# mais continue en question. Les deux DOIVENT declencher le recall. Sans eux,
+# elargir la liste de marqueurs casserait l'injection sans que rien ne rougisse.
+#
+# CONTRE-EPREUVE PAR MUTATION verifiee : neutraliser est_validation_seule (en
+# lui faisant retourner False) fait echouer les trois premiers ; neutraliser
+# est_relance_machine fait echouer le quatrieme.
+# ---------------------------------------------------------------------------
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "ups-filtre-validation-ok-go" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-ups-validation-ok-go.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-userpromptsubmit.sh"' \
+  0 \
+  "" \
+  "no" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "ups-filtre-validation-cest-fait" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-ups-validation-cest-fait.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-userpromptsubmit.sh"' \
+  0 \
+  "" \
+  "no" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "ups-filtre-validation-parfait-accents" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-ups-validation-parfait.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-userpromptsubmit.sh"' \
+  0 \
+  "" \
+  "no" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "ups-filtre-relance-machine" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-ups-relance-machine.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-userpromptsubmit.sh"' \
+  0 \
+  "" \
+  "no" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+# GARDE-FOU INVERSE 1 : court (11 caracteres) mais vraie question -> DOIT passer.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "ups-question-courte-doit-passer" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-ups-courte-mais-vraie-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-userpromptsubmit.sh"' \
+  0 \
+  "FACE-A CANNED TEXT" \
+  "yes" || FAILED_TESTS=$((FAILED_TESTS+1))
+
+# GARDE-FOU INVERSE 2 : commence par un marqueur mais porte une question -> DOIT passer.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+assert "ups-validation-puis-question-doit-passer" \
+  'cat "$REPO_ROOT/plugins/mnemos/hooks/tests/fixtures/stdin-ups-validation-puis-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mnemos/hooks/mnemos-userpromptsubmit.sh"' \
+  0 \
+  "FACE-A CANNED TEXT" \
+  "yes" || FAILED_TESTS=$((FAILED_TESTS+1))
+
 # Compter les tests passés a partir des compteurs reels (pas un grep sur le
 # code source du script).
 PASSED_TESTS=$((TOTAL_TESTS-FAILED_TESTS))

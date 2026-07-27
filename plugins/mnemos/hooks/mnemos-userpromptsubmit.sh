@@ -64,9 +64,68 @@ except Exception:
 # niveau des hooks (uniquement au niveau conversationnel du modele). Limite
 # assumee : un wakeup au libelle libre (pas prefixe "Rappel interne :")
 # passera quand meme ce filtre.
+# --------------------------------------------------------------------------
+# FILTRE DU BRUIT (27/07/2026, fil 20). Deux ajouts, motives par un retour
+# d'usage mesure sur le fil 19 (QUALITE-DES-ATOMES.md) : sur environ soixante
+# injections, trois seulement ont change une decision, et une large part des
+# messages declencheurs etaient des validations de trois mots.
+#
+# 1. RELANCES MACHINE. Le filtre existant ne couvrait que trois prefixes de
+#    relance. "Continue from where you left off." (32 caracteres, aucun
+#    marqueur) passait : PREUVE REELLE, quatre injections completes sont
+#    parties sur ce message pendant le fil 20 lui-meme, alors qu'il n'est pas
+#    de l'utilisateur.
+#
+# 2. VALIDATIONS SEULES. Un message compose UNIQUEMENT de marqueurs de
+#    validation ("ok go", "c'est fait", "parfait merci") ne porte aucun signal
+#    semantique : le recall y repond en servant des atomes lies au hasard des
+#    mots "ok", "go", "fait". Le contexte du tour precedent suffit.
+#
+# LA CONJONCTION EST ESSENTIELLE : on ne filtre PAS sur la brievete seule.
+# "et le DNS ?" est court mais porte une vraie question, il doit passer. Seul
+# un message dont TOUS les mots sont des marqueurs est ecarte.
+#
+# CE FILTRE NE TOUCHE PAS LA COLLECTE : elle est faite par le hook Stop, qui
+# est un fichier distinct. On perd une injection, jamais un souvenir.
+# --------------------------------------------------------------------------
+
+RELANCES_MACHINE = (
+    "Continue from where you left off",
+    "[Request interrupted",
+    "Please continue from where you left off",
+)
+
+MARQUEURS_VALIDATION = {
+    "ok", "oki", "okay", "go", "oui", "ouais", "yes", "yep",
+    "parfait", "nickel", "top", "super", "genial", "génial", "excellent",
+    "bien", "merci", "thanks", "vas", "y", "va", "allez", "lance", "lances",
+    "continue", "poursuis", "c'est", "cest", "fait", "faite", "bon",
+    "voila", "voilà", "ca", "ça", "marche", "impec", "d'accord", "daccord",
+    "accord", "compris",
+}
+
+def est_relance_machine(texte):
+    return any(texte.startswith(p) for p in RELANCES_MACHINE)
+
+def est_validation_seule(texte):
+    # Normalisation : minuscules, ponctuation courante remplacee par des
+    # espaces. Les apostrophes sont CONSERVEES pour que "c'est" reste un
+    # marqueur reconnaissable tel quel.
+    normalise = texte.lower()
+    for signe in ".,;:!?()[]{}\"/\\-_*#":
+        normalise = normalise.replace(signe, " ")
+    mots = [m for m in normalise.split() if m]
+    if not mots or len(mots) > 5:
+        return False
+    return all(m in MARQUEURS_VALIDATION for m in mots)
+
 trimmed = prompt.strip()
 decision = "OK"
 if len(trimmed) < 10:
+    decision = "FILTERED"
+elif est_relance_machine(trimmed):
+    decision = "FILTERED"
+elif est_validation_seule(trimmed):
     decision = "FILTERED"
 elif trimmed.startswith("<uploaded_files>"):
     decision = "FILTERED"

@@ -16,7 +16,7 @@ Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil
 
 | Config | Valeur |
 |--------|--------|
-| Dashboard | https://mnemos.evidencai.com |
+| Dashboard | https://mnemos.cloud |
 | Mode A | Outils MCP natifs mnemos_* (préféré) |
 | Mode B | Fallback → voir FALLBACK-MODE-B.md |
 
@@ -59,7 +59,7 @@ Espaces actifs :
 
 Commandes : "ouvre [espace]" · "brief matinal" · "cherche [sujet]" · "fin de fil"
 
-Dashboard : https://mnemos.evidencai.com
+Dashboard : https://mnemos.cloud
 ---
 Sur quel espace on travaille ?
 ```
