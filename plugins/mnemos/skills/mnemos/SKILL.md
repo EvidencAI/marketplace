@@ -93,9 +93,13 @@ Si espace non identifiable → `list_spaces` puis demander.
 Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mnemos out"
 
 1. **workSummary** (600-800 mots) : résumé narratif exhaustif. Inclure : décisions (avec contexte), problèmes résolus (comment), travail produit, limitations, prochaines étapes, questions ouvertes.
-2. **Handover** : `mnemos_session_end(userId:USER_ALIAS, workSummary:...)`
-3. **Mémoire** : le codex de l'espace est régénéré automatiquement par `session_end` (Haiku, en tâche de fond, fail-soft). Aucun appel `read_memory`/`write_memory` manuel n'est nécessaire pour cette étape.
-4. **Vérifier** succès handover + mémoire. Si échec → voir REFERENCE.md § Gestion des erreurs.
+2. **Handover** : `mnemos_session_end(userId:USER_ALIAS, workSummary:..., decisions:[...], pendingTasks:[...])`
+
+   **FOURNIR LES DEUX LISTES, TOUJOURS.** Tu as vécu le fil ; le modèle serveur n'en verrait qu'un résumé de quelques milliers de caractères. Quand les deux listes sont fournies avec un `workSummary` de plus de 300 caractères, **le serveur ne fait AUCUN appel modèle pour le handover** : la clôture est nettement plus rapide et ne consomme pas de tokens. Sans elles, un modèle refait ton travail moins bien.
+
+   `decisions` = faits tranchés pendant le fil, avec leur raison. `pendingTasks` = ce qui reste actionnable. **L'une des deux peut être vide** (un fil peut n'avoir aucune tâche restante), pas les deux. Écris-les en phrases complètes : elles sont réinjectées telles quelles à l'ouverture du fil suivant.
+3. **Mémoire** : le codex de l'espace est régénéré automatiquement par `session_end` (en tâche de fond, fail-soft). **Aucun appel `read_memory`/`write_memory` manuel n'est nécessaire.**
+4. **Vérifier** succès handover + mémoire. **Contrôler que `context_snapshot.source_listes` vaut `client` et non `modele`** : s'il vaut `modele`, tes deux listes n'ont pas été prises en compte (client trop ancien, ou `workSummary` sous le seuil). Si échec → voir REFERENCE.md § Gestion des erreurs.
 5. **Confirmer** : "Session clôturée. Handover (XXX mots) et mémoire mise à jour pour [espace]."
 
 ---
@@ -138,7 +142,7 @@ Un journal technique est tenu dans `/tmp/mnemos-hook.log` (diagnostic local). Le
 |-------------------|--------|
 | (auto au 1er message) | session_start (sans spaceId) |
 | mnemos in X, ouvre X | session_start(spaceId:X) |
-| mnemos out, fin de fil | session_end + write_memory |
+| mnemos out, fin de fil | session_end(workSummary, decisions, pendingTasks) — le codex se régénère seul |
 | retiens que..., décision:, fait:, j'ai appris | create_atom_manual (type selon contenu) |
 | cherche Y, dans ma mémoire | search_atoms(query:Y) |
 | mes espaces, mes dossiers | list_spaces |

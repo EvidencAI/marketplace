@@ -64,7 +64,10 @@ Si `$ARGUMENTS` = un nom d'espace (ex: "Developpement Mnemos", "CodirIA") :
 - Afficher le contexte et demander confirmation
 
 Si `$ARGUMENTS` = "out" ou "fin" :
-- Executer le protocole de cloture (workSummary, session_end, write_memory).
+- Executer le protocole de cloture : workSummary, puis session_end en fournissant
+  TOUJOURS decisions et pendingTasks (sans elles, un modele serveur refait ce
+  travail moins bien et la cloture est nettement plus lente). Le codex de
+  l'espace se regenere seul, aucun write_memory manuel.
 
 Si `$ARGUMENTS` = "stats" :
 - Appeler mnemos_get_stats et afficher les compteurs.

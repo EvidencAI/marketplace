@@ -12,7 +12,7 @@
             "name": "mnemos",
             "source": "./plugins/mnemos",
             "description": "Mémoire persistante intelligente. 37 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
-            "version": "0.8.5"
+            "version": "0.8.6"
         },
         {
             "name": "mon-greffier",
