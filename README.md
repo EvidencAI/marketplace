@@ -7,6 +7,7 @@ Official plugin marketplace for Claude by [EvidencAI](https://mnemos-dashboard.v
 | Plugin | Description | Status |
 |--------|-------------|--------|
 | **Mnemos** | Persistent intelligent memory — 37 MCP tools, knowledge graph, dedup, auth | Available |
+| **Mycelora** | Persistent intelligent memory — 35 MCP tools, knowledge graph, dedup, auth. New name for Mnemos, available in parallel during the transition | Available |
 | **SignalPro** | Strategic intelligence & signal detection | Coming soon |
 | **CodirIA** | AI governance for executive committees | Coming soon |
 
@@ -22,6 +23,12 @@ Then install any plugin:
 
 ```
 /plugin install mnemos@evidencai-plugins
+```
+
+Mycelora is the new name for Mnemos, available in parallel during the transition:
+
+```
+/plugin install mycelora@evidencai-plugins
 ```
 
 ## About EvidencAI
