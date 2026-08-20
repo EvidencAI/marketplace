@@ -1,0 +1,9 @@
+{
+  "session_id": "726ec160-e1f5-5bd0-b3e7-3de9785ea2be",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "/home/claude",
+  "prompt_id": "daa83436-ac05-41b8-890b-2e2769ad9ce5",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Rappel interne : verifier le statut du deploiement en cours et relancer si besoin"
+}
