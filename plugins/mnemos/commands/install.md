@@ -5,12 +5,11 @@ description: "Installer ou mettre a jour le serveur MCP Mnemos sur cette machine
 # Mnemos — Installation du serveur MCP
 
 ## Contexte
-Le plugin Mnemos fournit les skills (comportement). Le serveur MCP fournit les outils (memoire, recall, extraction).
-Cowork ne charge pas encore les serveurs MCP locaux depuis les plugins (bug connu). L'installation configure le serveur MCP dans Claude Desktop.
+Le plugin Mnemos fournit les skills (comportement). Les outils MCP (mémoire, recall, extraction) sont fournis par deux canaux distincts et indépendants — il n'y a plus de bundle local a installer.
 
-## Detection
-Avant d'afficher les instructions, verifie si les outils mnemos sont deja disponibles :
-- Si `mnemos_whoami` ou `mnemos_list_spaces` repond → le MCP est deja configure, dis-le a l'utilisateur.
+## Détection
+Avant d'afficher les instructions, vérifie si les outils mnemos sont déjà disponibles :
+- Si `mnemos_whoami` ou `mnemos_list_spaces` répond → un canal est déjà configuré, dis-le a l'utilisateur.
 - Sinon → continue avec l'installation.
 
 ## Instructions a afficher a l'utilisateur
@@ -19,35 +18,26 @@ Affiche ce message :
 
 ---
 
-**Mnemos a besoin d'une installation rapide (30 secondes).**
+**Mnemos fonctionne via deux canaux, au choix (ou les deux ensemble) :**
 
-Ouvrez votre Terminal et collez cette commande :
+**1. Ce plugin Cowork**
+Installé depuis le marketplace EvidencAI, il fournit les skills et les hooks automatiques (rappel contextuel, extraction). Rien a configurer une fois le plugin activé.
 
-```
-curl -sL https://api.mycelora.ai/functions/v1/mycelora-install | bash
-```
+**2. Le connecteur Mycelora (claude.ai / Claude Desktop)**
+Pour accéder aux outils mémoire (espaces, atomes, recall...) depuis claude.ai ou Claude Desktop, ajoutez le connecteur distant :
+- Serveur MCP : `https://api.mycelora.ai/functions/v1/mycelora-mcp`
+- Authentification : OAuth via le connecteur, ou clé API `mk_live_...` créée depuis le dashboard [https://mycelora.ai](https://mycelora.ai)
 
-Ce script va :
-1. Telecharger le moteur Mnemos (~3 MB)
-2. Le placer dans `~/mycelora-mcp/`
-3. Configurer Claude Desktop automatiquement
-
-Apres l'installation, **redemarrez Claude Desktop** puis revenez ici.
+Aucune installation locale n'est nécessaire — pas de script, pas de bundle a télécharger.
 
 ---
 
-## Apres le redemarrage
+## Après configuration
 
 Une fois que l'utilisateur revient :
-1. Teste `mnemos_whoami` pour confirmer que le MCP fonctionne
-2. Si ca marche, propose `mnemos login` ou `mnemos signup` selon si l'utilisateur a deja un compte
-3. Si ca ne marche pas, verifie :
-   - Node.js est installe ? (`node -v` dans le terminal)
-   - Le fichier `~/mycelora-mcp/index.cjs` existe ?
-   - Le fichier `claude_desktop_config.json` contient bien la section mnemos ?
-
-## Mode B (fallback sans Node.js)
-
-Si l'utilisateur ne peut pas installer Node.js ou si le script echoue, les outils Mnemos fonctionnent en mode Edge Function (HTTP).
-Ce mode est automatique : le plugin detecte l'absence du MCP local et route les appels vers Supabase.
-Limitation du Mode B : pas de Face A (rappel contextuel automatique), pas d'extraction continue.
+1. Teste `mnemos_whoami` pour confirmer que le canal fonctionne.
+2. Si ça marche, propose `mnemos login` ou `mnemos signup` selon si l'utilisateur a déjà un compte.
+3. Si ça ne marche pas, vérifie :
+   - Le connecteur Mycelora est bien ajouté et activé dans claude.ai / Claude Desktop ?
+   - L'authentification (OAuth ou clé API `mk_live_...`) a bien abouti ?
+   - Le dashboard https://mycelora.ai confirme un compte actif ?

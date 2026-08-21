@@ -16,7 +16,7 @@ Mycelora est multi-utilisateur. Chaque installation nécessite :
 | SUPABASE_SERVICE_ROLE_KEY | Env var dans claude_desktop_config.json | (ne pas écrire ici) |
 
 Où trouver ces valeurs :
-- claude_desktop_config.json → section mcpServers.mnemos.env
+- Historiquement dans claude_desktop_config.json → section mcpServers.mnemos.env (canal local retiré le 21/08/2026, voir l'historique git)
 - `mnemos_get_profile(userId:USER_ALIAS)` → principes, portrait, instructions
 
 Premier setup : voir ONBOARDING.md.
@@ -163,29 +163,13 @@ Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, 
 
 ## Architecture technique
 
-Trois couches de code, une seule base Supabase :
+Une seule base Supabase, deux canaux d'accès vivants :
 - **Source** (vérité) : répertoire local du développeur, dossier mcp-server/src/ (TypeScript)
-- **Bundle** (actif) : ~/mycelora-mcp/index.cjs (fichier unique CJS, ~3.2 MB, inclut transcript-watcher)
-- **Config** : claude_desktop_config.json (macOS: ~/Library/Application Support/Claude/ · Windows: %APPDATA%\Claude\ · Linux: ~/.config/claude/)
-- **Distribution** : plugin Cowork (~16 Ko, skills only) + bundle via Supabase Storage (install.sh)
+- **Distribution** : plugin Cowork (~16 Ko, skills only, hooks automatiques) via le marketplace EvidencAI, et connecteur Mycelora distant (OAuth ou clé API `mk_live_...`) dans claude.ai / Claude Desktop
 - **Dashboard** : https://mycelora.ai (Coolify)
 - **Supabase** : pgvector, Voyage AI voyage-3-lite 512 dim, Haiku extraction
-- **Edge Function** : https://api.mycelora.ai/functions/v1/mycelora-mcp
-- **Transcript-watcher** : intégré au bundle, parse les sessions Cowork, extrait les atomes automatiquement. Standalone supprimé (26/03/2026).
+- **Edge Function** (serveur MCP distant) : https://api.mycelora.ai/functions/v1/mycelora-mcp
+- **Transcript-watcher** : parse les sessions Cowork, extrait les atomes automatiquement. Standalone supprimé (26/03/2026).
 
-### Build process
-```
-npx tsc
-npx esbuild dist/index.js --bundle --format=cjs --platform=node --target=node18 --outfile=bundle/index.cjs --keep-names
-# macOS/Linux :
-cp bundle/index.cjs ~/mycelora-mcp/index.cjs
-# Windows : copy bundle\index.cjs %USERPROFILE%\mycelora-mcp\index.cjs
-```
-
-### Distribution (install.sh)
-L'utilisateur installe le plugin Cowork (skills only, ~16 Ko) puis lance :
-```
-curl -sL "https://SUPABASE_PROJECT_REF.supabase.co/storage/v1/object/public/mnemos-releases/install.sh" | bash
-```
-Le script télécharge le bundle dans ~/mycelora-mcp/ et injecte la config dans claude_desktop_config.json.
-Zéro secrets côté client. La service_role_key est injectée par install.sh depuis Supabase Storage (accès authentifié).
+### Canal local (bundle) retiré
+Le canal d'installation locale (bundle CJS dans ~/mycelora-mcp/, build via `esbuild`, script install.sh servi depuis le bucket Supabase Storage `mnemos-releases`) a été retiré le 21/08/2026. Voir l'historique git pour la procédure précédente.
