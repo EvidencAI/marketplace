@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Script d'integration pour les hooks mnemos.
-# Fait des appels reseaux vers l'edge mnemos-mcp avec le jeton reel.
+# Fait des appels reseaux vers l'edge mycelora-mcp avec le jeton reel.
 # Ne doit JAMAIS afficher le jeton dans ses messages.
 
 set -uo pipefail
@@ -8,7 +8,7 @@ set -uo pipefail
 TOKEN_PATH="${1:-/Users/stephanecommenge/Claude-Dev/MNEMOS 07 26/HOOK-KEY.txt}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EDGE_URL="https://hpbsowihyydzdnxuzoxs.supabase.co/functions/v1/mnemos-mcp"
+EDGE_URL="https://api.mycelora.ai/functions/v1/mycelora-mcp"
 
 # Verifie la presence et non-vide du jeton
 if [ ! -f "$TOKEN_PATH" ]; then

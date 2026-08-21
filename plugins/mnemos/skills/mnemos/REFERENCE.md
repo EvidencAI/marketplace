@@ -170,7 +170,7 @@ Trois couches de code, une seule base Supabase :
 - **Distribution** : plugin Cowork (~16 Ko, skills only) + bundle via Supabase Storage (install.sh)
 - **Dashboard** : https://mnemos.cloud (Coolify)
 - **Supabase** : pgvector, Voyage AI voyage-3-lite 512 dim, Haiku extraction
-- **Edge Function** : https://SUPABASE_PROJECT_REF.supabase.co/functions/v1/mnemos-mcp
+- **Edge Function** : https://api.mycelora.ai/functions/v1/mycelora-mcp
 - **Transcript-watcher** : intégré au bundle, parse les sessions Cowork, extrait les atomes automatiquement. Standalone supprimé (26/03/2026).
 
 ### Build process

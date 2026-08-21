@@ -2,7 +2,7 @@
 # Fonctions partagees par mnemos-userpromptsubmit.sh et mnemos-stop.sh.
 # Ce fichier est SOURCE (via `source`), jamais execute directement.
 
-MNEMOS_EDGE_URL="https://hpbsowihyydzdnxuzoxs.supabase.co/functions/v1/mnemos-mcp"
+MNEMOS_EDGE_URL="https://api.mycelora.ai/functions/v1/mycelora-mcp"
 MNEMOS_LOG_FILE="/tmp/mnemos-hook.log"
 
 # mnemos_log <hook> <event> <duration_ms> <status> <response_size>

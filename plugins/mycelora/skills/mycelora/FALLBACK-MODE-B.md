@@ -29,7 +29,7 @@ La cle service_role du Mac vit dans `/Users/stephanecommenge/.mnemos-supabase-ke
 L'edge function accepte trois modes d'auth : `Authorization: Bearer [jeton]`, header `x-mnemos-key: [jeton]`, ou `?api_key=[jeton]` en query param.
 
 ```
-curl -s -X POST "https://hpbsowihyydzdnxuzoxs.supabase.co/functions/v1/mnemos-mcp" \
+curl -s -X POST "https://api.mycelora.ai/functions/v1/mycelora-mcp" \
   -H "Content-Type: application/json" -H "Authorization: Bearer [jeton B1]" \
   -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"TOOL_NAME","arguments":{"userId":"USER_UUID",...}},"id":1}'
 ```
@@ -65,7 +65,7 @@ Note : `session_id` provient du `session_start` precedent. Si non disponible, ge
 ### initialize (test de connexion)
 
 ```
-curl -s -X POST "https://hpbsowihyydzdnxuzoxs.supabase.co/functions/v1/mnemos-mcp" \
+curl -s -X POST "https://api.mycelora.ai/functions/v1/mycelora-mcp" \
   -H "Content-Type: application/json" -H "Authorization: Bearer [jeton B1]" \
   -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cowork","version":"1.0"}},"id":1}'
 ```
@@ -73,7 +73,7 @@ curl -s -X POST "https://hpbsowihyydzdnxuzoxs.supabase.co/functions/v1/mnemos-mc
 ### mnemos_session_start
 
 ```
-curl -s -X POST "https://hpbsowihyydzdnxuzoxs.supabase.co/functions/v1/mnemos-mcp" \
+curl -s -X POST "https://api.mycelora.ai/functions/v1/mycelora-mcp" \
   -H "Content-Type: application/json" -H "Authorization: Bearer [jeton B1]" \
   -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"mnemos_session_start","arguments":{"userId":"USER_UUID","sessionId":"SESSION_ID"}},"id":1}'
 ```

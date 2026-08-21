@@ -5,20 +5,20 @@
     },
     "metadata": {
         "description": "Plugins EvidencAI pour Claude — mémoire persistante, veille, gouvernance IA",
-        "homepage": "https://mnemos.cloud"
+        "homepage": "https://mycelora.ai"
     },
     "plugins": [
         {
             "name": "mnemos",
             "source": "./plugins/mnemos",
             "description": "Mémoire persistante intelligente. 37 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
-            "version": "0.8.6"
+            "version": "0.8.7"
         },
         {
             "name": "mycelora",
             "source": "./plugins/mycelora",
             "description": "Mémoire persistante intelligente. 35 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku. Nouveau nom du plugin mnemos, disponible en parallèle pendant la transition.",
-            "version": "0.9.0"
+            "version": "0.9.1"
         },
         {
             "name": "mon-greffier",

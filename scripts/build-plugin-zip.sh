@@ -1,17 +1,29 @@
 #!/usr/bin/env bash
-# Fabrique le zip du plugin mnemos avec injection du jeton hook. Le jeton ne
-# doit JAMAIS apparaitre dans un message, un log ou en argument de commande
-# visible (ps aux). Usage :
-#   scripts/build-plugin-zip.sh <version> [chemin_jeton]
+# Fabrique le zip d'un plugin (mnemos ou mycelora) avec injection du jeton
+# hook. Le jeton ne doit JAMAIS apparaitre dans un message, un log ou en
+# argument de commande visible (ps aux). Usage :
+#   scripts/build-plugin-zip.sh <version> [chemin_jeton] [plugin]
+# Le troisieme argument vaut "mnemos" par defaut (compatibilite avec les
+# appels historiques). Le placeholder du jeton et le nom du zip sont derives
+# du nom du plugin : __MNEMOS_HOOK_KEY__ / plugin-mnemos<version>.zip pour
+# mnemos, __MYCELORA_HOOK_KEY__ / plugin-mycelora-<version>.zip sinon.
 
 set -uo pipefail
 
-VERSION="${1:?usage: build-plugin-zip.sh <version> [chemin_jeton]}"
+VERSION="${1:?usage: build-plugin-zip.sh <version> [chemin_jeton] [plugin]}"
 TOKEN_PATH="${2:-/Users/stephanecommenge/Claude-Dev/MNEMOS 07 26/HOOK-KEY.txt}"
+PLUGIN="${3:-mnemos}"
+PLUGIN_UPPER="$(printf '%s' "$PLUGIN" | tr '[:lower:]-' '[:upper:]_')"
+PLACEHOLDER="__${PLUGIN_UPPER}_HOOK_KEY__"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PLUGIN_SRC="$REPO_ROOT/plugins/mnemos"
+PLUGIN_SRC="$REPO_ROOT/plugins/$PLUGIN"
+
+if [ ! -d "$PLUGIN_SRC" ]; then
+  echo "abort: plugins/$PLUGIN introuvable" >&2
+  exit 1
+fi
 
 if [ ! -f "$TOKEN_PATH" ]; then
   echo "abort: jeton introuvable ou vide" >&2
@@ -46,11 +58,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-DEST="$TMPDIR/plugin-src/mnemos"
+DEST="$TMPDIR/plugin-src/$PLUGIN"
 mkdir -p "$DEST/hooks"
 
 if [ ! -f "$PLUGIN_SRC/hooks/hooks.json" ]; then
-  echo "abort: plugins/mnemos/hooks/hooks.json introuvable" >&2
+  echo "abort: plugins/$PLUGIN/hooks/hooks.json introuvable" >&2
   exit 1
 fi
 cp "$PLUGIN_SRC/hooks/hooks.json" "$DEST/hooks/hooks.json"
@@ -80,17 +92,17 @@ TOKEN_FILE_TMP="$(mktemp /tmp/mnemos-build-token.XXXXXX)"
 chmod 600 "$TOKEN_FILE_TMP"
 printf '%s' "$TOKEN_CONTENT" > "$TOKEN_FILE_TMP"
 
-python3 - "$DEST/hooks" "$TOKEN_FILE_TMP" <<'PYEOF'
+python3 - "$DEST/hooks" "$TOKEN_FILE_TMP" "$PLACEHOLDER" <<'PYEOF'
 import sys, os, glob
 
-hooks_dir, token_file = sys.argv[1], sys.argv[2]
+hooks_dir, token_file, placeholder = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(token_file, "r", encoding="utf-8") as f:
     token = f.read()
 
 for path in glob.glob(os.path.join(hooks_dir, "*.sh")):
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
-    content = content.replace("__MNEMOS_HOOK_KEY__", token)
+    content = content.replace(placeholder, token)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 PYEOF
@@ -98,7 +110,7 @@ PYEOF
 rm -f "$TOKEN_FILE_TMP"
 
 # Garde-fous bloquants AVANT de zipper.
-if grep -rl "__MNEMOS_HOOK_KEY__" "$TMPDIR/plugin-src" >/dev/null 2>&1; then
+if grep -rl "$PLACEHOLDER" "$TMPDIR/plugin-src" >/dev/null 2>&1; then
   echo "abort: placeholder residuel detecte dans la copie, jeton non injecte quelque part" >&2
   exit 1
 fi
@@ -110,10 +122,14 @@ fi
 
 OUT_DIR="/Users/stephanecommenge/Claude-Dev/MNEMOS 07 26/plugin"
 mkdir -p "$OUT_DIR"
-OUT_ZIP="$OUT_DIR/plugin-mnemos${VERSION}.zip"
+if [ "$PLUGIN" = "mnemos" ]; then
+  OUT_ZIP="$OUT_DIR/plugin-mnemos${VERSION}.zip"
+else
+  OUT_ZIP="$OUT_DIR/plugin-${PLUGIN}-${VERSION}.zip"
+fi
 rm -f "$OUT_ZIP"
 
-FILE_LIST="$(cd "$TMPDIR/plugin-src" && find mnemos -type f ! -name ".DS_Store" | sort)"
+FILE_LIST="$(cd "$TMPDIR/plugin-src" && find "$PLUGIN" -type f ! -name ".DS_Store" | sort)"
 if [ -z "$FILE_LIST" ]; then
   echo "abort: aucun fichier a zipper" >&2
   exit 1
