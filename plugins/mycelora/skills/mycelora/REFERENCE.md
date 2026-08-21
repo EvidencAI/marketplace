@@ -165,10 +165,10 @@ Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, 
 
 Trois couches de code, une seule base Supabase :
 - **Source** (vérité) : répertoire local du développeur, dossier mcp-server/src/ (TypeScript)
-- **Bundle** (actif) : ~/mnemos-mcp/index.cjs (fichier unique CJS, ~3.2 MB, inclut transcript-watcher)
+- **Bundle** (actif) : ~/mycelora-mcp/index.cjs (fichier unique CJS, ~3.2 MB, inclut transcript-watcher)
 - **Config** : claude_desktop_config.json (macOS: ~/Library/Application Support/Claude/ · Windows: %APPDATA%\Claude\ · Linux: ~/.config/claude/)
 - **Distribution** : plugin Cowork (~16 Ko, skills only) + bundle via Supabase Storage (install.sh)
-- **Dashboard** : https://mnemos.cloud (Coolify)
+- **Dashboard** : https://mycelora.ai (Coolify)
 - **Supabase** : pgvector, Voyage AI voyage-3-lite 512 dim, Haiku extraction
 - **Edge Function** : https://api.mycelora.ai/functions/v1/mycelora-mcp
 - **Transcript-watcher** : intégré au bundle, parse les sessions Cowork, extrait les atomes automatiquement. Standalone supprimé (26/03/2026).
@@ -178,8 +178,8 @@ Trois couches de code, une seule base Supabase :
 npx tsc
 npx esbuild dist/index.js --bundle --format=cjs --platform=node --target=node18 --outfile=bundle/index.cjs --keep-names
 # macOS/Linux :
-cp bundle/index.cjs ~/mnemos-mcp/index.cjs
-# Windows : copy bundle\index.cjs %USERPROFILE%\mnemos-mcp\index.cjs
+cp bundle/index.cjs ~/mycelora-mcp/index.cjs
+# Windows : copy bundle\index.cjs %USERPROFILE%\mycelora-mcp\index.cjs
 ```
 
 ### Distribution (install.sh)
@@ -187,5 +187,5 @@ L'utilisateur installe le plugin Cowork (skills only, ~16 Ko) puis lance :
 ```
 curl -sL "https://SUPABASE_PROJECT_REF.supabase.co/storage/v1/object/public/mnemos-releases/install.sh" | bash
 ```
-Le script télécharge le bundle dans ~/mnemos-mcp/ et injecte la config dans claude_desktop_config.json.
+Le script télécharge le bundle dans ~/mycelora-mcp/ et injecte la config dans claude_desktop_config.json.
 Zéro secrets côté client. La service_role_key est injectée par install.sh depuis Supabase Storage (accès authentifié).

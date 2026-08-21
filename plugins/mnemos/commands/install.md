@@ -24,12 +24,12 @@ Affiche ce message :
 Ouvrez votre Terminal et collez cette commande :
 
 ```
-curl -sL https://hpbsowihyydzdnxuzoxs.supabase.co/functions/v1/mnemos-install | bash
+curl -sL https://api.mycelora.ai/functions/v1/mycelora-install | bash
 ```
 
 Ce script va :
 1. Telecharger le moteur Mnemos (~3 MB)
-2. Le placer dans `~/mnemos-mcp/`
+2. Le placer dans `~/mycelora-mcp/`
 3. Configurer Claude Desktop automatiquement
 
 Apres l'installation, **redemarrez Claude Desktop** puis revenez ici.
@@ -43,7 +43,7 @@ Une fois que l'utilisateur revient :
 2. Si ca marche, propose `mnemos login` ou `mnemos signup` selon si l'utilisateur a deja un compte
 3. Si ca ne marche pas, verifie :
    - Node.js est installe ? (`node -v` dans le terminal)
-   - Le fichier `~/mnemos-mcp/index.cjs` existe ?
+   - Le fichier `~/mycelora-mcp/index.cjs` existe ?
    - Le fichier `claude_desktop_config.json` contient bien la section mnemos ?
 
 ## Mode B (fallback sans Node.js)

@@ -30,7 +30,7 @@ Vous n'etes pas encore connecte.
 Dites-moi "je veux me connecter" (avec votre email/mot de passe)
 ou "je veux creer un compte" pour commencer.
 
-Dashboard : https://mnemos.cloud
+Dashboard : https://mycelora.ai
 ```
 
 - STOP. Ne pas aller plus loin.
@@ -76,5 +76,5 @@ Si `$ARGUMENTS` = "stats" :
 
 Chaque reponse de /mnemos:start DOIT inclure en fin de message :
 ```
-Dashboard : https://mnemos.cloud
+Dashboard : https://mycelora.ai
 ```
