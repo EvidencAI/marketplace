@@ -1,0 +1,1 @@
+Fichiers archivés : canal MCP local (Mode A/Mode B, bundle `~/mycelora-mcp/index.cjs`) retiré au fil 63, le 21/08/2026 — seuls vivent désormais le plugin Cowork et le connecteur claude.ai « Mycelora » (OAuth).

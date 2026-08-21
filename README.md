@@ -1,13 +1,13 @@
 # EvidencAI Plugin Marketplace
 
-Official plugin marketplace for Claude by [EvidencAI](https://mnemos-dashboard.vercel.app).
+Official plugin marketplace for Claude by [EvidencAI](https://mycelora.ai).
 
 ## Available Plugins
 
 | Plugin | Description | Status |
 |--------|-------------|--------|
-| **Mnemos** | Persistent intelligent memory — 37 MCP tools, knowledge graph, dedup, auth | Available |
-| **Mycelora** | Persistent intelligent memory — 35 MCP tools, knowledge graph, dedup, auth. New name for Mnemos, available in parallel during the transition | Available |
+| **Mnemos** | Persistent intelligent memory — 48 MCP tools, knowledge graph, dedup, auth | Available |
+| **Mycelora** | Persistent intelligent memory — 48 MCP tools, knowledge graph, dedup, auth. New name for Mnemos, available in parallel during the transition | Available |
 | **SignalPro** | Strategic intelligence & signal detection | Coming soon |
 | **CodirIA** | AI governance for executive committees | Coming soon |
 
@@ -16,7 +16,7 @@ Official plugin marketplace for Claude by [EvidencAI](https://mnemos-dashboard.v
 Add this marketplace to Claude:
 
 ```
-/plugin marketplace add stephanecomm/evidencai-marketplace
+/plugin marketplace add EvidencAI/marketplace
 ```
 
 Then install any plugin:

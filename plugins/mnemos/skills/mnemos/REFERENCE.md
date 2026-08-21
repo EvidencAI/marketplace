@@ -6,17 +6,20 @@ Ce document est consulté à la demande, PAS à chaque tour. Le LLM le lit uniqu
 
 ## Configuration par utilisateur
 
-Mnemos est multi-utilisateur. Chaque installation nécessite :
+Mnemos est multi-utilisateur. Deux canaux vivants donnent accès à la mémoire (détail complet : install.md) :
 
-| Variable | Source | Exemple (Stéphane) |
-|----------|--------|---------------------|
-| USER_ALIAS | userId pour les outils MCP Mode A | "stephane" |
-| USER_UUID | userId pour les curls Mode B | 2ba47612-aa7d-45ef-b9a9-295d039e5f82 |
+| Canal | Ce qu'il faut à l'utilisateur | Où |
+|-------|-------------------------------|-----|
+| Plugin Cowork (marketplace EvidencAI) | Jeton hook, embarqué automatiquement dans le zip du plugin par `scripts/build-plugin-zip.sh` — rien à configurer manuellement | — |
+| Connecteur Mycelora (claude.ai / Claude Desktop) | OAuth via le connecteur, ou clé API `mk_live_...` | Dashboard https://mycelora.ai |
+
+Un utilisateur du plugin n'a jamais besoin d'une clé service_role Supabase : ce niveau d'accès reste interne à l'infrastructure EvidencAI.
+
+| Variable | Description | Exemple (Stéphane) |
+|----------|--------------|---------------------|
+| USER_ALIAS | Identifiant court passé en `userId` aux outils MCP `mnemos_*` | "stephane" |
 | SUPABASE_PROJECT_REF | Référence projet Supabase | hpbsowihyydzdnxuzoxs |
-| SUPABASE_SERVICE_ROLE_KEY | Env var dans claude_desktop_config.json | (ne pas écrire ici) |
 
-Où trouver ces valeurs :
-- Historiquement dans claude_desktop_config.json → section mcpServers.mnemos.env (canal local retiré le 21/08/2026, voir l'historique git)
 - `mnemos_get_profile(userId:USER_ALIAS)` → principes, portrait, instructions
 
 Premier setup : voir ONBOARDING.md.
@@ -46,7 +49,7 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 
 ## Outils MCP (référence rapide)
 
-35 outils exposés au LLM, regroupés par domaine :
+48 outils exposés au LLM, regroupés par domaine :
 
 **Espaces** (4) : list_spaces, create_space, update_space, suggest_spaces
 **Atomes** (4) : search_atoms, create_atom_manual, update_atom, toggle_pin_atom
@@ -57,17 +60,21 @@ Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer l
 **Profil** (3) : get_profile, update_profile, get_calibration
 **Contacts** (2) : upsert_contact, search_contacts
 **Ingestion** (4) : ingest_document, ingest_events, process_events, collect_events (collecte cloud automatique mail/agenda, S7, voir § Collecte cloud)
-**Insights** (2) : cross_insights, analyze_space
+**Sources** (4) : create_source, disconnect_source, test_source_connection, google_consent_url
+**Clés API** (3) : create_api_key, list_api_keys, revoke_api_key
+**Insights & tensions** (5) : cross_insights, analyze_space, ack_tension, close_topic, reopen_topic
 **Documents** (1) : list_documents
 **Connexions** (1) : create_connection
 **Extraction** (2) : log_exchange, extract_atoms (aussi utilisés automatiquement par le transcript-watcher)
 **Sync** (1) : sync_status
+**Export** (2) : export_memory, export_status
 **Feedback** (1) : submit_feedback
+**Compte** (1) : delete_account
 
 Note : log_exchange et extract_atoms sont appelés automatiquement par les hooks du watcher v3 (UserPromptSubmit/Stop). Le LLM n'a pas besoin de les appeler en routine, mais ils sont disponibles si nécessaire (debug, extraction manuelle).
 Note : get_stats, health_check, triage_atoms, garbage_collect sont des outils standalone (`mnemos_get_stats`, `mnemos_health_check`, `mnemos_triage_atoms`, `mnemos_garbage_collect`). Il n'existe plus de dispatcher `mnemos_admin`.
 
-Note spaceId : Mode A accepte le **nom**. Mode B exige le **UUID**.
+Note spaceId : les outils MCP acceptent le **nom** de l'espace (résolution insensible à la casse) aussi bien que l'**UUID**.
 Note read_memory/write_memory : acceptent désormais le **nom** d'espace (comme les autres outils avec résolution de nom), en plus de l'UUID.
 
 ---
@@ -153,11 +160,10 @@ Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, 
 
 ## Gestion des erreurs
 
-1. Mode A échoue → retenter une fois. Échec persistant → basculer Mode B (voir FALLBACK-MODE-B.md).
-2. Mode B échoue → "L'accès mémoire est indisponible. Je continue sans, session non sauvegardée."
-3. Ni A ni B → travailler sans mémoire, le signaler clairement.
-4. Ne JAMAIS ignorer un échec d'écriture (handover, mémoire, atome). Toujours prévenir l'utilisateur.
-5. Clôture échouée → copier handover/mémoire dans le chat pour sauvegarde manuelle.
+1. Un appel MCP `mnemos_*` échoue → retenter une fois. Échec persistant → vérifier que le canal (plugin Cowork ou connecteur Mycelora, voir install.md) est bien actif et authentifié.
+2. Toujours indisponible → "L'accès mémoire est indisponible. Je continue sans, session non sauvegardée."
+3. Ne JAMAIS ignorer un échec d'écriture (handover, mémoire, atome). Toujours prévenir l'utilisateur.
+4. Clôture échouée → copier handover/mémoire dans le chat pour sauvegarde manuelle.
 
 ---
 
@@ -172,4 +178,4 @@ Une seule base Supabase, deux canaux d'accès vivants :
 - **Transcript-watcher** : parse les sessions Cowork, extrait les atomes automatiquement. Standalone supprimé (26/03/2026).
 
 ### Canal local (bundle) retiré
-Le canal d'installation locale (bundle CJS dans ~/mycelora-mcp/, build via `esbuild`, script install.sh servi depuis le bucket Supabase Storage `mnemos-releases`) a été retiré le 21/08/2026. Voir l'historique git pour la procédure précédente.
+Le canal d'installation locale (bundle CJS dans ~/mycelora-mcp/, build via `esbuild`, script install.sh servi depuis un bucket de stockage Supabase dédié — bucket aujourd'hui supprimé) a été retiré le 21/08/2026. Voir l'historique git pour la procédure précédente.

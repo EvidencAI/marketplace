@@ -17,12 +17,12 @@ Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil
 | Config | Valeur |
 |--------|--------|
 | Dashboard | https://mycelora.ai |
-| Mode A | Outils MCP natifs mnemos_* (préféré) |
-| Mode B | Fallback → voir FALLBACK-MODE-B.md |
+| Canal 1 | Plugin Cowork (skills + hooks automatiques, rien à configurer) |
+| Canal 2 | Connecteur claude.ai / Claude Desktop "Mycelora" (OAuth) → outils MCP mnemos_* |
 
-OUTILS : fournis par le connecteur custom claude.ai "Mnemos" (35 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
-USERID : Mode A → userId:USER_ALIAS (identifiant court, ex: "stephane", défini à l'onboarding). Mode B (curl) → userId:USER_UUID.
-Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, FALLBACK-MODE-B.md, SYNC-MAIL-AGENDA-PROMPT.md
+OUTILS : fournis par le connecteur custom claude.ai "Mycelora" (48 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
+USERID : userId:USER_ALIAS (identifiant court, ex: "stephane", défini à l'onboarding), toujours requis dans les appels MCP.
+Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, SYNC-MAIL-AGENDA-PROMPT.md
 
 ---
 
@@ -191,4 +191,4 @@ Anthropic natifs en conversation directe étaient disponibles hors macOS).
 
 Mnemos est le nom de l'app, l'utiliser librement.
 Dire "je me souviens que..." ou "dans le dossier X..." plutôt que détailler la mécanique.
-Ne pas mentionner modes A/B, outils MCP ou fichiers mémoire sauf demande explicite ou debug.
+Ne pas mentionner les canaux techniques, outils MCP ou fichiers mémoire sauf demande explicite ou debug.

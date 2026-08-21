@@ -11,14 +11,14 @@
         {
             "name": "mnemos",
             "source": "./plugins/mnemos",
-            "description": "Mémoire persistante intelligente. 37 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
-            "version": "0.8.7"
+            "description": "Mémoire persistante intelligente. 48 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
+            "version": "0.8.8"
         },
         {
             "name": "mycelora",
             "source": "./plugins/mycelora",
-            "description": "Mémoire persistante intelligente. 35 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku. Nouveau nom du plugin mnemos, disponible en parallèle pendant la transition.",
-            "version": "0.9.1"
+            "description": "Mémoire persistante intelligente. 48 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku. Nouveau nom du plugin mnemos, disponible en parallèle pendant la transition.",
+            "version": "0.9.2"
         },
         {
             "name": "mon-greffier",
