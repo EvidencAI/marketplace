@@ -93,7 +93,14 @@ Si espace non identifiable → `list_spaces` puis demander.
 Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora out"
 
 1. **workSummary** (8 lignes AU PLUS) : « où on s'est arrêté et pourquoi », pas un récit. Le détail vit dans les listes structurées ci-dessous, pas dans le résumé.
-2. **Handover** : `mnemos_session_end(userId:USER_ALIAS, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...])`
+2. **Codex** (DOIT, pas PEUT — S-CODEX-1, décision du 23/08) : RÉDIGE le codex à jour de l'espace AVANT l'appel de clôture. C'est une MISE À JOUR, pas une réécriture : reprends le codex servi à l'ouverture du fil, applique-lui le delta du fil (ce qui est advenu, tranché, réfuté, fait), conserve chaque ligne ancienne ni contredite ni remplacée AVEC sa date et sa formulation. Forme imposée (même forme que le prompt serveur, `lib/codex-reflecteur.ts::construirePromptCodex` — tenir les deux en phase, renvoi croisé du 23/08/2026) :
+   - markdown direct, SANS frontmatter, SANS fence, SANS emoji ni tableau ;
+   - tête « EN BREF : » (avec les deux-points) : l'état de l'espace en une phrase, le plus structurant d'abord ; puis la prochaine échéance datée en une phrase ;
+   - cinq sections, exactement : `## Situation`, `## Décisions en vigueur`, `## Réfuté ou abandonné`, `## En attente`, `## Repères chiffrés` — jamais de sixième section : les repères d'infrastructure entrent comme LIGNE DATÉE de Situation ;
+   - lignes « - JJ/MM : ... », uniquement des dates citées par le fil, les handovers ou l'ancien codex ; « (antérieur) » si la date est inconnue ; prévu ≠ fait (le futur va dans En attente) ;
+   - 1000 à 1500 mots en PLAFOND, la matière commande la longueur ; le codex grandit, il ne rétrécit que par retrait de lignes périmées ; une même chose ne figure jamais dans deux sections.
+   Le serveur contrôle ce codex avec les MÊMES garde-fous que le modèle, sans exemption ; s'il est refusé, le repli modèle prend la main et l'ancien codex reste protégé.
+3. **Handover** : `mnemos_session_end(userId:USER_ALIAS, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
 
    **FOURNIR LES DEUX LISTES, TOUJOURS.** Tu as vécu le fil ; le modèle serveur n'en verrait qu'un résumé de quelques milliers de caractères. Quand les deux listes sont fournies avec un `workSummary` de plus de 300 caractères, **le serveur ne fait AUCUN appel modèle pour le handover** : la clôture est nettement plus rapide et ne consomme pas de tokens. Sans elles, un modèle refait ton travail moins bien.
 
@@ -107,9 +114,9 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
    - `nonVerifie` : ce que tu affirmes sans preuve (non testé, non mesuré, repris d'un souvenir).
 
    **Une liste vide est refusée.** Si le fil n'a rien à mettre dans un champ, la justification EST l'entrée : `["aucune réfutation : fil de lecture seule"]`. Dates : cite la date de l'événement quand tu la connais. Ces champs sont rendus à l'ouverture du fil suivant dans l'ordre : prochaine action, réfutations, pièges, corrections, décisions, pointeurs, non vérifié, résumé ; et les réfutations et pièges alimentent la section « Réfuté ou abandonné » du codex.
-3. **Mémoire** : le codex de l'espace est régénéré automatiquement par `session_end` (en tâche de fond, fail-soft). **Aucun appel `read_memory`/`write_memory` manuel n'est nécessaire.**
-4. **Vérifier** succès handover + mémoire. **Contrôler que `context_snapshot.source_listes` vaut `client` et non `modele`** : s'il vaut `modele`, tes deux listes n'ont pas été prises en compte (client trop ancien, ou `workSummary` sous le seuil). Si échec → voir REFERENCE.md § Gestion des erreurs.
-5. **Confirmer** : "Session clôturée. Handover (XXX mots) et mémoire mise à jour pour [espace]."
+4. **Mémoire** : ton codex accepté est écrit par `session_end` (frontmatter `author: client`) et la clôture ne fait alors AUCUN appel modèle. S'il est refusé, le serveur replie sur le modèle, et si le repli est refusé aussi l'ancien codex est conservé. **Aucun appel `read_memory`/`write_memory` manuel n'est nécessaire** — `write_memory` reste une issue de secours d'administration, non contrôlée, à ne pas utiliser en clôture.
+5. **Vérifier** la réponse de l'outil. **`context_snapshot.source_listes` doit valoir `client`** (sinon tes listes n'ont pas été prises en compte : client trop ancien, ou `workSummary` sous le seuil). **Le bloc `codex` de la réponse doit porter `source:"client", accepte:true`** : s'il porte un refus, ANNONCE ses `raisons` à l'utilisateur (elles sont la seule trace lisible) et ne relance JAMAIS `session_end` pour retenter — le handover est déjà écrit, une relance créerait un doublon. Si échec → voir REFERENCE.md § Gestion des erreurs.
+6. **Confirmer** : "Session clôturée. Handover (XXX mots) et codex mis à jour pour [espace]." — en citant qui a écrit le codex (toi ou le repli modèle).
 
 ---
 
@@ -151,7 +158,7 @@ Un journal technique est tenu dans `/tmp/mycelora-hook.log` (diagnostic local). 
 |-------------------|--------|
 | (auto au 1er message) | session_start (sans spaceId) |
 | mycelora in X, ouvre X | session_start(spaceId:X) |
-| mycelora out, fin de fil | session_end(workSummary, decisions, pendingTasks) — le codex se régénère seul |
+| mycelora out, fin de fil | session_end(workSummary, decisions, pendingTasks, ..., codex) — le codex est RÉDIGÉ par toi (protocole de clôture, étape 2) |
 | retiens que..., décision:, fait:, j'ai appris | create_atom_manual (type selon contenu) |
 | cherche Y, dans ma mémoire | search_atoms(query:Y) |
 | mes espaces, mes dossiers | list_spaces |
