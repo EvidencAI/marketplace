@@ -92,12 +92,21 @@ Si espace non identifiable → `list_spaces` puis demander.
 
 Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora out"
 
-1. **workSummary** (600-800 mots) : résumé narratif exhaustif. Inclure : décisions (avec contexte), problèmes résolus (comment), travail produit, limitations, prochaines étapes, questions ouvertes.
-2. **Handover** : `mnemos_session_end(userId:USER_ALIAS, workSummary:..., decisions:[...], pendingTasks:[...])`
+1. **workSummary** (8 lignes AU PLUS) : « où on s'est arrêté et pourquoi », pas un récit. Le détail vit dans les listes structurées ci-dessous, pas dans le résumé.
+2. **Handover** : `mnemos_session_end(userId:USER_ALIAS, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...])`
 
    **FOURNIR LES DEUX LISTES, TOUJOURS.** Tu as vécu le fil ; le modèle serveur n'en verrait qu'un résumé de quelques milliers de caractères. Quand les deux listes sont fournies avec un `workSummary` de plus de 300 caractères, **le serveur ne fait AUCUN appel modèle pour le handover** : la clôture est nettement plus rapide et ne consomme pas de tokens. Sans elles, un modèle refait ton travail moins bien.
 
-   `decisions` = faits tranchés pendant le fil, avec leur raison. `pendingTasks` = ce qui reste actionnable. **L'une des deux peut être vide** (un fil peut n'avoir aucune tâche restante), pas les deux. Écris-les en phrases complètes : elles sont réinjectées telles quelles à l'ouverture du fil suivant.
+   `decisions` = faits tranchés pendant le fil, avec leur raison. `pendingTasks` = ce qui reste actionnable, **la prochaine action en premier** (elle est rendue en tête à l'ouverture du fil suivant). **L'une des deux peut être vide** (un fil peut n'avoir aucune tâche restante), pas les deux. Écris-les en phrases complètes : elles sont réinjectées telles quelles à l'ouverture du fil suivant.
+
+   **LA CLÔTURE STRUCTURÉE (obligatoire depuis le fil 69).** Sur ce chemin, le serveur REFUSE la clôture si l'un des cinq champs suivants est absent ou vide. Ce sont les champs que tu n'écris jamais spontanément : tu retiens tes conclusions, pas tes impasses.
+   - `refutations` : essayé ou affirmé pendant le fil, puis révélé faux. Quoi, et pourquoi c'est écarté.
+   - `pieges` : ce qu'il ne faut pas redécouvrir au fil suivant (comportements traîtres, limites d'outils, faux amis).
+   - `pointeurs` : chemins, scripts, identifiants, commandes utiles pour reprendre. Du « où regarder », pas du contenu.
+   - `correctionsUtilisateur` : ce que l'utilisateur a corrigé dans ce que tu affirmais. Ne te l'approprie pas : cite la correction.
+   - `nonVerifie` : ce que tu affirmes sans preuve (non testé, non mesuré, repris d'un souvenir).
+
+   **Une liste vide est refusée.** Si le fil n'a rien à mettre dans un champ, la justification EST l'entrée : `["aucune réfutation : fil de lecture seule"]`. Dates : cite la date de l'événement quand tu la connais. Ces champs sont rendus à l'ouverture du fil suivant dans l'ordre : prochaine action, réfutations, pièges, corrections, décisions, pointeurs, non vérifié, résumé ; et les réfutations et pièges alimentent la section « Réfuté ou abandonné » du codex.
 3. **Mémoire** : le codex de l'espace est régénéré automatiquement par `session_end` (en tâche de fond, fail-soft). **Aucun appel `read_memory`/`write_memory` manuel n'est nécessaire.**
 4. **Vérifier** succès handover + mémoire. **Contrôler que `context_snapshot.source_listes` vaut `client` et non `modele`** : s'il vaut `modele`, tes deux listes n'ont pas été prises en compte (client trop ancien, ou `workSummary` sous le seuil). Si échec → voir REFERENCE.md § Gestion des erreurs.
 5. **Confirmer** : "Session clôturée. Handover (XXX mots) et mémoire mise à jour pour [espace]."
