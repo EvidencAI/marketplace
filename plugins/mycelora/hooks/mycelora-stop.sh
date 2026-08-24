@@ -214,15 +214,24 @@ if [ "$EMPTY_CHECK" != "OK" ]; then
   exit 0
 fi
 
-SPACE_ID="$(mycelora_resolve_space_id "$SESSION_ID" "$TRANSCRIPT_PATH")"
+# S-ALIAS-1 (fil 76, 24/08/2026) : UNE seule passe pour les trois etiquettes
+# du fil (espace, nom technique, titre humain). Ne pas appeler successivement
+# mycelora_resolve_space_id puis mycelora_resolve_etiquettes : ce serait deux
+# processus python pour la meme lecture.
+FIL_META="$(_mycelora_charger_fil "$SESSION_ID" "$TRANSCRIPT_PATH")"
+SPACE_ID="$(printf '%s\n' "$FIL_META" | sed -n '1p')"
+SESSION_LABEL="$(printf '%s\n' "$FIL_META" | sed -n '2p')"
+CUSTOM_TITLE="$(printf '%s\n' "$FIL_META" | sed -n '3p')"
 
 BODY_FILE="$(mktemp /tmp/mycelora-hook-stop-body.XXXXXX)"
 CLEANUP_FILES+=("$BODY_FILE")
 
-python3 - "$LAST_USER_FILE" "$ASSISTANT_FILE" "$SESSION_ID" "$SPACE_ID" "$BODY_FILE" <<'PYEOF'
+python3 - "$LAST_USER_FILE" "$ASSISTANT_FILE" "$SESSION_ID" "$SPACE_ID" "$BODY_FILE" "$SESSION_LABEL" "$CUSTOM_TITLE" <<'PYEOF'
 import json, sys
 
 user_path, assistant_path, session_id, space_id, body_path = sys.argv[1:6]
+session_label = sys.argv[6] if len(sys.argv) > 6 else ""
+custom_title = sys.argv[7] if len(sys.argv) > 7 else ""
 
 def read_file(path):
     try:
@@ -242,6 +251,13 @@ arguments = {
 }
 if space_id:
     arguments["spaceId"] = space_id
+# S-ALIAS-1 : etiquettes du fil. Omises quand inconnues, jamais inventees
+# (regle R4) : un fil ouvert avant le premier session_start n'a pas de nom
+# technique, et un fil jamais renomme peut n'avoir aucun titre humain.
+if session_label:
+    arguments["sessionLabel"] = session_label
+if custom_title:
+    arguments["customTitle"] = custom_title
 
 payload = {
     "jsonrpc": "2.0",

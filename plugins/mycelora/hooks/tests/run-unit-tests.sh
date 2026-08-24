@@ -594,6 +594,74 @@ assert "ups-validation-puis-question-doit-passer" \
   "FACE-A CANNED TEXT" \
   "yes" || FAILED_TESTS=$((FAILED_TESTS+1))
 
+# ============================================================================
+# S-ALIAS-1 (fil 76, 24/08/2026) — etiquettes du fil dans le corps envoye
+# ============================================================================
+#
+# `assert` ne sait verifier que le code de sortie, stdout et le fait qu'un
+# appel curl ait eu lieu. Ces tests-ci portent sur le CONTENU du corps
+# JSON-RPC : ils passent donc par MYCELORA_TEST_CAPTURE_BODY directement.
+#
+# assert_arguments <nom> <fixture_stdin> <expression_python_sur_arguments>
+assert_arguments() {
+  local test_name="$1" fixture="$2" expression="$3"
+  local temp_dir capture_body verdict
+  temp_dir="$(mktemp -d)"
+
+  # Etat propre AVANT chaque cas. Le cache d'etiquettes est indexe par
+  # session_id seul : ces fixtures partagent le meme session_id avec des
+  # transcripts differents, donc sans ce nettoyage le titre trouve par un cas
+  # fuiterait dans le suivant. Piege paye au premier lancement (fil 76).
+  rm -f /tmp/mycelora-hook-*.json
+
+  MYCELORA_TEST_CURL_LOG="$temp_dir/call.log" \
+  MYCELORA_TEST_CAPTURE_BODY="$temp_dir/body.json" \
+  MYCELORA_TEST_CURL_RESPONSE="" \
+  PATH="$FAKE_BIN_DIR:$PATH" \
+    "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" \
+    < "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/$fixture" > /dev/null 2>&1
+
+  verdict="$(python3 - "$temp_dir/body.json" "$expression" <<'PYEOF'
+import json, sys
+chemin, expression = sys.argv[1], sys.argv[2]
+try:
+    with open(chemin, encoding="utf-8") as f:
+        arguments = json.load(f)["params"]["arguments"]
+except Exception as err:
+    print("FAIL corps illisible: %s" % err)
+    sys.exit(0)
+print("OK" if eval(expression, {"arguments": arguments}) else "FAIL %s" % json.dumps(
+    {k: v for k, v in arguments.items() if k != "userMessage" and k != "assistantResponse"},
+    ensure_ascii=False))
+PYEOF
+)"
+
+  rm -rf "$temp_dir"
+  TOTAL_TESTS=$((TOTAL_TESTS+1))
+  if [ "$verdict" = "OK" ]; then
+    echo "PASS $test_name"
+  else
+    echo "FAIL $test_name : $verdict"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+  fi
+}
+
+# Le cas nominal : les deux etiquettes sont dans le transcript, les deux
+# doivent partir. Le nom technique vient de l'appel session_start, le titre
+# humain de l'entree type=custom-title.
+assert_arguments "alias-les-deux-etiquettes-partent" "stdin-stop-alias.json" \
+  "arguments.get('sessionLabel') == 'cowork-2026-07-14-sprint-v3-s3-watcher' and arguments.get('customTitle') == 'PROMPT-FIL-SUITE76'"
+
+# Regle R4, JAMAIS D'INVENTION : pas d'entree custom-title dans ce transcript,
+# donc pas de cle customTitle dans le corps. Surtout pas une chaine vide.
+assert_arguments "alias-sans-titre-humain-la-cle-est-absente" "stdin-stop-alias-sans-titre.json" \
+  "'customTitle' not in arguments and arguments.get('sessionLabel') == 'cowork-2026-07-14-sprint-v3-s3-watcher'"
+
+# Contrat historique preserve : la resolution d'espace continue de marcher,
+# elle passe desormais par la meme passe de lecture.
+assert_arguments "alias-le-spaceId-est-toujours-resolu" "stdin-stop-alias.json" \
+  "arguments.get('spaceId') == 'Développement Mnemos'"
+
 # Compter les tests passés a partir des compteurs reels (pas un grep sur le
 # code source du script).
 PASSED_TESTS=$((TOTAL_TESTS-FAILED_TESTS))

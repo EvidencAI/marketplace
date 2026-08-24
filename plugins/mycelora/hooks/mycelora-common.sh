@@ -22,116 +22,176 @@ mycelora_log() {
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$ts" "$hook" "$event" "$duration_ms" "$status" "$response_size" >> "$MYCELORA_LOG_FILE" 2>/dev/null || true
 }
 
-# mycelora_resolve_space_id <session_id> <transcript_path>
-# Affiche le spaceId resolu sur stdout (chaine vide si inconnu). Utilise
-# python3 (jamais jq) pour tout parsing JSON.
-# Regle de cache : si /tmp/mycelora-hook-<session_id>.json existe, on lit sa cle
-# "spaceId" et on la retourne TELLE QUELLE (meme vide) SANS reparser le
-# transcript. Sinon on parse transcript_path ligne par ligne (json.loads par
-# ligne, ignorer silencieusement les lignes invalides), on cherche la
-# DERNIERE entree de type "assistant" contenant un bloc
-# content[].type=="tool_use" dont le champ "name" se termine par
-# "mnemos_session_start" (str.endswith), on extrait input.spaceId tel quel
-# (ne pas transformer, peut etre un nom ou un UUID). Si trouve et
-# session_id non vide : ecrire le cache /tmp/mycelora-hook-<session_id>.json
-# avec le contenu exact {"spaceId": "<valeur>"}. Si rien trouve apres lecture
-# complete : NE PAS ecrire de cache.
-mycelora_resolve_space_id() {
+# ============================================================================
+# Etiquettes du fil (S-ALIAS-1, fil 76, 24/08/2026)
+# ============================================================================
+#
+# Le watcher est le SEUL point du systeme qui voit a la fois l'identifiant
+# interne du fil (recu sur stdin) et ses etiquettes lisibles (dans le
+# transcript). Il en resout TROIS en une seule passe :
+#
+#   spaceId      : input.spaceId du dernier tool_use mnemos_session_start.
+#   sessionLabel : input.sessionId du MEME appel. C'est le nom technique qui
+#                  se retrouvera dans handovers.session_id a la cloture ;
+#                  il rend exact l'appariement lots / compte rendu, aujourd'hui
+#                  heuristique par fenetre temporelle.
+#   customTitle  : dernier customTitle des entrees type=custom-title. C'est le
+#                  titre HUMAIN, celui que l'utilisateur voit et renomme dans
+#                  son interface.
+#
+# CACHE INCREMENTAL (v2). L'ancien cache figeait le resultat des le premier
+# succes, ce qui interdisait de voir apparaitre plus tard une etiquette encore
+# absente — or l'utilisateur peut renommer son fil a tout moment, et
+# session_start peut etre appele apres le premier tour. Le cache garde donc
+# desormais l'OFFSET en octets deja lu, et chaque appel ne lit que la QUEUE
+# ajoutee depuis. Cout constant, et rien n'est fige.
+#
+# Un cache d'ancienne generation (sans "v": 2) est traite comme ABSENT, pas
+# comme un resultat vide : sinon les fils deja en cours n'auraient jamais
+# d'etiquette.
+#
+# LIMITE ASSUMEE, a connaitre avant d'en dependre : une etiquette n'est jamais
+# EFFACEE, seulement remplacee par une autre non vide. Si l'utilisateur revient
+# d'un titre choisi a un titre genere, le dernier titre choisi reste en cache
+# et continue d'etre envoye. Ce comportement est volontaire (une etiquette vide
+# n'apprend rien et ne doit pas ecraser une etiquette utile), mais il rend le
+# cache sensible a la reutilisation d'un meme session_id sur deux transcripts
+# differents — cas de test, pas cas reel.
+#
+# Format : {"v":2,"offset":<int>,"spaceId":"","sessionLabel":"","customTitle":""}
+
+# _mycelora_charger_fil <session_id> <transcript_path>
+# Rend TROIS lignes sur stdout, dans cet ordre, chacune eventuellement vide :
+#   spaceId / sessionLabel / customTitle
+# Ne leve jamais, n'ecrit jamais sur stderr.
+_mycelora_charger_fil() {
   local session_id="$1" transcript_path="$2"
   local cache_file=""
   if [ -n "$session_id" ]; then
     cache_file="/tmp/mycelora-hook-${session_id}.json"
   fi
 
-  if [ -n "$cache_file" ] && [ -f "$cache_file" ]; then
-    local cached_value
-    cached_value="$(python3 - "$cache_file" <<'PYEOF'
-import json, sys
-path = sys.argv[1]
-try:
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    print("HIT:" + (data.get("spaceId", "") or ""))
-except Exception:
-    print("MISS")
-PYEOF
-)"
-    case "$cached_value" in
-      HIT:*)
-        echo "${cached_value#HIT:}"
-        return 0
-        ;;
-      *)
-        # Cache illisible ou JSON invalide (ex. fichier tronque par un kill
-        # en plein ecriture) : on ne retourne PAS "" immediatement, on
-        # retombe sur le parsing du transcript comme si le cache n'existait
-        # pas.
-        ;;
-    esac
-  fi
-
-  if [ -z "$transcript_path" ] || [ ! -f "$transcript_path" ]; then
-    echo ""
-    return 0
-  fi
-
-  local space_id
-  space_id="$(python3 - "$transcript_path" <<'PYEOF'
-import json, sys
-
-path = sys.argv[1]
-found = ""
-try:
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except Exception:
-                continue
-            if entry.get("type") != "assistant":
-                continue
-            message = entry.get("message") or {}
-            content = message.get("content")
-            if not isinstance(content, list):
-                continue
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    name = block.get("name", "")
-                    if isinstance(name, str) and name.endswith("mnemos_session_start"):
-                        input_data = block.get("input") or {}
-                        sid = input_data.get("spaceId")
-                        if sid is not None:
-                            found = sid
-except Exception:
-    pass
-print(found)
-PYEOF
-)"
-
-  if [ -n "$space_id" ] && [ -n "$cache_file" ]; then
-    # Ecriture atomique : on ecrit dans un fichier temporaire puis on
-    # renomme (os.replace) vers le chemin final, pour qu'un kill en plein
-    # ecriture ne laisse jamais un cache tronque a la place du bon.
-    python3 - "$cache_file" "$space_id" <<'PYEOF'
+  python3 - "$cache_file" "$transcript_path" <<'PYEOF'
 import json, os, sys
-path, space_id = sys.argv[1], sys.argv[2]
-tmp_path = path + ".tmp"
-try:
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump({"spaceId": space_id}, f)
-    os.replace(tmp_path, path)
-except Exception:
+
+cache_path, transcript_path = sys.argv[1], sys.argv[2]
+
+etat = {"v": 2, "offset": 0, "spaceId": "", "sessionLabel": "", "customTitle": ""}
+
+# Cache v2 uniquement. Une version anterieure (ou un fichier tronque par un
+# kill en pleine ecriture) est traitee comme absente : on repart de l'offset 0
+# et on reconstruit tout.
+if cache_path and os.path.exists(cache_path):
     try:
-        os.remove(tmp_path)
+        with open(cache_path, "r", encoding="utf-8") as f:
+            ancien = json.load(f)
+        if isinstance(ancien, dict) and ancien.get("v") == 2:
+            for cle in ("offset", "spaceId", "sessionLabel", "customTitle"):
+                if cle in ancien:
+                    etat[cle] = ancien[cle]
     except Exception:
         pass
-PYEOF
-  fi
 
-  echo "$space_id"
+
+def propre(valeur):
+    """Une etiquette est une ligne de texte. Jamais de saut de ligne (le
+    protocole de sortie est en lignes), jamais autre chose qu'une chaine."""
+    if not isinstance(valeur, str):
+        return ""
+    return " ".join(valeur.split()).strip()
+
+
+modifie = False
+if transcript_path and os.path.exists(transcript_path):
+    try:
+        taille = os.path.getsize(transcript_path)
+        depart = etat.get("offset", 0)
+        if not isinstance(depart, int) or depart < 0 or depart > taille:
+            # Transcript remplace ou tronque : on ne devine pas, on relit tout.
+            depart = 0
+        with open(transcript_path, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(depart)
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(entry, dict):
+                    continue
+
+                # Titre humain : une entree dediee, sans rapport avec les
+                # appels d'outils. Le dernier vu gagne (regle R1).
+                if entry.get("type") == "custom-title":
+                    titre = propre(entry.get("customTitle"))
+                    if titre:
+                        etat["customTitle"] = titre
+                        modifie = True
+                    continue
+
+                if entry.get("type") != "assistant":
+                    continue
+                message = entry.get("message") or {}
+                content = message.get("content")
+                if not isinstance(content, list):
+                    continue
+                for block in content:
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        continue
+                    name = block.get("name", "")
+                    if not (isinstance(name, str) and name.endswith("mnemos_session_start")):
+                        continue
+                    input_data = block.get("input") or {}
+                    # spaceId : conserve TEL QUEL (peut etre un nom ou un UUID),
+                    # contrat historique de cette resolution.
+                    sid = input_data.get("spaceId")
+                    if isinstance(sid, str) and sid.strip():
+                        etat["spaceId"] = sid
+                        modifie = True
+                    label = propre(input_data.get("sessionId"))
+                    if label:
+                        etat["sessionLabel"] = label
+                        modifie = True
+            etat["offset"] = f.tell()
+            modifie = True
+    except Exception:
+        # Transcript illisible : on rend ce que le cache portait deja.
+        pass
+
+# Ecriture atomique (tmp + os.replace) : un kill en pleine ecriture ne doit
+# jamais laisser un cache tronque a la place du bon.
+if cache_path and modifie:
+    tmp_path = cache_path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(etat, f)
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+print(etat.get("spaceId", "") or "")
+print(etat.get("sessionLabel", "") or "")
+print(etat.get("customTitle", "") or "")
+PYEOF
+}
+
+# mycelora_resolve_space_id <session_id> <transcript_path>
+# Affiche le spaceId resolu sur stdout (chaine vide si inconnu).
+# Contrat de sortie INCHANGE depuis la v1 : une seule ligne.
+mycelora_resolve_space_id() {
+  _mycelora_charger_fil "$1" "$2" | sed -n '1p'
+}
+
+# mycelora_resolve_etiquettes <session_id> <transcript_path>
+# Affiche DEUX lignes sur stdout : sessionLabel puis customTitle (chacune
+# eventuellement vide). S-ALIAS-1.
+mycelora_resolve_etiquettes() {
+  _mycelora_charger_fil "$1" "$2" | sed -n '2,3p'
 }
 
 # mycelora_curl_post <body_file> <cfgfile> <resp_file>
