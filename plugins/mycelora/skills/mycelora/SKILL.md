@@ -105,7 +105,15 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
    - lignes « - JJ/MM : ... », uniquement des dates citées par le fil, les handovers ou l'ancien codex ; « (antérieur) » si la date est inconnue ; prévu ≠ fait (le futur va dans En attente) ;
    - 1000 à 1500 mots en PLAFOND, la matière commande la longueur ; le codex grandit, il ne rétrécit que par retrait de lignes périmées ; une même chose ne figure jamais dans deux sections.
    Le serveur contrôle ce codex avec les MÊMES garde-fous que le modèle, sans exemption ; s'il est refusé, le repli modèle prend la main et l'ancien codex reste protégé.
-3. **Handover** : `mnemos_session_end(userId:USER_ALIAS, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
+3. **Handover** : `mnemos_session_end(userId:USER_ALIAS, spaceId:L'ESPACE DU FIL, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
+
+   **`spaceId` EST OBLIGATOIRE À LA CLÔTURE, même si le fil a été ouvert avec.**
+   Le serveur ne le retrouve pas tout seul : `sessionEnd` le résout depuis le
+   paramètre reçu, et `resolveSpaceId` rend `undefined` quand il est absent.
+   Sans lui, le handover s'écrit avec `space_id` à NULL, le codex n'est PAS
+   régénéré (`"aucun espace résolu"`), et la clôture est à moitié perdue. Cas
+   réel, fil 86 du 26/08/2026 : cette ligne omettait `spaceId`, et le fil l'a
+   payé. Repasser l'UUID rendu à l'ouverture.
 
    **FOURNIR LES DEUX LISTES, TOUJOURS.** Tu as vécu le fil ; le modèle serveur n'en verrait qu'un résumé de quelques milliers de caractères. Quand les deux listes sont fournies avec un `workSummary` de plus de 300 caractères, **le serveur ne fait AUCUN appel modèle pour le handover** : la clôture est nettement plus rapide et ne consomme pas de tokens. Sans elles, un modèle refait ton travail moins bien.
 
@@ -143,6 +151,14 @@ Exemples — ça n'en mérite PAS :
 - "Oui, bonne idée" (acquiescement sans contenu)
 - "Passe-moi le fichier X" (instruction opérationnelle ponctuelle)
 - Discussion technique transitoire qui sera dans le handover de clôture
+
+**TAILLE : 1500 CARACTÈRES, PLAFOND DUR.** Un atome plus long est **coupé** à
+l'écriture depuis S-PLAFOND-1 (26/08/2026) : ce qui dépasse n'est pas stocké,
+donc pas récupérable. Écris sous la limite, ou **fais deux atomes** plutôt qu'un
+gros. Ce n'est pas une préférence de style, c'est la taille servie : le rappel
+coupe à 1500 depuis toujours, et l'embedding se calcule sur ce texte-là. Un
+atome long dilue son propre vecteur sur trop de sujets et se retrouve moins
+bien. Un fait par atome se retrouve mieux que trois faits dans un pavé.
 
 ### Hygiène mémoire
 `triage_atoms` : quand > 30% d'atomes basse confiance, ou sur demande.
