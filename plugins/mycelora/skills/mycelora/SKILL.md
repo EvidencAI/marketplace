@@ -42,11 +42,16 @@ Triggers : "ouvre un fil", "mycelora in", "session start", "lance Mycelora", ou 
 
 ### Étape 1 : Boot
 Appeler `mnemos_session_start(userId:USER_ALIAS, sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé.
-Retourne : profil, espaces actifs, 3 derniers handovers, atomes épinglés, codex de l'espace « Mémoire générale » (injecté systématiquement au boot).
+
+**L'IDENTIFIANT DÉFINITIF DU FIL EST CELUI QUE LE SERVEUR REND, pas celui que tu as envoyé.** Depuis le fil 86 (26/08/2026), le serveur horodate lui-même le sessionId à l'heure LOCALE et l'annonce en tête du bloc d'ouverture, sur la ligne `Fil : ...`. Ne calcule pas l'heure toi-même, ne la devine pas : **relis cette ligne et reprends cet identifiant-là dans TOUS les appels suivants**, jusqu'à la clôture comprise.
+
+Motif : le sessionId est la clé de rattachement des atomes et des injections en base. Deux fils qui portent le même identifiant se disputent leur mémoire (cas réel : les fils 81 et 82 du 25/08 ont partagé un seau toute la journée). Le serveur réutilise le seau d'un fil encore ouvert et n'en crée un nouveau que si le précédent est clôturé, donc le second appel de `session_start` (celui qui apporte le spaceId) ne fabrique pas de doublon.
+
+Retourne : la date, l'heure et le jour de la semaine courants dans TON fuseau (un modèle n'a pas d'horloge : ne recalcule jamais un jour de semaine, lis-le), l'identifiant du fil, les consignes de l'espace, le profil, les espaces actifs, 3 derniers handovers, atomes épinglés.
 Si profil vide ou erreur "user not found" → LIRE **ONBOARDING.md** et suivre le flow.
 
 ### Étape 2 : Bloc d'accueil
-Vérifier l'heure via la commande `date` (Bash, Desktop Commander, ou tout shell disponible) pour la salutation.
+L'heure de la salutation est celle que le bloc d'ouverture vient de te donner (`Nous sommes le ...`), dans le fuseau de l'utilisateur. Ne la recalcule pas, ne la devine pas ; `date` ne sert plus que si le bloc ne l'a pas rendue.
 Présenter SYSTÉMATIQUEMENT :
 
 ```
@@ -65,7 +70,7 @@ Sur quel espace on travaille ?
 ```
 
 Le lien Dashboard DOIT apparaître à chaque ouverture de fil.
-Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(userId:USER_ALIAS, sessionId:même valeur, spaceId:X)` pour attacher la session à l'espace.
+Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(userId:USER_ALIAS, sessionId:L'IDENTIFIANT RENDU À L'ÉTAPE 1, spaceId:X)` pour attacher la session à l'espace. Le serveur rattache ce second appel au seau déjà ouvert, il n'en crée pas un second.
 Note : userId est TOUJOURS requis dans les appels MCP, sauf si la doc de l'outil le marque explicitement optionnel.
 Résolution nom : `list_spaces` + matching souple insensible à la casse.
 
@@ -78,7 +83,7 @@ Trigger : "continued from a previous conversation", "context compaction", résum
 CE SCÉNARIO EST CRITIQUE : le LLM a perdu ~70% du contexte. Sans ce protocole, la session reprend sans mémoire.
 
 1. Détecter l'espace actif dans le résumé compressé
-2. `mnemos_session_start(userId:USER_ALIAS, sessionId:"resume-YYYY-MM-DD", spaceId:"[espace]")`
+2. `mnemos_session_start(userId:USER_ALIAS, sessionId:"resume-AAAA-MM-JJ", spaceId:"[espace]")` — le serveur horodate, reprends l'identifiant qu'il rend
 3. `mnemos_read_memory(userId:USER_ALIAS, spaceId:"[espace]", type:"all")`
 4. Croiser résumé compressé + mémoire Mycelora
 5. "Je reprends après compression. Voici ce que j'ai retrouvé : [résumé croisé]. On continue ?"
