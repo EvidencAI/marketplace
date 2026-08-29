@@ -1,9 +1,0 @@
-{
-  "session_id": "fil20-filtre-bruit-0001",
-  "transcript_path": "plugins/mnemos/hooks/tests/fixtures/transcript-session-start.jsonl",
-  "cwd": "/home/claude",
-  "prompt_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-  "permission_mode": "default",
-  "hook_event_name": "UserPromptSubmit",
-  "prompt": "ok mais pourquoi deux crons ?"
-}

@@ -22,14 +22,10 @@ Add this marketplace to Claude:
 Then install any plugin:
 
 ```
-/plugin install mnemos@evidencai-plugins
-```
-
-Mycelora is the new name for Mnemos, available in parallel during the transition:
-
-```
 /plugin install mycelora@evidencai-plugins
 ```
+
+(Mycelora is the new name for Mnemos; the legacy `mnemos` plugin was retired on 2026-08-29.)
 
 ## About EvidencAI
 
