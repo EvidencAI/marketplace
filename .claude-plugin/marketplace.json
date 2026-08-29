@@ -18,7 +18,7 @@
             "name": "mycelora",
             "source": "./plugins/mycelora",
             "description": "Mémoire persistante intelligente. 48 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku. Nouveau nom du plugin mnemos, disponible en parallèle pendant la transition.",
-            "version": "0.9.7"
+            "version": "0.9.8"
         },
         {
             "name": "mon-greffier",

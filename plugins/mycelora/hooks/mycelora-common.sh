@@ -213,6 +213,12 @@ mycelora_resolve_etiquettes() {
 # la ligne de commande curl (visible dans `ps aux`). Utiliser un fichier de
 # config curl temporaire (-K), cree via heredoc bash (jamais via echo/printf
 # avec le token en argument), chmod 600. curl --max-time 5 systematiquement.
+# x-region: eu-west-1 (0.9.8, fil myy 29/08/2026) : l'edge function s'execute
+# pres de l'APPELANT par defaut, or les conteneurs Cowork tournent aux US et
+# la base est en eu-west-1 -- chaque aller-retour base payait l'Atlantique et
+# le recall depassait le --max-time 5 (mesure : 4,6-7,9 s sans l'en-tete,
+# 3,2-3,65 s avec). Cet en-tete epingle l'execution dans la region de la
+# base ; ne pas le retirer sans re-mesurer depuis un conteneur Cowork.
 mycelora_curl_post() {
   local body_file="$1" cfgfile="$2" resp_file="$3"
   local http_code curl_rc
@@ -220,6 +226,7 @@ mycelora_curl_post() {
   cat > "$cfgfile" <<CFGEOF
 header = "Authorization: Bearer ${MYCELORA_HOOK_TOKEN}"
 header = "Content-Type: application/json"
+header = "x-region: eu-west-1"
 CFGEOF
   http_code="$(curl -s --max-time 5 -K "$cfgfile" -X POST --data-binary "@${body_file}" -o "$resp_file" -w '%{http_code}' "$MYCELORA_EDGE_URL" 2>/dev/null)"
   curl_rc=$?
