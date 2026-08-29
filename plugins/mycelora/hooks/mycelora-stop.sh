@@ -226,12 +226,24 @@ CUSTOM_TITLE="$(printf '%s\n' "$FIL_META" | sed -n '3p')"
 BODY_FILE="$(mktemp /tmp/mycelora-hook-stop-body.XXXXXX)"
 CLEANUP_FILES+=("$BODY_FILE")
 
-python3 - "$LAST_USER_FILE" "$ASSISTANT_FILE" "$SESSION_ID" "$SPACE_ID" "$BODY_FILE" "$SESSION_LABEL" "$CUSTOM_TITLE" <<'PYEOF'
-import json, sys
+# S-ACK-1 (29/08/2026) : accuse de reception des injections du tour. Le hook
+# UserPromptSubmit a appose chaque lot reellement injecte dans ce fichier
+# (un lot_id par ligne) ; on le rejoue dans ackLotIds pour que le serveur
+# confirme les lignes session_injections. Supprime seulement apres un 2xx
+# (plus bas) : sur echec ou timeout il reste, retente au Stop suivant.
+ACK_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
+ACK_FILE="/tmp/mycelora-ack-${ACK_SESSION}"
+if [ -z "$ACK_SESSION" ] || [ ! -f "$ACK_FILE" ]; then
+  ACK_FILE=""
+fi
+
+python3 - "$LAST_USER_FILE" "$ASSISTANT_FILE" "$SESSION_ID" "$SPACE_ID" "$BODY_FILE" "$SESSION_LABEL" "$CUSTOM_TITLE" "$ACK_FILE" <<'PYEOF'
+import json, re, sys
 
 user_path, assistant_path, session_id, space_id, body_path = sys.argv[1:6]
 session_label = sys.argv[6] if len(sys.argv) > 6 else ""
 custom_title = sys.argv[7] if len(sys.argv) > 7 else ""
+ack_path = sys.argv[8] if len(sys.argv) > 8 else ""
 
 def read_file(path):
     try:
@@ -258,6 +270,19 @@ if session_label:
     arguments["sessionLabel"] = session_label
 if custom_title:
     arguments["customTitle"] = custom_title
+
+# S-ACK-1 : lots a confirmer, un uuid par ligne, dedupliques en gardant
+# l'ordre, plafond 50 (aligne sur le serveur). Fichier illisible ou vide :
+# on n'envoie rien, jamais une liste inventee.
+if ack_path:
+    uuid_re = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+    lots = []
+    for line in read_file(ack_path).splitlines():
+        lot = line.strip()
+        if uuid_re.match(lot) and lot not in lots:
+            lots.append(lot)
+    if lots:
+        arguments["ackLotIds"] = lots[:50]
 
 payload = {
     "jsonrpc": "2.0",
@@ -288,7 +313,15 @@ if [ "$CURL_RC" -ne 0 ]; then
 fi
 
 case "$HTTP_CODE" in
-  2??) mycelora_log "stop" "log_exchange" "$DURATION_MS" "ok" "$RESP_SIZE" ;;
+  2??)
+    mycelora_log "stop" "log_exchange" "$DURATION_MS" "ok" "$RESP_SIZE"
+    # S-ACK-1 : accuses livres, le fichier de lots part avec le tour. Sur
+    # timeout ou erreur HTTP (branches ci-dessus/dessous), il RESTE en place
+    # et sera rejoue au prochain Stop du fil (l'accuse tardif confirme).
+    if [ -n "$ACK_FILE" ]; then
+      rm -f "$ACK_FILE" 2>/dev/null || true
+    fi
+    ;;
   *) mycelora_log "stop" "log_exchange" "$DURATION_MS" "error-http-$HTTP_CODE" "$RESP_SIZE" ;;
 esac
 

@@ -662,6 +662,84 @@ assert_arguments "alias-sans-titre-humain-la-cle-est-absente" "stdin-stop-alias-
 assert_arguments "alias-le-spaceId-est-toujours-resolu" "stdin-stop-alias.json" \
   "arguments.get('spaceId') == 'Développement Mnemos'"
 
+# ============ S-ACK-1 (29/08/2026) : accuse de reception des injections ====
+# Le session_id des fixtures normales est 726ec160-e1f5-5bd0-b3e7-3de9785ea2be,
+# donc le fichier de lots est /tmp/mycelora-ack-<ce session_id>.
+ACK_TEST_SESSION="726ec160-e1f5-5bd0-b3e7-3de9785ea2be"
+ACK_TEST_FILE="/tmp/mycelora-ack-${ACK_TEST_SESSION}"
+ACK_TEST_LOT="9d1e4b2a-1111-4222-8333-abcdefabcdef"
+
+# A. UPS : une reponse ok portant _meta.lot_id ecrit le lot dans le fichier.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$ACK_TEST_FILE"
+ack_tmp="$(mktemp -d)"
+cat > "$ack_tmp/resp-meta.json" <<EOF
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"FACE-A CANNED TEXT"}],"_meta":{"lot_id":"$ACK_TEST_LOT"}},"id":1}
+EOF
+export MYCELORA_TEST_CURL_LOG="$ack_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE="$ack_tmp/resp-meta.json"
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$ack_tmp/body.json"
+ack_out="$(cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-ups-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-userpromptsubmit.sh")"
+if [ "$ack_out" = "FACE-A CANNED TEXT" ] && [ -f "$ACK_TEST_FILE" ] && grep -q "$ACK_TEST_LOT" "$ACK_TEST_FILE"; then
+  echo "PASS ack-ups-ecrit-le-lot"
+else
+  echo "FAIL ack-ups-ecrit-le-lot : stdout='$ack_out', fichier=$([ -f "$ACK_TEST_FILE" ] && cat "$ACK_TEST_FILE" || echo ABSENT)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# B. UPS : une reponse ok SANS _meta ne cree pas de fichier (serveur pre-S-ACK-1).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$ACK_TEST_FILE"
+cat > "$ack_tmp/resp-sans-meta.json" <<'EOF'
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"FACE-A CANNED TEXT"}]},"id":1}
+EOF
+export MYCELORA_TEST_CURL_RESPONSE="$ack_tmp/resp-sans-meta.json"
+ack_out="$(cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-ups-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-userpromptsubmit.sh")"
+if [ "$ack_out" = "FACE-A CANNED TEXT" ] && [ ! -f "$ACK_TEST_FILE" ]; then
+  echo "PASS ack-ups-sans-meta-pas-de-fichier"
+else
+  echo "FAIL ack-ups-sans-meta-pas-de-fichier : stdout='$ack_out', fichier=$([ -f "$ACK_TEST_FILE" ] && echo PRESENT || echo absent)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# C. Stop : le fichier de lots part dans ackLotIds et est supprime apres un 2xx.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+printf '%s\n%s\npas-un-uuid\n%s\n' "$ACK_TEST_LOT" "$ACK_TEST_LOT" "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" > "$ACK_TEST_FILE"
+export MYCELORA_TEST_CURL_RESPONSE="$ack_tmp/resp-sans-meta.json"
+export MYCELORA_TEST_CAPTURE_BODY="$ack_tmp/body-stop.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+ack_args_ok="$(python3 -c "
+import json
+try:
+    d = json.load(open('$ack_tmp/body-stop.json'))
+    lots = d['params']['arguments'].get('ackLotIds')
+    print('ok' if lots == ['$ACK_TEST_LOT', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'] else 'ko:%s' % lots)
+except Exception as e:
+    print('ko:%s' % e)
+")"
+if [ "$ack_args_ok" = "ok" ] && [ ! -f "$ACK_TEST_FILE" ]; then
+  echo "PASS ack-stop-rejoue-et-supprime"
+else
+  echo "FAIL ack-stop-rejoue-et-supprime : args=$ack_args_ok, fichier=$([ -f "$ACK_TEST_FILE" ] && echo PRESENT || echo absent)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# D. Stop : sur une erreur HTTP, le fichier RESTE (rejoue au Stop suivant).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+printf '%s\n' "$ACK_TEST_LOT" > "$ACK_TEST_FILE"
+export MYCELORA_TEST_CURL_HTTP_CODE="500"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+if [ -f "$ACK_TEST_FILE" ]; then
+  echo "PASS ack-stop-echec-http-garde-le-fichier"
+else
+  echo "FAIL ack-stop-echec-http-garde-le-fichier : fichier supprime malgre le 500"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+rm -f "$ACK_TEST_FILE"
+rm -rf "$ack_tmp"
+
 # Compter les tests passés a partir des compteurs reels (pas un grep sur le
 # code source du script).
 PASSED_TESTS=$((TOTAL_TESTS-FAILED_TESTS))

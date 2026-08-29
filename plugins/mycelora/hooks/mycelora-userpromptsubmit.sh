@@ -251,8 +251,20 @@ try:
 except Exception:
     text = ""
 
+# S-ACK-1 (29/08/2026) : le serveur rend le lot du recall dans
+# result._meta.lot_id. Protocole de sortie sur le chemin ok : ligne 1 le
+# statut, ligne 2 le lot ("-" si absent), le bloc a partir de la ligne 3.
+# Les autres statuts gardent leur ligne unique. ATTENTION bash 3.2 : ce
+# bloc python vit dans une substitution $( ) ; PAS D APOSTROPHE dans les
+# commentaires, le vieux parseur la compte comme une quote ouvrante.
+meta = result.get("_meta")
+lot_id = ""
+if isinstance(meta, dict) and isinstance(meta.get("lot_id"), str):
+    lot_id = meta["lot_id"]
+
 if isinstance(text, str) and text != "":
     print("ok")
+    print(lot_id or "-")
     sys.stdout.write(text)
 else:
     print("empty")
@@ -260,10 +272,25 @@ PYEOF
 )"
 
 STATUS="$(printf '%s\n' "$STATUS_AND_TEXT" | head -n 1)"
-TEXT="$(printf '%s\n' "$STATUS_AND_TEXT" | tail -n +2)"
+LOT_ID="$(printf '%s\n' "$STATUS_AND_TEXT" | sed -n '2p')"
+TEXT="$(printf '%s\n' "$STATUS_AND_TEXT" | tail -n +3)"
 
 case "$STATUS" in
   ok)
+    # S-ACK-1 : le bloc part reellement sur stdout, donc le lot est a
+    # accuser en fin de tour. APPEND (jamais overwrite) : un message envoye
+    # en cours de tour declenche un second UPS avant le Stop, les deux lots
+    # doivent etre confirmes. Le fichier est lu puis supprime par
+    # mycelora-stop.sh apres un log_exchange en 2xx.
+    case "$LOT_ID" in
+      [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-*)
+        # Nom de fichier assaini : le session_id vient du stdin du hook.
+        ACK_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
+        if [ -n "$ACK_SESSION" ]; then
+          printf '%s\n' "$LOT_ID" >> "/tmp/mycelora-ack-${ACK_SESSION}" 2>/dev/null || true
+        fi
+        ;;
+    esac
     mycelora_log "userpromptsubmit" "recall" "$DURATION_MS" "ok" "$RESP_SIZE"
     printf '%s' "$TEXT"
     ;;
