@@ -1,24 +1,24 @@
 {
-    "name": "evidencai-plugins",
-    "owner": {
-        "name": "Stéphane Commenge — EvidencAI"
+  "name": "evidencai-plugins",
+  "owner": {
+    "name": "Stéphane Commenge — EvidencAI"
+  },
+  "metadata": {
+    "description": "Plugins EvidencAI pour Claude — mémoire persistante, veille, gouvernance IA",
+    "homepage": "https://mycelora.ai"
+  },
+  "plugins": [
+    {
+      "name": "mycelora",
+      "source": "./plugins/mycelora",
+      "description": "Mémoire persistante intelligente. 48 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
+      "version": "0.9.11"
     },
-    "metadata": {
-        "description": "Plugins EvidencAI pour Claude — mémoire persistante, veille, gouvernance IA",
-        "homepage": "https://mycelora.ai"
-    },
-    "plugins": [
-        {
-            "name": "mycelora",
-            "source": "./plugins/mycelora",
-            "description": "Mémoire persistante intelligente. 48 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
-            "version": "0.9.10"
-        },
-        {
-            "name": "mon-greffier",
-            "source": "./plugins/mon-greffier",
-            "description": "Assistant du juge consulaire au Tribunal de Commerce. L'authentification passe par un connecteur personnalisé Cowork (à ajouter dans Paramètres → Connecteurs avec l'URL https://api.mongreffier.evidencai.com/mcp), en attendant la correction du bug d'auth des plugins. Rédaction de jugements commerciaux en 5 phases avec vérification juridique Légifrance et Judilibre via PISTE. Backend Supabase self-hosted EvidencAI (Scaleway).",
-            "version": "8.0.0"
-        }
-    ]
+    {
+      "name": "mon-greffier",
+      "source": "./plugins/mon-greffier",
+      "description": "Assistant du juge consulaire au Tribunal de Commerce. L'authentification passe par un connecteur personnalisé Cowork (à ajouter dans Paramètres → Connecteurs avec l'URL https://api.mongreffier.evidencai.com/mcp), en attendant la correction du bug d'auth des plugins. Rédaction de jugements commerciaux en 5 phases avec vérification juridique Légifrance et Judilibre via PISTE. Backend Supabase self-hosted EvidencAI (Scaleway).",
+      "version": "8.0.0"
+    }
+  ]
 }
