@@ -199,14 +199,76 @@ Un journal technique est tenu dans `/tmp/mycelora-hook.log` (diagnostic local). 
 
 ## TÂCHES PLANIFIÉES
 
-| Système | Tâche | Fréquence |
-|---------|-------|-----------|
-| Supabase pg_cron | garbage_collect | Dimanche 5h FR |
-| Supabase pg_cron | health_check (Edge Function health-cron) | Quotidien 5h UTC |
-| Supabase pg_cron | mnemos-collect-google (collecte cloud mail/agenda : Google Workspace + IMAP OVH, malgré son nom historique) | Toutes les 2h, indépendant du Mac/Cowork |
-| Cowork scheduled-tasks | mnemos-sync-mail-agenda (macOS, legacy) | Toutes les 2h (quand Cowork ouvert) |
+### RÈGLE : une tâche planifiée est une SONDE, pas un fil
+
+Décision de Stéphane du 01/09/2026, à appliquer à TOUTE tâche planifiée
+(surveillance, brief, veille, envoi, contrôle) qui touche Mycelora.
+
+- Elle **n'ouvre jamais** de session (`mnemos_session_start`).
+- Elle **ne clôture jamais** (`mnemos_session_end`).
+- Elle **n'écrit ni handover ni codex**.
+- Sa seule écriture en mémoire est **UN atome**, via `mnemos_create_atom_manual`,
+  dans **l'espace qu'elle déclare**, et **seulement s'il y a quelque chose à
+  retenir**. Une sonde verte n'écrit rien : c'est le cas normal.
+
+**Pourquoi.** Un fil produit une compréhension qui a bougé, une sonde produit un
+relevé. Faire passer une sonde par le circuit des fils fabrique des handovers de
+données brutes sans contexte, qui remontent ensuite gonfler le codex de l'espace.
+Constat qui a produit la règle : le codex de l'espace NDO App était monté à
+27 402 caractères pour une cible de 10 000, nourri chaque matin par un brief
+automatique. Le petit modèle chargé de régénérer le codex n'a alors qu'une suite
+de chiffres sans récit, et le résultat est illisible.
+
+**Corollaire : toute tâche planifiée doit déclarer son espace.** Sans espace,
+son atome n'a pas de destination et finit dans « Non affecté ». L'espace se
+décide à la création de la tâche et se met en clair dans son prompt, avec son
+UUID.
+
+**Plafond à rappeler dans chaque prompt de tâche.** Un atome est tronqué **en
+silence** à 1500 caractères (`ATOME_TAILLE_MAX`), sans message d'erreur : la
+conclusion d'une sonde bavarde disparaît sans prévenir. Consigne à donner :
+l'essentiel en premier (symptôme, chiffre, écart), le détail ensuite, viser
+1400 caractères.
+
+**L'exception qui confirme la règle** : le brief général quotidien
+(`morning-brief`) n'est pas une sonde mais une synthèse transversale de la
+journée. Lui écrit un handover, dans l'espace **Mémoire générale**. Condition
+impérative : il lit les handovers pour se fabriquer, donc il doit **exclure les
+siens** de sa matière d'entrée, sinon il se nourrit de sa propre sortie.
+
+### Parc des crons serveur (stack Supabase auto-hébergée)
+
+| # | Cron | Fréquence (UTC) | Rôle |
+|---|------|-----------------|------|
+| 1 | extract-from-exchanges | toutes les 15 min | extraction d'atomes depuis les échanges |
+| 2 | auto-session-end | toutes les 15 min | clôture des fils inactifs |
+| 3 | mycelora-health-cron | chaque heure à :04 | contrôle de santé |
+| 4 | mycelora-weekly-insights | lundi 06h10 | cross-insights hebdomadaires |
+| 5 | mycelora-garbage-collect | quotidien 02h07 | ménage mémoire |
+| 6 | mycelora-collect-google | toutes les 2h | collecte mail/agenda (Google Workspace + IMAP), indépendante du Mac |
+| 7 | mycelora-process-events | toutes les 2h à :20 | traitement des événements collectés |
+| 8 | mycelora-morning-brief-hourly | chaque heure à :02 | brief général, écrit par glm-5.2, rangé dans `briefs` et envoyé par mail |
+| 9 | mycelora-export-queue | toutes les 2 min | file d'export mémoire |
+| 10 | mycelora-retention-purge | quotidien 03h37 | purge de rétention |
+| 11 | mycelora-retention-inactive-accounts | dimanche 04h15 | comptes inactifs |
+| 12 | mycelora-juge-injections | chaque heure à :21 | juge de l'utilité des injections |
+| 13 | mycelora-codex-worker | toutes les 5 min | dépilement de `codex_regen_queue` |
 
 Note : au premier run d'une tâche Cowork, l'utilisateur doit approuver les outils MCP une fois ("Toujours autorisé").
+
+### Journal des briefs : la table `briefs`
+
+Chaque brief général produit est conservé dans la table `briefs` (97 briefs au
+01/09/2026, le plus ancien du 04/06/2026). C'est le **seul artefact daté** de la
+mémoire : le codex répond à « où en est ce projet », le journal des briefs répond
+à « que s'est-il passé le 12 août ».
+
+- **Consultation à la demande uniquement.** Quand une question porte sur une
+  date, une période, ou sur ce qui s'est passé dans un autre projet à un moment
+  donné, ce journal est la bonne source.
+- **Jamais injecté dans le recall.** Les briefs datés ont été identifiés comme le
+  premier gisement de bruit de l'injection automatique (13 injections jugées
+  bruit pour 0 utile). Ils se consultent, ils ne se servent pas tout seuls.
 
 ### Collecte mail/agenda : cloud (recommandé) vs legacy Mac
 Depuis S7, la collecte mail/agenda tourne côté serveur Mycelora
