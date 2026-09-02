@@ -2148,6 +2148,64 @@ else
   FAILED_TESTS=$((FAILED_TESTS+1))
 fi
 
+# --- extraire_fil (fonction pure, correctif du 02/09 soir) : la ligne
+# « Fil : <id> ... » du brief d'ouverture rend l'identifiant DEFINITIF du
+# fil (horodate par le serveur depuis le 26/08). Meme extraction de source
+# reelle que extraire_jeton (la fonction vit dans la meme zone du fichier). --
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+EXTRAIRE_FIL_TEST_SCRIPT="$(mktemp /tmp/mycelora-test-extraire-fil.XXXXXX)"
+{
+  echo 'import re'
+  printf '%s\n' "$EXTRAIRE_JETON_SRC"
+  cat <<'PYEOF'
+cas = [
+    ("Fil : cowork-2026-09-02-2147-mycelora (l'identifiant « cowork-2026-09-02-mycelora » a été horodaté par le serveur)", "cowork-2026-09-02-2147-mycelora", "ligne_reelle_avec_parenthese"),
+    ("═══ MNEMOS IN ═══\n\nNous sommes le 02/09/2026.\nFil : resume-2026-09-02-1015-tamis\n\n[Profil] x", "resume-2026-09-02-1015-tamis", "ligne_parmi_le_brief"),
+    ("Fil : cowork-a\nFil : cowork-b", "cowork-b", "dernier_vu_gagne"),
+    ("Fil : cowork-2026-09-02-2147-mycelora", "cowork-2026-09-02-2147-mycelora", "ligne_seule_fin_de_texte"),
+    ("Le fil : cowork-pas-en-tete-de-ligne", None, "pas_en_tete_de_ligne"),
+    ("Fil :\ncowork-a-cheval", None, "identifiant_a_cheval_sur_deux_lignes"),
+    ("Fil : «cowork-guillemets»", None, "caractere_interdit_colle"),
+    ("Aucune ligne de fil ici.", None, "pas_de_ligne"),
+    (None, None, "non_str"),
+]
+erreurs = []
+for texte, attendu, nom in cas:
+    obtenu = extraire_fil(texte)
+    if obtenu != attendu:
+        erreurs.append("%s: attendu=%r obtenu=%r" % (nom, attendu, obtenu))
+print("FAIL:" + "; ".join(erreurs) if erreurs else "OK")
+PYEOF
+} > "$EXTRAIRE_FIL_TEST_SCRIPT"
+extraire_fil_verdict="$(python3 "$EXTRAIRE_FIL_TEST_SCRIPT" 2>&1)"
+rm -f "$EXTRAIRE_FIL_TEST_SCRIPT"
+if [ "$extraire_fil_verdict" = "OK" ]; then
+  echo "PASS extraire-fil-direct-cas-positifs-negatifs"
+else
+  echo "FAIL extraire-fil-direct-cas-positifs-negatifs : $extraire_fil_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# --- sessionLabel = identifiant RENDU PAR LE SERVEUR (ligne « Fil : »), pas
+# input.sessionId de l'appel ; et une ligne « Fil : » citee dans le resultat
+# d'un AUTRE outil (sans jeton ni bandeau MNEMOS IN) est ignoree. -----------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+FIL_TRANSCRIPT="$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/transcript-session-start-fil-serveur.jsonl"
+rm -f "/tmp/mycelora-hook-s-fil-serveur-0001.json"
+fil_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "s-fil-serveur-0001" "$FIL_TRANSCRIPT"
+)"
+fil_label="$(printf '%s\n' "$fil_out" | sed -n '2p')"
+fil_token="$(printf '%s\n' "$fil_out" | sed -n '4p')"
+rm -f "/tmp/mycelora-hook-s-fil-serveur-0001.json"
+if [ "$fil_label" = "cowork-2026-09-02-2147-mycelora" ] && [ "$fil_token" = "mk_sess_FIXTUREFIL0001" ]; then
+  echo "PASS session-label-rendu-par-le-serveur-prime-sur-l-appel"
+else
+  echo "FAIL session-label-rendu-par-le-serveur-prime-sur-l-appel : label=$fil_label token=$fil_token"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
 # --- format du content d'un tool_result : liste de blocs {type:text} (deja
 # couvert par le cache-v2 ci-dessus, transcript avec-jeton) ET chaine directe
 # (transcript dedie) : extraire_jeton doit fonctionner sur les DEUX. ---------
