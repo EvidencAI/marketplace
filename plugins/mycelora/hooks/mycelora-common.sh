@@ -117,6 +117,29 @@ def extraire_jeton(texte):
     return matches[-1] if matches else None
 
 
+# Correctif du 02/09/2026 soir (fil cowork-2026-09-02-2147-mycelora) : depuis
+# le fil 86 (26/08), le serveur HORODATE lui-meme le sessionId envoye a
+# mnemos_session_start et annonce l'identifiant DEFINITIF sur la ligne
+# « Fil : ... » du brief (tool_result). C'est cet identifiant-la, pas celui
+# de l'appel, qui signe le handover a la cloture. sessionLabel etait lu dans
+# input.sessionId de l'appel : l'alias (session_aliases.session_label)
+# divergeait donc du handover sur chaque fil ouvert depuis le 26/08, et
+# l'appariement lots / compte rendu que ce champ doit rendre exact etait
+# casse. Meme forme que extraire_jeton : fonction pure, ligne dediee, le
+# dernier vu gagne, rien a cheval sur deux lignes.
+_RE_FIL = re.compile(r"^Fil[ \t]*:[ \t]+([A-Za-z0-9._-]+)(?:[ \t]|$)", re.MULTILINE)
+
+
+def extraire_fil(texte):
+    """str -> str | None. Identifiant de fil rendu par le serveur sur la
+    ligne « Fil : <id> ... » du brief d'ouverture ; dernier match si
+    plusieurs."""
+    if not isinstance(texte, str):
+        return None
+    matches = _RE_FIL.findall(texte)
+    return matches[-1] if matches else None
+
+
 modifie = False
 if transcript_path and os.path.exists(transcript_path):
     try:
@@ -188,6 +211,20 @@ if transcript_path and os.path.exists(transcript_path):
                             jeton = extraire_jeton(texte_bloc) if texte_bloc is not None else None
                             if jeton:
                                 etat["hookToken"] = jeton
+                                modifie = True
+                            # Identifiant de fil rendu par le serveur (ligne
+                            # « Fil : ... ») : il PRIME sur input.sessionId de
+                            # l'appel, lu plus bas dans l'entree assistant, car
+                            # le tool_result arrive toujours APRES l'appel dans
+                            # le transcript (le dernier vu gagne, regle R1).
+                            # Garde : seulement dans un brief d'ouverture
+                            # (jeton present dans le meme bloc, ou bandeau
+                            # MNEMOS IN), jamais dans le resultat d'un autre
+                            # outil qui citerait une ligne « Fil : ... ».
+                            est_brief = bool(jeton) or (texte_bloc is not None and "MNEMOS IN" in texte_bloc)
+                            fil = extraire_fil(texte_bloc) if (est_brief and texte_bloc is not None) else None
+                            if fil:
+                                etat["sessionLabel"] = fil
                                 modifie = True
                     continue
 
