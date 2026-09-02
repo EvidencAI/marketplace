@@ -1956,6 +1956,84 @@ fi
 rm -rf "$c7_tmp"
 rm -f "$c5_journal"
 
+# I. CORRECTION post-revue (apres ff82375) : une ligne JSON valide mais au
+# TYPE inattendu ("t" un entier, pas une chaine) melangee a des lignes
+# valides NE DOIT PAS faire planter le hook -- ancien bug reproduit :
+# max(refus_entries, key=lambda e: e.get("t") or "") levait un TypeError
+# NON attrape (comparaison str/int) qui tuait le bloc python AVANT
+# json.dump(payload, ...), laissait BODY_FILE vide, et empechait la purge
+# a chaque Stop suivant (gel silencieux de tout mnemos_log_exchange du
+# fil). Le hook doit terminer proprement, envoyer TOUTES les lignes dans
+# "reflexes" (la ligne poison n'est PAS exclue du tableau, seulement de la
+# logique question_humain), et taguer le dernier refus VALIDE (t et evt
+# tous deux des chaines).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_valide_1"],"empreinte":"e1","rapport_vide":false}' > "$c5_journal"
+printf '%s\n' '{"t":5,"evt":"refus","outil":"Bash","objets":["tbl_poison"],"empreinte":"e2","rapport_vide":false}' >> "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T12:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_valide_2"],"empreinte":"e3","rapport_vide":false}' >> "$c5_journal"
+c8_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c8_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c8_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-reflexes-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c8_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c8_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    tagged = [r for r in refs if r.get('question_humain')]
+    ok = (isinstance(refs, list) and len(refs) == 3 and len(tagged) == 1 and tagged[0]['objets'] == ['tbl_valide_2'])
+    print('OK' if ok else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c8_verdict" = "OK" ] && [ ! -f "$c5_journal" ]; then
+  echo "PASS reflexe-stop-question-humain-ligne-type-inattendu-ne-plante-pas"
+else
+  echo "FAIL reflexe-stop-question-humain-ligne-type-inattendu-ne-plante-pas : $c8_verdict, fichier=$([ -f "$c5_journal" ] && echo PRESENT || echo absent)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c8_tmp"
+rm -f "$c5_journal"
+
+# J. Deux refus au MEME "t" (egalite a la seconde, resolution reelle de
+# mycelora_reflexe_log) -> le DERNIER ecrit dans le fichier (le plus
+# recent) doit etre tague, jamais le premier. Ancien bug : max() Python
+# renvoie le PREMIER element rencontre en cas d'egalite de cle, donc
+# l'ancien refus etait tague a tort. refus_entries[-1] (ordre d'ecriture,
+# journal append-only) resout ce cas sans avoir besoin de comparer "t".
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_premier_meme_seconde"],"empreinte":"e1","rapport_vide":false}' > "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_dernier_meme_seconde"],"empreinte":"e2","rapport_vide":false}' >> "$c5_journal"
+c9_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c9_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c9_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-reflexes-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c9_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c9_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    tagged = [r for r in refs if r.get('question_humain')]
+    ok = (len(tagged) == 1 and tagged[0]['objets'] == ['tbl_dernier_meme_seconde'])
+    print('OK' if ok else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c9_verdict" = "OK" ]; then
+  echo "PASS reflexe-stop-question-humain-egalite-t-le-dernier-ecrit-gagne"
+else
+  echo "FAIL reflexe-stop-question-humain-egalite-t-le-dernier-ecrit-gagne : $c9_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c9_tmp"
+rm -f "$c5_journal"
+
 # Nettoyage final des artefacts de test (marqueurs, journaux, reponse canned).
 rm -f /tmp/mycelora-reflexes-*.jsonl /tmp/mycelora-impact-* "$REFLEXE_IMPACT_RESPONSE" "$REPO_ROOT/.carte-perimee" "$REPO_ROOT/.mycelora-reflexes-off"
 unset MYCELORA_TEST_CAPTURE_BODY

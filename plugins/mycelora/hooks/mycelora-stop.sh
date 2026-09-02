@@ -321,16 +321,43 @@ if reflexes_path:
         # existe directement dans cwd (pas de recherche recursive), signal
         # (b) presence d'un "?" dans la reponse assistant de ce tour
         # (approximation actee a l'audit -- simple presence, pas de NLP). Si
-        # (a) OU (b), pose sur la ligne la PLUS RECENTE (le plus grand "t")
-        # parmi celles dont evt == "refus" -- aucune si aucun refus dans le
-        # lot (jamais de ligne creee).
+        # (a) OU (b), pose sur la ligne la PLUS RECENTE parmi celles dont
+        # evt == "refus" -- aucune si aucun refus dans le lot (jamais de
+        # ligne creee).
+        #
+        # CORRECTION (revue coordinateur, apres ff82375) : deux bugs sur
+        # l'ancienne implementation `max(refus_entries, key=lambda e:
+        # e.get("t") or "")`.
+        # 1. Fail-open casse : une ligne JSON valide mais au TYPE inattendu
+        #    (ex. "t":5, un entier) faisait planter ce max() avec un
+        #    TypeError NON attrape (comparaison str/int), hors de tout try —
+        #    le bloc python entier mourait avant json.dump(payload, ...),
+        #    BODY_FILE restait vide, curl envoyait un corps vide, la reponse
+        #    non-2xx empechait la purge, et CHAQUE Stop suivant recrashait a
+        #    l'identique sur la meme ligne empoisonnee (gel silencieux de
+        #    tout mnemos_log_exchange du fil, pas seulement reflexes). Les
+        #    entrees dont "evt" ou "t" ne sont pas des chaines sont
+        #    desormais exclues de CETTE logique (pas du tableau "reflexes"
+        #    envoye, qui les garde toutes) avant tout calcul.
+        # 2. "le plus recent" errone en cas d'egalite de "t" : "t" a une
+        #    resolution d'UNE SECONDE (mycelora_reflexe_log, format
+        #    %Y-%m-%dT%H:%M:%SZ) ; deux refus dans la meme seconde ont un
+        #    "t" identique, et max() renvoyait alors le PREMIER rencontre
+        #    (le plus ANCIEN dans le fichier), pas le plus recent. Le
+        #    journal etant append-only et lu dans l'ordre chronologique
+        #    d'ecriture, le DERNIER element de la liste filtree
+        #    (refus_entries[-1]) est a la fois plus simple (plus de
+        #    max()/key fragile) et correct meme a egalite de seconde.
         signal_decision = bool(cwd) and os.path.exists(os.path.join(cwd, ".cc-attente-decision.md"))
         signal_question = "?" in assistant_response
         if signal_decision or signal_question:
-            refus_entries = [e for e in entries if e.get("evt") == "refus"]
+            refus_entries = [
+                e for e in entries
+                if isinstance(e.get("evt"), str) and e.get("evt") == "refus"
+                and isinstance(e.get("t"), str)
+            ]
             if refus_entries:
-                plus_recent = max(refus_entries, key=lambda e: e.get("t") or "")
-                plus_recent["question_humain"] = True
+                refus_entries[-1]["question_humain"] = True
         arguments["reflexes"] = entries
 
 payload = {

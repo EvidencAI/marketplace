@@ -79,12 +79,15 @@ JSON reçu sur stdin du hook Stop, distinct du `REPO_ROOT` résolu par
 deux notions coexistent dans des hooks différents, ne pas les confondre en
 maintenance future.
 
-La fusion `question_humain: true` ne touche que la ligne du lot local ayant
-le plus grand `t` parmi celles à `evt == "refus"` (`max(refus_entries,
-key=lambda e: e.get("t") or "")` en Python — tri lexicographique valide car
-le format `%Y-%m-%dT%H:%M:%SZ` est ordonné comme la date qu'il représente).
-Aucune ligne n'est créée si le lot ne contient aucun `refus` : le filtre sur
-`evt` a lieu AVANT le calcul du max, jamais un fallback sur "la ligne la
+La fusion `question_humain: true` ne touche que la ligne du lot local la
+PLUS RÉCENTE parmi celles à `evt == "refus"`. **Corrigé après revue
+(voir §6)** : ce n'est plus `max(refus_entries, key=lambda e: e.get("t") or
+"")` mais `refus_entries[-1]`, une fois `refus_entries` filtrée aux entrées
+dont `evt` ET `t` sont bien des `str` — le journal étant append-only et lu
+dans l'ordre chronologique d'écriture, le dernier élément de la liste EST le
+plus récent, sans jamais comparer les valeurs de `t` entre elles. Aucune
+ligne n'est créée si le lot ne contient aucun `refus` valide : le filtre sur
+`evt`/`t` a lieu AVANT toute sélection, jamais un fallback sur "la ligne la
 plus récente du lot tout court".
 
 ## 4. Purge du journal local des reflexes
@@ -107,3 +110,59 @@ observé `1` au lieu de `0`) — la mutation est bien détectée par ce test
 précis et par lui seul. Mutation revertie aussitôt après vérification
 (`diff` confirmé vide contre la sauvegarde), suite complète re-vérifiée
 verte (91/91). Aucune trace de la mutation dans le code final.
+
+## 6. Corrections post-revue (coordinateur, sur le commit `ff82375`)
+
+Deux défauts confirmés et reproduits sur le calcul de `question_humain`
+dans `mycelora-stop.sh` (bloc Python qui construit `arguments["reflexes"]`),
+corrigés dans un commit séparé, sans modifier `ff82375` :
+
+**1. MEDIUM, bug réel confirmé.** `max(refus_entries, key=lambda e:
+e.get("t") or "")` n'était protégé par AUCUN `try` : une ligne JSON valide
+au JSON mais au TYPE inattendu (`"t"` un entier plutôt qu'une chaîne, ex.
+`{"evt":"refus","t":5}`) faisait planter ce `max()` avec un `TypeError` non
+attrapé (comparaison `str`/`int` par Python lors du tri) — reproduit
+manuellement avant correction (voir la commande `python3 -c` de
+vérification). Le bloc Python mourait avant `json.dump(payload, …)` :
+`BODY_FILE` restait vide, curl envoyait un corps vide, la réponse non-2xx
+empêchait la purge, et **chaque Stop suivant recrashait à l'identique sur
+la même ligne empoisonnée** — gel silencieux de tout `mnemos_log_exchange`
+du fil (pas seulement `reflexes`) jusqu'à nettoyage manuel de `/tmp`.
+Violation du principe fail-open déjà établi ailleurs dans ce fichier (les
+lignes du journal local à erreur de SYNTAXE JSON étaient déjà ignorées,
+pas celles à erreur de TYPE en aval). Corrigé : `refus_entries` est
+maintenant filtrée aux entrées dont `evt` ET `t` sont des `str` AVANT toute
+utilisation dans la logique `question_humain` — la ligne empoisonnée reste
+dans le tableau `reflexes` envoyé au serveur (elle n'est retirée que de
+cette logique de sélection), conformément à la posture générale "jamais
+d'exclusion silencieuse du contenu envoyé, seulement de la logique
+dérivée".
+
+**2. LOW, correction + simplification.** `t` a une résolution d'UNE SECONDE
+(format `%Y-%m-%dT%H:%M:%SZ`). Deux refus dans la même seconde ont un `t`
+identique ; `max()` Python renvoie alors le PREMIER élément rencontré à
+égalité de clé — le plus ANCIEN dans le fichier — alors que le contrat
+demande le PLUS RÉCENT. Remplacé par `refus_entries[-1]` : le journal étant
+append-only et lu dans l'ordre chronologique d'écriture, le dernier élément
+de la liste (déjà filtrée par le point 1) est le plus récent par
+construction, sans jamais comparer les valeurs de `t` entre elles — élimine
+le bug ET le `max(key=...)` fragile en une seule fois.
+
+Vérification : les deux bugs reproduits manuellement sur l'ancien code
+(diff temporaire, confirmé puis reverté, aucune trace dans le code final)
+— la ligne empoisonnée provoque bien le `TypeError` décrit, et l'égalité de
+`t` fait bien tagger le premier refus au lieu du dernier. Deux tests neufs
+ajoutés dans `run-unit-tests.sh`
+(`reflexe-stop-question-humain-ligne-type-inattendu-ne-plante-pas`,
+`reflexe-stop-question-humain-egalite-t-le-dernier-ecrit-gagne`), les deux
+confirmés en échec sur l'ancien code (91/93, `TypeError` observé au premier
+et mauvais objet tagué au second) puis verts après correction (93/93).
+
+## 7. Point connu, hors périmètre (à traiter dans une story future)
+
+`.claude-plugin/marketplace.json` (racine du dépôt) affiche encore la
+version `0.9.12` pour le plugin mycelora, en retard sur le `plugin.json`
+réel (`0.10.1` après cette story). Dérive PRÉ-EXISTANTE (déjà `0.9.12` vs
+`0.10.0` avant S-REFLEXES-5b), confirmée hors périmètre de cette story par
+le coordinateur — non corrigée ici, à traiter dans une story dédiée au
+packaging/versioning du marketplace.
