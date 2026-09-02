@@ -1,7 +1,7 @@
 {
   "name": "mycelora",
-  "version": "0.10.1",
-  "description": "Sous chacun de vos projets, un réseau qui relie, retient et apprend : Mycelora est la mémoire persistante de Claude. Plugin = skills, commandes et hooks avec watcher v3 (injection FACE-A par message, collecte automatique des échanges) et réflexe d'impact (refus unique sur un geste structurant DDL/UPDATE-DELETE/prod, jalon après exécution) ; les 48 outils MCP sont fournis par le connecteur custom claude.ai Mycelora (edge function Supabase). Graphe de connaissances (10 types d'atomes, espaces, connexions), rappel contextuel, neurone cross-insights, collecte mail/agenda, quotas par plan.",
+  "version": "0.10.2",
+  "description": "Sous chacun de vos projets, un réseau qui relie, retient et apprend : Mycelora est la mémoire persistante de Claude. Plugin = skills, commandes et hooks (watcher v3 : rappel injecté à chaque message, collecte automatique des échanges ; réflexe d'impact : refus unique avant un geste structurant, jalon après). Les 48 outils MCP viennent du connecteur Mycelora. Graphe de connaissances (atomes, espaces, connexions), neurone cross-insights, collecte mail/agenda, quotas par plan.",
   "author": {
     "name": "EvidencAI"
   },
@@ -15,5 +15,14 @@
     "cross-insights",
     "quotas",
     "saas"
-  ]
+  ],
+  "userConfig": {
+    "hook_key": {
+      "type": "string",
+      "title": "Clé hook Mycelora",
+      "description": "Jeton à droits réduits (rappel, collecte, carte des objets) généré dans le dashboard Mycelora. Nécessaire pour une installation depuis la marketplace ; inutile avec le zip personnalisé, qui embarque déjà le sien.",
+      "sensitive": true,
+      "required": false
+    }
+  }
 }

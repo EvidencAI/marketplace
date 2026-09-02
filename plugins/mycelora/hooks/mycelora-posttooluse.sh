@@ -12,7 +12,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/mycelora-common.sh"
 
-MYCELORA_HOOK_TOKEN="__MYCELORA_HOOK_KEY__"
+# Jeton hook : variable CLAUDE_PLUGIN_OPTION_HOOK_KEY (userConfig hook_key, canal
+# marketplace, saisie a l'activation et rangee dans le trousseau) si elle est
+# definie, sinon la valeur substituee dans le zip par build-plugin-zip.sh.
+MYCELORA_HOOK_TOKEN="${CLAUDE_PLUGIN_OPTION_HOOK_KEY:-__MYCELORA_HOOK_KEY__}"
 
 CLEANUP_FILES=()
 cleanup_and_exit() {
