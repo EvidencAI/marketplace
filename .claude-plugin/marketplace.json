@@ -12,7 +12,7 @@
       "name": "mycelora",
       "source": "./plugins/mycelora",
       "description": "Mémoire persistante intelligente. 48 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
-      "version": "0.10.3"
+      "version": "0.10.4"
     },
     {
       "name": "mon-greffier",
