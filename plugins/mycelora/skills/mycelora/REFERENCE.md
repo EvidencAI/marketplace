@@ -137,6 +137,53 @@ Vault, référencé depuis `sources.vault_secret_id`.
 
 ---
 
+## Réflexes de senior (impact, état du fil, contradiction)
+
+Trois réflexes ajoutés au plugin Cowork pour retenir Claude — et Stéphane —
+d'une glissade, sans geste manuel supplémentaire.
+
+**Réflexe d'impact.** Avant un geste structurant en ligne de commande
+(modification de schéma, suppression ou mise à jour massive, opération sur
+la prod), le plugin REFUSE une première fois et montre un rapport : qui lit
+et qui écrit l'objet visé, la portée du changement. Le même geste, rejoué
+tel quel juste après, passe : le refus ne se répète jamais pour le même
+objet dans le même fil. Aujourd'hui limité aux commandes shell (Bash) ; les
+autres outils restent seulement notés au passage, sans blocage.
+
+**État du fil.** Le plugin tient un court état du fil en cours (objectif,
+décidé, écarté, ouvert), régénéré automatiquement à intervalles réguliers
+pendant la conversation. Visible dans le dashboard, onglet **Réflexes**,
+bloc **Fils en cours** : un aperçu de « où en est ce fil » sans avoir à le
+relire en entier.
+
+**Réflexe de contradiction.** Quand une réponse contredit une décision déjà
+prise ailleurs (un autre projet, un fil antérieur), une alerte apparaît.
+Deux endroits pour la lire : dans le rappel de la conversation elle-même,
+ou dans le dashboard, onglet Réflexes, bloc **Alertes**.
+
+**Acquitter une alerte** — deux chemins, au choix, avec exactement le même
+effet côté serveur :
+- Depuis claude.ai ou Claude Desktop (connecteur Mycelora) : demander à
+  Claude d'acquitter l'alerte ; il utilise l'outil `mnemos_ack_alerte` avec
+  le petit identifiant donné dans le texte de l'alerte, et un verdict,
+  utile ou bruit.
+- Depuis le dashboard : onglet Réflexes, bloc Alertes, deux boutons
+  **Utile** / **Bruit**.
+
+Les deux chemins marquent l'alerte, ils ne la suppriment jamais. Le
+verdict donné ici (par Claude ou par un clic) est un signal d'appoint ; la
+décision qui compte reste celle que Stéphane prend en la lisant — c'est
+elle qui alimente les compteurs de fiabilité du même onglet (bloc
+Compteurs, dashboard uniquement, jamais dans le rappel).
+
+**Rien à coller.** Aucun de ces trois réflexes ne demande à l'utilisateur
+de copier une clé ou un jeton : le canal marketplace (plugin Cowork)
+authentifie automatiquement ses hooks avec un jeton de session lu depuis le
+brief d'ouverture du fil, à l'insu de l'utilisateur. Le dashboard, lui,
+s'appuie sur la session déjà connectée.
+
+---
+
 ## Hygiène mémoire (détail technique)
 
 ### Déduplication automatique (v0.4.1)
