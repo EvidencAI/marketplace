@@ -144,17 +144,19 @@ d'une glissade, sans geste manuel supplémentaire.
 
 **Réflexe d'impact.** Avant un geste structurant en ligne de commande
 (modification de schéma, suppression ou mise à jour massive, opération sur
-la prod), le plugin REFUSE une première fois et montre un rapport : qui lit
-et qui écrit l'objet visé, la portée du changement. Le même geste, rejoué
-tel quel juste après, passe : le refus ne se répète jamais pour le même
-objet dans le même fil. Aujourd'hui limité aux commandes shell (Bash) ; les
-autres outils restent seulement notés au passage, sans blocage.
+la prod), le plugin REFUSE une première fois et montre un rapport (qui lit
+et qui écrit l'objet visé, ou la portée de l'opération prod concernée
+quand l'objet n'est pas une table). Le même geste, rejoué tel quel juste
+après, passe : le refus ne se répète jamais pour le même objet dans le
+même fil. Aujourd'hui limité aux commandes shell (Bash) ; les autres
+outils restent seulement notés au passage, sans blocage.
 
 **État du fil.** Le plugin tient un court état du fil en cours (objectif,
-décidé, écarté, ouvert), régénéré automatiquement à intervalles réguliers
-pendant la conversation. Visible dans le dashboard, onglet **Réflexes**,
-bloc **Fils en cours** : un aperçu de « où en est ce fil » sans avoir à le
-relire en entier.
+périmètre en cours, ce qui est décidé, écarté, ouvert, corrections
+faites, etc.), régénéré automatiquement à intervalles réguliers pendant la
+conversation. Visible dans le dashboard, onglet **Réflexes**, bloc **Fils
+en cours** : un aperçu de « où en est ce fil » sans avoir à le relire en
+entier.
 
 **Réflexe de contradiction.** Quand une réponse contredit une décision déjà
 prise ailleurs (un autre projet, un fil antérieur), une alerte apparaît.
