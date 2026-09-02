@@ -313,3 +313,15 @@ La story annonçait « 30 tests existants ». Mesuré en ouverture (avant tout
 changement) : 34/34 déjà verts. Écart mineur, signalé par honnêteté de
 mesure — la Definition of Done (« 30 tests existants + les tests neufs »)
 reste satisfaite dans l'esprit : 34 préexistants + 30 neufs = 64/64.
+
+## Sonde réelle des noms d'outils MCP, session Cowork cloud liée au Mac (Cowork, 02/09/2026 06h33 UTC)
+
+Hook PreToolUse de journalisation posé dans une session Cowork réelle (Fable 5.1), trois appels d'outils consécutifs. Noms reçus dans `tool_name`, tels quels :
+
+```
+2026-09-02T06:33:14 event=PreToolUse tool_name=mcp__remote-devices__device_list_dir input_keys=['path']
+2026-09-02T06:33:18 event=PreToolUse tool_name=mcp__remote-devices__Desktop_Commander__start_process input_keys=['command', 'timeout_ms']
+2026-09-02T06:33:23 event=PreToolUse tool_name=Bash input_keys=['command', 'description']
+```
+
+Conséquences : la convention `mcp__<serveur>__<outil>` est confirmée sur une machine réelle ; `Desktop_Commander__start_process` porte la commande dans `tool_input.command`, même clef que `Bash`, donc la détection SQL et infra s'applique telle quelle ; `device_list_dir` ne porte qu'un `path`. Le matcher générique `mcp__.*` du plugin 0.10.0 est correct.
