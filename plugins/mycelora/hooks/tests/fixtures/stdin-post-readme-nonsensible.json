@@ -1,0 +1,13 @@
+{
+  "session_id": "reflexe-post-readme",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_post_readme",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "REPO_ROOT_PLACEHOLDER/README.md",
+    "content": "x"
+  }
+}
