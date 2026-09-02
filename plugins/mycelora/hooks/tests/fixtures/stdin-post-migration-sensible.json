@@ -1,0 +1,13 @@
+{
+  "session_id": "reflexe-post-migration",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_post_migration",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "REPO_ROOT_PLACEHOLDER/supabase/migrations/20260902_test.sql",
+    "content": "select 1;"
+  }
+}
