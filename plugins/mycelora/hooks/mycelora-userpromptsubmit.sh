@@ -153,6 +153,16 @@ SESSION_ID="$(printf '%s\n' "$EXTRACT_OUT" | sed -n '1p')"
 TRANSCRIPT_PATH="$(printf '%s\n' "$EXTRACT_OUT" | sed -n '2p')"
 DECISION="$(printf '%s\n' "$EXTRACT_OUT" | sed -n '3p')"
 
+# S-REFLEXES-6 : jeton de session hook. Priorite 1 (zip substitue) deja geree
+# par l'assignation de MYCELORA_HOOK_TOKEN ci-dessus ; sinon on tente le cache
+# v3 du fil. Sans jeton, le hook est inerte (premier message d'un fil, avant
+# l'ouverture : cas normal, jamais une erreur visible).
+mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
+if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
+  mycelora_log "userpromptsubmit" "auth" 0 "sans-jeton" 0
+  exit 0
+fi
+
 DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
 
 if [ "$DECISION" != "OK" ]; then
@@ -217,6 +227,18 @@ fi
 
 case "$HTTP_CODE" in
   2??) : ;;
+  401)
+    # S-REFLEXES-6 : 401 typé (jeton de session hook expiré ou révoqué) ->
+    # jamais silencieux, seul hook qui imprime du texte brut sur stdout.
+    # Un 401 générique (clé inconnue) reste dans le comportement de "*)".
+    if grep -q '"jeton_session_expire"' "$RESP_FILE" 2>/dev/null; then
+      mycelora_log "userpromptsubmit" "auth" "$DURATION_MS" "jeton-expire" "$RESP_SIZE"
+      printf '%s' "Mycelora : jeton de session expiré, relancez l'ouverture du fil (mnemos_session_start) pour rétablir la mémoire."
+      exit 0
+    fi
+    mycelora_log "userpromptsubmit" "recall" "$DURATION_MS" "error-http-$HTTP_CODE" "$RESP_SIZE"
+    exit 0
+    ;;
   *)
     mycelora_log "userpromptsubmit" "recall" "$DURATION_MS" "error-http-$HTTP_CODE" "$RESP_SIZE"
     exit 0

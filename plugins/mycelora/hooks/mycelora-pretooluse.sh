@@ -89,6 +89,18 @@ FICHIER_LU="$(printf '%s\n' "$FIELDS" | sed -n '8p')"
 EMPREINTE="$(printf '%s\n' "$FIELDS" | sed -n '9p')"
 OBJETS_JSON="$(printf '%s\n' "$FIELDS" | sed -n '10p')"
 
+# S-REFLEXES-6 : jeton de session hook. Priorite 1 (zip substitue) deja geree
+# par l'assignation de MYCELORA_HOOK_TOKEN ci-dessus ; sinon on tente le cache
+# v3 du fil. Sans jeton, le hook est inerte (premier message d'un fil, avant
+# l'ouverture : cas normal, jamais une erreur visible — conséquence assumée :
+# aucun refus de geste structurant tant que le fil n'a pas ouvert, voir
+# .claude/v2-decisions/S-REFLEXES-6.md).
+mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
+if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
+  mycelora_log "pretooluse" "auth" 0 "sans-jeton" 0
+  exit 0
+fi
+
 DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
 
 if [ "$OK" != "1" ]; then

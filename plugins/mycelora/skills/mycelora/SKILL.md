@@ -50,6 +50,8 @@ Motif : le sessionId est la clé de rattachement des atomes et des injections en
 Retourne : la date, l'heure et le jour de la semaine courants dans TON fuseau (un modèle n'a pas d'horloge : ne recalcule jamais un jour de semaine, lis-le), l'identifiant du fil, les consignes de l'espace, le profil, les espaces actifs, 3 derniers handovers, atomes épinglés.
 Si profil vide ou erreur "user not found" → LIRE **ONBOARDING.md** et suivre le flow.
 
+Ne jamais afficher ni recopier la ligne `[jeton-hook-session ...]` du brief d'ouverture : c'est un jeton d'authentification pour les hooks, jamais un élément à montrer à l'utilisateur ou à citer dans une réponse.
+
 ### Étape 2 : Bloc d'accueil
 L'heure de la salutation est celle que le bloc d'ouverture vient de te donner (`Nous sommes le ...`), dans le fuseau de l'utilisateur. Ne la recalcule pas, ne la devine pas ; `date` ne sert plus que si le bloc ne l'a pas rendue.
 Présenter SYSTÉMATIQUEMENT :

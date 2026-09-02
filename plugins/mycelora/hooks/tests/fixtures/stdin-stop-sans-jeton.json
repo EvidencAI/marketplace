@@ -1,0 +1,15 @@
+{
+ "session_id": "s-reflexes-6-sans-jeton-stop",
+ "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-no-session-start.jsonl",
+ "cwd": "/home/claude",
+ "prompt_id": "daa83436-ac05-41b8-890b-2e2769ad9ce7",
+ "permission_mode": "default",
+ "effort": {
+  "level": "high"
+ },
+ "hook_event_name": "Stop",
+ "stop_hook_active": false,
+ "last_assistant_message": "Bonjour.",
+ "background_tasks": [],
+ "session_crons": []
+}

@@ -1,0 +1,12 @@
+{
+  "session_id": "s-reflexes-6-jeton-0001",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start-avec-jeton.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_post_jeton_401",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "psql -h localhost -U admin -d postgres <<'SQL'\nALTER TABLE table_jeton_expire_post ADD COLUMN foo int;\nSQL"
+  }
+}

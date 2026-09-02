@@ -79,6 +79,16 @@ CWD="$(python3 -c "import json; print(json.load(open('$META_FILE')).get('cwd',''
 TRANSCRIPT_PATH="$(python3 -c "import json; print(json.load(open('$META_FILE')).get('transcript_path',''))" 2>/dev/null || echo '')"
 FILE_PATH="$(python3 -c "import json; print(json.load(open('$META_FILE')).get('file_path',''))" 2>/dev/null || echo '')"
 
+# S-REFLEXES-6 : jeton de session hook. Priorite 1 (zip substitue) deja geree
+# par l'assignation de MYCELORA_HOOK_TOKEN ci-dessus ; sinon on tente le cache
+# v3 du fil. Sans jeton, le hook est inerte (premier message d'un fil, avant
+# l'ouverture : cas normal, jamais une erreur visible).
+mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
+if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
+  mycelora_log "posttooluse" "auth" 0 "sans-jeton" 0
+  exit 0
+fi
+
 REPO_ROOT="$(mycelora_repo_root "$CWD")"
 DESARME="$(mycelora_reflexe_desarme "$REPO_ROOT")"
 if [ "$DESARME" = "1" ]; then
@@ -153,6 +163,14 @@ except Exception:
       if [ -n "${MYCELORA_REFLEXE_LOOKUP_EVT:-}" ]; then
         mycelora_reflexe_log "$SESSION_ID" "${MYCELORA_REFLEXE_LOOKUP_EVT}" "$TOOL_NAME" "$OBJETS_JSON" "$EMPREINTE" "0"
       fi
+      # S-REFLEXES-6 : 401 typé sur ce lookup -> log dédié best-effort, ne
+      # change RIEN au jalon qui se construit normalement ensuite. Verifie
+      # LOCALEMENT (pas dans mycelora_reflexe_lookup_serveur, partagee avec
+      # mycelora-pretooluse.sh dont le comportement de refus est inchangé).
+      if [ "${MYCELORA_LAST_HTTP_CODE:-000}" = "401" ] && grep -q '"jeton_session_expire"' "$LOOKUP_CURL_RESP" 2>/dev/null; then
+        AUTH_DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
+        mycelora_log "posttooluse" "auth" "$AUTH_DURATION_MS" "jeton-expire" 0
+      fi
     else
       printf '{}' > "$SERVER_RESULT_FILE"
     fi
@@ -185,6 +203,12 @@ else
       LOOKUP_CURL_RESP="$(mktemp /tmp/mycelora-hook-post-lookup-resp.XXXXXX)"
       CLEANUP_FILES+=("$LOOKUP_CURL_RESP")
       mycelora_reflexe_lookup_serveur "$SPACE_ID" "$OBJETS_JSON" "$SERVER_RESULT_FILE" "$LOOKUP_CFGFILE" "$LOOKUP_CURL_RESP"
+      # S-REFLEXES-6 : meme verification locale que le premier site d'appel
+      # (voir plus haut), best-effort, ne change rien au jalon.
+      if [ "${MYCELORA_LAST_HTTP_CODE:-000}" = "401" ] && grep -q '"jeton_session_expire"' "$LOOKUP_CURL_RESP" 2>/dev/null; then
+        AUTH_DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
+        mycelora_log "posttooluse" "auth" "$AUTH_DURATION_MS" "jeton-expire" 0
+      fi
     else
       OBJETS_JSON="$(python3 -c "import json,sys; print(json.dumps([sys.argv[1]]))" "$FILE_PATH")"
     fi
