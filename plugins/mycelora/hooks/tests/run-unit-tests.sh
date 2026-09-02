@@ -1444,6 +1444,596 @@ else
 fi
 rm -rf "$failopen_tmp"
 
+# ============================================================================
+# S-REFLEXES-5b (02/09/2026) — carte_age_jours (mycelora_reflexe_log,
+# mycelora_reflexe_construire_rapport) et mycelora-stop.sh (remontee
+# "reflexes", question_humain, purge apres 2xx). Choix documentes dans
+# .claude/v2-decisions/S-REFLEXES-5b.md.
+# ============================================================================
+
+# --- mycelora_reflexe_log : carte_age_jours ecrit (numerique) quand fourni,
+# JAMAIS une cle a null ni une chaine vide, omise purement et simplement
+# sinon (meme discipline que tools.ts cote serveur pour ce champ). ----------
+reflog_journal="/tmp/mycelora-reflexes-reflog-test-session.jsonl"
+rm -f "$reflog_journal"
+bash -c '
+  set -uo pipefail
+  source "$1/plugins/mycelora/hooks/mycelora-common.sh"
+  mycelora_reflexe_log "reflog-test-session" "refus" "Bash" "[\"t1\"]" "empreinte1" "0" "5"
+' _ "$REPO_ROOT"
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+verdict_reflog_avec="$(python3 -c "
+import json
+try:
+    d = json.loads(open('$reflog_journal').read().strip().splitlines()[-1])
+    print('OK' if d.get('carte_age_jours') == 5 else 'FAIL:%r' % d)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$verdict_reflog_avec" = "OK" ]; then
+  echo "PASS reflexe-log-carte-age-jours-ecrit-quand-fourni"
+else
+  echo "FAIL reflexe-log-carte-age-jours-ecrit-quand-fourni : $verdict_reflog_avec"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+rm -f "$reflog_journal"
+bash -c '
+  set -uo pipefail
+  source "$1/plugins/mycelora/hooks/mycelora-common.sh"
+  mycelora_reflexe_log "reflog-test-session" "passage" "Bash" "[\"t1\"]" "empreinte1" "0"
+' _ "$REPO_ROOT"
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+verdict_reflog_sans="$(python3 -c "
+import json
+try:
+    d = json.loads(open('$reflog_journal').read().strip().splitlines()[-1])
+    print('OK' if 'carte_age_jours' not in d else 'FAIL:%r' % d)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$verdict_reflog_sans" = "OK" ]; then
+  echo "PASS reflexe-log-carte-age-jours-omis-quand-absent"
+else
+  echo "FAIL reflexe-log-carte-age-jours-omis-quand-absent : $verdict_reflog_sans"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -f "$reflog_journal"
+
+# --- mycelora_reflexe_construire_rapport : les 4 cas du calcul de
+# carte_age_jours (candidat par objet, MAX des candidats, priorite absolue de
+# l'echec de lookup). Test DIRECT de la fonction (meme patron que la preuve
+# fail-open plus haut : bash -c isole, jamais un `source` dans CE script). --
+
+# Cas 1 : resolution LOCALE seule (grep frais) -> candidat 0.
+# CONTRE-EPREUVE PAR MUTATION (DoD) verifiee manuellement le 02/09/2026 :
+# `candidats_age.append(0)` mute en `candidats_age.append(1)` dans
+# mycelora_reflexe_construire_rapport fait echouer CE test (carte_age_jours
+# rendu vaut "1", pas "0") ; mutation revertie aussitot apres verification,
+# aucune trace dans le code final. Voir .claude/v2-decisions/S-REFLEXES-5b.md.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+age_local_tmp="$(mktemp -d)"
+cat > "$age_local_tmp/local.json" <<'EOF'
+{"resultats": {"tabla_local": {"lu_par": ["a.ts"], "ecrit_par": []}}}
+EOF
+echo '{}' > "$age_local_tmp/server.json"
+bash -c '
+  set -uo pipefail
+  source "$1/plugins/mycelora/hooks/mycelora-common.sh"
+  mycelora_reflexe_construire_rapport "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}"
+' _ "$REPO_ROOT" '["tabla_local"]' "ddl" "" "" "" "" \
+  "$age_local_tmp/local.json" "$age_local_tmp/server.json" "$age_local_tmp/rapport.txt" "$age_local_tmp/meta.json"
+age_local_verdict="$(python3 -c "
+import json
+try:
+    print(json.load(open('$age_local_tmp/meta.json')).get('carte_age_jours'))
+except Exception as e:
+    print('ERROR:%s' % e)
+")"
+if [ "$age_local_verdict" = "0" ]; then
+  echo "PASS reflexe-carte-age-jours-local-seul-zero"
+else
+  echo "FAIL reflexe-carte-age-jours-local-seul-zero : $age_local_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$age_local_tmp"
+
+# Cas 2 : resolution SERVEUR seule, age connu (genere_le il y a 5 jours,
+# calcule dynamiquement -- jamais une date figee, la suite doit rester verte
+# a n'importe quelle date d'execution).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+age_srv_tmp="$(mktemp -d)"
+echo '{"resultats": {}}' > "$age_srv_tmp/local.json"
+python3 - "$age_srv_tmp/server.json" <<'PYEOF'
+import datetime, json, sys
+out_path = sys.argv[1]
+genere_le = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+inner = {
+    "spaceId": "sp1", "carteVide": False, "dateCarte": genere_le, "carteperimee": False, "avertissement": None,
+    "objets": [{"identifiant": "tabla_srv", "inconnu": False, "lignes": [{
+        "type": "table", "objet": "tabla_srv", "colonnes": [], "lu_par": ["x.ts"], "ecrit_par": [],
+        "rpc": [], "section_carte": "", "genere_le": genere_le, "empreinte": "x"
+    }]}]
+}
+payload = {"jsonrpc": "2.0", "result": {"content": [{"type": "text", "text": json.dumps(inner, ensure_ascii=False)}]}}
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PYEOF
+bash -c '
+  set -uo pipefail
+  source "$1/plugins/mycelora/hooks/mycelora-common.sh"
+  mycelora_reflexe_construire_rapport "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}"
+' _ "$REPO_ROOT" '["tabla_srv"]' "ddl" "" "" "" "" \
+  "$age_srv_tmp/local.json" "$age_srv_tmp/server.json" "$age_srv_tmp/rapport.txt" "$age_srv_tmp/meta.json"
+age_srv_verdict="$(python3 -c "
+import json
+try:
+    print(json.load(open('$age_srv_tmp/meta.json')).get('carte_age_jours'))
+except Exception as e:
+    print('ERROR:%s' % e)
+")"
+if [ "$age_srv_verdict" = "5" ]; then
+  echo "PASS reflexe-carte-age-jours-serveur-seul-age-connu"
+else
+  echo "FAIL reflexe-carte-age-jours-serveur-seul-age-connu : $age_srv_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$age_srv_tmp"
+
+# Cas 3 : melange LOCAL (candidat 0) + SERVEUR (candidat 7) -> MAX = 7 (le
+# rapport le plus defavorable, pas la derniere source vue).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+age_mix_tmp="$(mktemp -d)"
+cat > "$age_mix_tmp/local.json" <<'EOF'
+{"resultats": {"tabla_local_mix": {"lu_par": ["a.ts"], "ecrit_par": []}}}
+EOF
+python3 - "$age_mix_tmp/server.json" <<'PYEOF'
+import datetime, json, sys
+out_path = sys.argv[1]
+genere_le = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+inner = {
+    "spaceId": "sp1", "carteVide": False, "dateCarte": genere_le, "carteperimee": False, "avertissement": None,
+    "objets": [{"identifiant": "tabla_srv_mix", "inconnu": False, "lignes": [{
+        "type": "table", "objet": "tabla_srv_mix", "colonnes": [], "lu_par": ["y.ts"], "ecrit_par": [],
+        "rpc": [], "section_carte": "", "genere_le": genere_le, "empreinte": "x"
+    }]}]
+}
+payload = {"jsonrpc": "2.0", "result": {"content": [{"type": "text", "text": json.dumps(inner, ensure_ascii=False)}]}}
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PYEOF
+bash -c '
+  set -uo pipefail
+  source "$1/plugins/mycelora/hooks/mycelora-common.sh"
+  mycelora_reflexe_construire_rapport "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}"
+' _ "$REPO_ROOT" '["tabla_local_mix", "tabla_srv_mix"]' "ddl" "" "" "" "" \
+  "$age_mix_tmp/local.json" "$age_mix_tmp/server.json" "$age_mix_tmp/rapport.txt" "$age_mix_tmp/meta.json"
+age_mix_verdict="$(python3 -c "
+import json
+try:
+    print(json.load(open('$age_mix_tmp/meta.json')).get('carte_age_jours'))
+except Exception as e:
+    print('ERROR:%s' % e)
+")"
+if [ "$age_mix_verdict" = "7" ]; then
+  echo "PASS reflexe-carte-age-jours-melange-local-serveur-le-max"
+else
+  echo "FAIL reflexe-carte-age-jours-melange-local-serveur-le-max : $age_mix_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$age_mix_tmp"
+
+# Cas 4 : echec REEL du lookup (lookup_timeout) -> ABSENT en PRIORITE, meme
+# si un objet est par ailleurs resolu localement (candidat 0 ignore).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+age_fail_tmp="$(mktemp -d)"
+cat > "$age_fail_tmp/local.json" <<'EOF'
+{"resultats": {"tabla_local_fail": {"lu_par": ["a.ts"], "ecrit_par": []}}}
+EOF
+echo '{}' > "$age_fail_tmp/server.json"
+bash -c '
+  set -uo pipefail
+  source "$1/plugins/mycelora/hooks/mycelora-common.sh"
+  mycelora_reflexe_construire_rapport "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}"
+' _ "$REPO_ROOT" '["tabla_local_fail"]' "ddl" "" "" "" "lookup_timeout" \
+  "$age_fail_tmp/local.json" "$age_fail_tmp/server.json" "$age_fail_tmp/rapport.txt" "$age_fail_tmp/meta.json"
+age_fail_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$age_fail_tmp/meta.json'))
+    print('null' if d.get('carte_age_jours') is None else d.get('carte_age_jours'))
+except Exception as e:
+    print('ERROR:%s' % e)
+")"
+if [ "$age_fail_verdict" = "null" ]; then
+  echo "PASS reflexe-carte-age-jours-lookup-echec-priorite-absent"
+else
+  echo "FAIL reflexe-carte-age-jours-lookup-echec-priorite-absent : $age_fail_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$age_fail_tmp"
+
+# --- Plombage bout en bout (mycelora-pretooluse.sh -> META_FILE ->
+# mycelora_reflexe_log) : le hook complet lit bien carte_age_jours dans le
+# meta et le fait suivre jusque dans la ligne "refus" du journal. ----------
+
+# Cas SERVEUR (age connu, calcule dynamiquement) : ALTER TABLE memory_atoms.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f /tmp/mycelora-impact-reflexe-carte-age-jours-serveur /tmp/mycelora-reflexes-reflexe-carte-age-jours-serveur.jsonl
+cajs_tmp="$(mktemp -d)"
+cajs_resp="$cajs_tmp/resp.json"
+python3 - "$cajs_resp" <<'PYEOF'
+import datetime, json, sys
+out_path = sys.argv[1]
+genere_le = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+inner = {
+    "spaceId": "sp1", "carteVide": False, "dateCarte": genere_le, "carteperimee": False, "avertissement": None,
+    "objets": [{"identifiant": "memory_atoms", "inconnu": False, "lignes": [{
+        "type": "table", "objet": "memory_atoms", "colonnes": [], "lu_par": ["recall.ts"], "ecrit_par": [],
+        "rpc": [], "section_carte": "Tables coeur (l.410)", "genere_le": genere_le, "empreinte": "x"
+    }]}]
+}
+payload = {"jsonrpc": "2.0", "result": {"content": [{"type": "text", "text": json.dumps(inner, ensure_ascii=False)}]}}
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PYEOF
+export MYCELORA_TEST_CURL_LOG="$cajs_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE="$cajs_resp"
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$cajs_tmp/body.json"
+reflexe_stdin stdin-pre-carte-age-jours-serveur.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE" > /dev/null 2>&1
+cajs_verdict="$(python3 -c "
+import json
+try:
+    lignes = [json.loads(l) for l in open('/tmp/mycelora-reflexes-reflexe-carte-age-jours-serveur.jsonl') if l.strip()]
+    refus = [l for l in lignes if l.get('evt') == 'refus']
+    ok = len(refus) == 1 and refus[0].get('carte_age_jours') == 3
+    print('OK' if ok else 'FAIL:%r' % lignes)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$cajs_verdict" = "OK" ]; then
+  echo "PASS reflexe-carte-age-jours-full-hook-serveur-jusquau-journal"
+else
+  echo "FAIL reflexe-carte-age-jours-full-hook-serveur-jusquau-journal : $cajs_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$cajs_tmp"
+rm -f /tmp/mycelora-impact-reflexe-carte-age-jours-serveur /tmp/mycelora-reflexes-reflexe-carte-age-jours-serveur.jsonl
+
+# Cas INFRA (pas de rapport par objet, jamais de carte consultee) -> absent.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f /tmp/mycelora-impact-reflexe-infra-ssh-psql /tmp/mycelora-reflexes-reflexe-infra-ssh-psql.jsonl
+cajinfra_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$cajinfra_tmp/call.log"
+export MYCELORA_TEST_CAPTURE_BODY="$cajinfra_tmp/body.json"
+reflexe_stdin stdin-pre-infra-ssh-psql.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE" > /dev/null 2>&1
+cajinfra_verdict="$(python3 -c "
+import json
+try:
+    lignes = [json.loads(l) for l in open('/tmp/mycelora-reflexes-reflexe-infra-ssh-psql.jsonl') if l.strip()]
+    refus = [l for l in lignes if l.get('evt') == 'refus']
+    ok = len(refus) == 1 and 'carte_age_jours' not in refus[0]
+    print('OK' if ok else 'FAIL:%r' % lignes)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$cajinfra_verdict" = "OK" ]; then
+  echo "PASS reflexe-carte-age-jours-infra-absent"
+else
+  echo "FAIL reflexe-carte-age-jours-infra-absent : $cajinfra_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$cajinfra_tmp"
+rm -f /tmp/mycelora-impact-reflexe-infra-ssh-psql /tmp/mycelora-reflexes-reflexe-infra-ssh-psql.jsonl
+
+# ============================================================================
+# mycelora-stop.sh : remontee "reflexes", question_humain, purge apres 2xx.
+# ============================================================================
+
+REFLEXES_TEST_SESSION="726ec160-e1f5-5bd0-b3e7-3de9785ea2be"
+REFLEXES_TEST_FILE="/tmp/mycelora-reflexes-${REFLEXES_TEST_SESSION}.jsonl"
+
+# A. Journal absent -> pas de cle "reflexes" du tout (meme posture que
+# ackLotIds absent).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$REFLEXES_TEST_FILE"
+c1_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c1_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c1_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c1_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c1_tmp/body.json'))
+    print('OK' if 'reflexes' not in d['params']['arguments'] else 'FAIL:present')
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c1_verdict" = "OK" ]; then
+  echo "PASS reflexe-stop-journal-absent-pas-de-cle-reflexes"
+else
+  echo "FAIL reflexe-stop-journal-absent-pas-de-cle-reflexes : $c1_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c1_tmp"
+
+# B. Journal present -> "reflexes" part avec le corps, purge SEULEMENT apres
+# un 2xx.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$REFLEXES_TEST_FILE"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl1"],"empreinte":"e1","rapport_vide":false}' > "$REFLEXES_TEST_FILE"
+printf '%s\n' '{"t":"2026-09-01T10:00:05Z","evt":"passage","outil":"Bash","objets":["tbl1"],"empreinte":"e1","rapport_vide":false}' >> "$REFLEXES_TEST_FILE"
+c2_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c2_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c2_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c2_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c2_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    print('OK' if isinstance(refs, list) and len(refs) == 2 and refs[0]['evt'] == 'refus' and refs[1]['evt'] == 'passage' else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c2_verdict" = "OK" ] && [ ! -f "$REFLEXES_TEST_FILE" ]; then
+  echo "PASS reflexe-stop-journal-present-et-purge-apres-2xx"
+else
+  echo "FAIL reflexe-stop-journal-present-et-purge-apres-2xx : $c2_verdict, fichier=$([ -f "$REFLEXES_TEST_FILE" ] && echo PRESENT || echo absent)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c2_tmp"
+
+# C. Erreur HTTP -> le journal RESTE (rejoue au Stop suivant).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$REFLEXES_TEST_FILE"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl1"],"empreinte":"e1","rapport_vide":false}' > "$REFLEXES_TEST_FILE"
+c3_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c3_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="500"
+export MYCELORA_TEST_CAPTURE_BODY="$c3_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+if [ -f "$REFLEXES_TEST_FILE" ]; then
+  echo "PASS reflexe-stop-echec-http-garde-le-journal"
+else
+  echo "FAIL reflexe-stop-echec-http-garde-le-journal : fichier supprime malgre le 500"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+rm -rf "$c3_tmp"
+rm -f "$REFLEXES_TEST_FILE"
+
+# D. Timeout (curl en echec, pas seulement un mauvais code HTTP) -> le
+# journal RESTE aussi.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl1"],"empreinte":"e1","rapport_vide":false}' > "$REFLEXES_TEST_FILE"
+c3b_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c3b_tmp/call.log"
+export MYCELORA_TEST_CURL_FAIL="1"
+export MYCELORA_TEST_CAPTURE_BODY="$c3b_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-normal.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+if [ -f "$REFLEXES_TEST_FILE" ]; then
+  echo "PASS reflexe-stop-timeout-garde-le-journal"
+else
+  echo "FAIL reflexe-stop-timeout-garde-le-journal : fichier supprime malgre le timeout"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+unset MYCELORA_TEST_CURL_FAIL
+rm -rf "$c3b_tmp"
+rm -f "$REFLEXES_TEST_FILE"
+
+# E. question_humain pose par signal (a) : .cc-attente-decision.md present
+# directement dans le cwd du fixture (cwd substitue a un dossier temporaire
+# reel, pas de recherche recursive).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+c4_cwd="$(mktemp -d)"
+touch "$c4_cwd/.cc-attente-decision.md"
+c4_session="reflexe-stop-cwd-signal"
+c4_journal="/tmp/mycelora-reflexes-${c4_session}.jsonl"
+rm -f "$c4_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl1"],"empreinte":"e1","rapport_vide":false}' > "$c4_journal"
+c4_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c4_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c4_tmp/body.json"
+sed "s#CWD_PLACEHOLDER#$c4_cwd#g" "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-reflexes-cwd.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c4_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c4_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    print('OK' if isinstance(refs, list) and len(refs) == 1 and refs[0].get('question_humain') is True else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c4_verdict" = "OK" ]; then
+  echo "PASS reflexe-stop-question-humain-signal-fichier-decision"
+else
+  echo "FAIL reflexe-stop-question-humain-signal-fichier-decision : $c4_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c4_tmp" "$c4_cwd"
+rm -f "$c4_journal"
+
+# F. question_humain pose par signal (b) : un "?" dans la reponse assistant
+# de ce tour (simple presence, pas de NLP).
+c5_session="reflexe-stop-question"
+c5_journal="/tmp/mycelora-reflexes-${c5_session}.jsonl"
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl1"],"empreinte":"e1","rapport_vide":false}' > "$c5_journal"
+c5_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c5_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c5_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-reflexes-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c5_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c5_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    print('OK' if isinstance(refs, list) and len(refs) == 1 and refs[0].get('question_humain') is True else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c5_verdict" = "OK" ]; then
+  echo "PASS reflexe-stop-question-humain-signal-point-interrogation"
+else
+  echo "FAIL reflexe-stop-question-humain-signal-point-interrogation : $c5_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c5_tmp"
+
+# G. Aucun refus dans le lot -> question_humain n'est JAMAIS pose (pas de
+# ligne creee), meme si le signal "?" est present.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"passage","outil":"Bash","objets":["tbl1"],"empreinte":"e1","rapport_vide":false}' > "$c5_journal"
+c6_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c6_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c6_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-reflexes-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c6_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c6_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    print('OK' if isinstance(refs, list) and len(refs) == 1 and 'question_humain' not in refs[0] else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c6_verdict" = "OK" ]; then
+  echo "PASS reflexe-stop-question-humain-non-pose-sans-refus"
+else
+  echo "FAIL reflexe-stop-question-humain-non-pose-sans-refus : $c6_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c6_tmp"
+
+# H. Plusieurs refus dans le lot -> question_humain pose SEULEMENT sur le
+# plus recent (le plus grand "t"), jamais sur les autres, meme si une ligne
+# non-refus plus recente encore existe dans le lot.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_old"],"empreinte":"e1","rapport_vide":false}' > "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T09:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_ancien"],"empreinte":"e0","rapport_vide":false}' >> "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T11:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_recent"],"empreinte":"e2","rapport_vide":false}' >> "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T11:30:00Z","evt":"passage","outil":"Bash","objets":["tbl_recent"],"empreinte":"e2","rapport_vide":false}' >> "$c5_journal"
+c7_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c7_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c7_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-reflexes-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c7_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c7_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    tagged = [r for r in refs if r.get('question_humain')]
+    ok = (len(tagged) == 1 and tagged[0]['objets'] == ['tbl_recent'] and tagged[0]['evt'] == 'refus')
+    print('OK' if ok else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c7_verdict" = "OK" ]; then
+  echo "PASS reflexe-stop-question-humain-refus-le-plus-recent-seul"
+else
+  echo "FAIL reflexe-stop-question-humain-refus-le-plus-recent-seul : $c7_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c7_tmp"
+rm -f "$c5_journal"
+
+# I. CORRECTION post-revue (apres ff82375) : une ligne JSON valide mais au
+# TYPE inattendu ("t" un entier, pas une chaine) melangee a des lignes
+# valides NE DOIT PAS faire planter le hook -- ancien bug reproduit :
+# max(refus_entries, key=lambda e: e.get("t") or "") levait un TypeError
+# NON attrape (comparaison str/int) qui tuait le bloc python AVANT
+# json.dump(payload, ...), laissait BODY_FILE vide, et empechait la purge
+# a chaque Stop suivant (gel silencieux de tout mnemos_log_exchange du
+# fil). Le hook doit terminer proprement, envoyer TOUTES les lignes dans
+# "reflexes" (la ligne poison n'est PAS exclue du tableau, seulement de la
+# logique question_humain), et taguer le dernier refus VALIDE (t et evt
+# tous deux des chaines).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_valide_1"],"empreinte":"e1","rapport_vide":false}' > "$c5_journal"
+printf '%s\n' '{"t":5,"evt":"refus","outil":"Bash","objets":["tbl_poison"],"empreinte":"e2","rapport_vide":false}' >> "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T12:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_valide_2"],"empreinte":"e3","rapport_vide":false}' >> "$c5_journal"
+c8_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c8_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c8_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-reflexes-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c8_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c8_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    tagged = [r for r in refs if r.get('question_humain')]
+    ok = (isinstance(refs, list) and len(refs) == 3 and len(tagged) == 1 and tagged[0]['objets'] == ['tbl_valide_2'])
+    print('OK' if ok else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c8_verdict" = "OK" ] && [ ! -f "$c5_journal" ]; then
+  echo "PASS reflexe-stop-question-humain-ligne-type-inattendu-ne-plante-pas"
+else
+  echo "FAIL reflexe-stop-question-humain-ligne-type-inattendu-ne-plante-pas : $c8_verdict, fichier=$([ -f "$c5_journal" ] && echo PRESENT || echo absent)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c8_tmp"
+rm -f "$c5_journal"
+
+# J. Deux refus au MEME "t" (egalite a la seconde, resolution reelle de
+# mycelora_reflexe_log) -> le DERNIER ecrit dans le fichier (le plus
+# recent) doit etre tague, jamais le premier. Ancien bug : max() Python
+# renvoie le PREMIER element rencontre en cas d'egalite de cle, donc
+# l'ancien refus etait tague a tort. refus_entries[-1] (ordre d'ecriture,
+# journal append-only) resout ce cas sans avoir besoin de comparer "t".
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_premier_meme_seconde"],"empreinte":"e1","rapport_vide":false}' > "$c5_journal"
+printf '%s\n' '{"t":"2026-09-01T10:00:00Z","evt":"refus","outil":"Bash","objets":["tbl_dernier_meme_seconde"],"empreinte":"e2","rapport_vide":false}' >> "$c5_journal"
+c9_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$c9_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE=""
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+export MYCELORA_TEST_CAPTURE_BODY="$c9_tmp/body.json"
+cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-reflexes-question.json" | PATH="$FAKE_BIN_DIR:$PATH" "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh" > /dev/null 2>&1
+c9_verdict="$(python3 -c "
+import json
+try:
+    d = json.load(open('$c9_tmp/body.json'))
+    refs = d['params']['arguments'].get('reflexes')
+    tagged = [r for r in refs if r.get('question_humain')]
+    ok = (len(tagged) == 1 and tagged[0]['objets'] == ['tbl_dernier_meme_seconde'])
+    print('OK' if ok else 'FAIL:%r' % refs)
+except Exception as e:
+    print('FAIL:%s' % e)
+")"
+if [ "$c9_verdict" = "OK" ]; then
+  echo "PASS reflexe-stop-question-humain-egalite-t-le-dernier-ecrit-gagne"
+else
+  echo "FAIL reflexe-stop-question-humain-egalite-t-le-dernier-ecrit-gagne : $c9_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$c9_tmp"
+rm -f "$c5_journal"
+
 # Nettoyage final des artefacts de test (marqueurs, journaux, reponse canned).
 rm -f /tmp/mycelora-reflexes-*.jsonl /tmp/mycelora-impact-* "$REFLEXE_IMPACT_RESPONSE" "$REPO_ROOT/.carte-perimee" "$REPO_ROOT/.mycelora-reflexes-off"
 unset MYCELORA_TEST_CAPTURE_BODY

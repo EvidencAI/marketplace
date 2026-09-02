@@ -30,9 +30,9 @@ cat > "$STDIN_FILE"
 ASSISTANT_FILE="$(mktemp /tmp/mycelora-hook-stop-assistant.XXXXXX)"
 CLEANUP_FILES+=("$ASSISTANT_FILE")
 
-# Extraction session_id, transcript_path, prompt_id + ecriture de
-# last_assistant_message brut dans ASSISTANT_FILE (3 lignes sur stdout :
-# session_id, transcript_path, prompt_id)
+# Extraction session_id, transcript_path, prompt_id, cwd + ecriture de
+# last_assistant_message brut dans ASSISTANT_FILE (4 lignes sur stdout :
+# session_id, transcript_path, prompt_id, cwd)
 META_OUT="$(python3 - "$STDIN_FILE" "$ASSISTANT_FILE" <<'PYEOF'
 import json, sys
 
@@ -44,11 +44,13 @@ except Exception:
     print("")
     print("")
     print("")
+    print("")
     sys.exit(0)
 
 session_id = data.get("session_id", "") or ""
 transcript_path = data.get("transcript_path", "") or ""
 prompt_id = data.get("prompt_id", "") or ""
+cwd = data.get("cwd", "") or ""
 last_assistant = data.get("last_assistant_message", "")
 if not isinstance(last_assistant, str):
     last_assistant = ""
@@ -62,12 +64,14 @@ except Exception:
 print(session_id)
 print(transcript_path)
 print(prompt_id)
+print(cwd)
 PYEOF
 )"
 
 SESSION_ID="$(printf '%s\n' "$META_OUT" | sed -n '1p')"
 TRANSCRIPT_PATH="$(printf '%s\n' "$META_OUT" | sed -n '2p')"
 PROMPT_ID="$(printf '%s\n' "$META_OUT" | sed -n '3p')"
+CWD="$(printf '%s\n' "$META_OUT" | sed -n '4p')"
 
 # find_last_user <transcript_path> <out_file> <prompt_id>
 # Sur un tour Cowork qui utilise des outils (la quasi-totalite des tours),
@@ -237,13 +241,25 @@ if [ -z "$ACK_SESSION" ] || [ ! -f "$ACK_FILE" ]; then
   ACK_FILE=""
 fi
 
-python3 - "$LAST_USER_FILE" "$ASSISTANT_FILE" "$SESSION_ID" "$SPACE_ID" "$BODY_FILE" "$SESSION_LABEL" "$CUSTOM_TITLE" "$ACK_FILE" <<'PYEOF'
-import json, re, sys
+# S-REFLEXES-5b (02/09/2026) : journal local des reflexes (S-REFLEXES-2),
+# meme filtre de session que mycelora_reflexe_log. Rejoue dans "reflexes" au
+# meme titre que ackLotIds l'est pour les lots, supprime seulement apres un
+# 2xx (plus bas) : sur echec ou timeout il reste, retente au Stop suivant.
+REFLEXES_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
+REFLEXES_FILE="/tmp/mycelora-reflexes-${REFLEXES_SESSION}.jsonl"
+if [ -z "$REFLEXES_SESSION" ] || [ ! -f "$REFLEXES_FILE" ]; then
+  REFLEXES_FILE=""
+fi
+
+python3 - "$LAST_USER_FILE" "$ASSISTANT_FILE" "$SESSION_ID" "$SPACE_ID" "$BODY_FILE" "$SESSION_LABEL" "$CUSTOM_TITLE" "$ACK_FILE" "$REFLEXES_FILE" "$CWD" <<'PYEOF'
+import json, os, re, sys
 
 user_path, assistant_path, session_id, space_id, body_path = sys.argv[1:6]
 session_label = sys.argv[6] if len(sys.argv) > 6 else ""
 custom_title = sys.argv[7] if len(sys.argv) > 7 else ""
 ack_path = sys.argv[8] if len(sys.argv) > 8 else ""
+reflexes_path = sys.argv[9] if len(sys.argv) > 9 else ""
+cwd = sys.argv[10] if len(sys.argv) > 10 else ""
 
 def read_file(path):
     try:
@@ -284,6 +300,66 @@ if ack_path:
     if lots:
         arguments["ackLotIds"] = lots[:50]
 
+# S-REFLEXES-5b : journal local des reflexes (S-REFLEXES-2), un objet JSON
+# par ligne valide du fichier ; lignes invalides ignorees silencieusement
+# (jamais d'echec du hook). Absent du corps si aucune ligne valide (meme
+# posture que ackLotIds absent).
+if reflexes_path:
+    entries = []
+    for line in read_file(reflexes_path).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            entries.append(obj)
+    if entries:
+        # question_humain : signal (a) un fichier .cc-attente-decision.md
+        # existe directement dans cwd (pas de recherche recursive), signal
+        # (b) presence d'un "?" dans la reponse assistant de ce tour
+        # (approximation actee a l'audit -- simple presence, pas de NLP). Si
+        # (a) OU (b), pose sur la ligne la PLUS RECENTE parmi celles dont
+        # evt == "refus" -- aucune si aucun refus dans le lot (jamais de
+        # ligne creee).
+        #
+        # CORRECTION (revue coordinateur, apres ff82375) : deux bugs sur
+        # l'ancienne implementation `max(refus_entries, key=lambda e:
+        # e.get("t") or "")`.
+        # 1. Fail-open casse : une ligne JSON valide mais au TYPE inattendu
+        #    (ex. "t":5, un entier) faisait planter ce max() avec un
+        #    TypeError NON attrape (comparaison str/int), hors de tout try —
+        #    le bloc python entier mourait avant json.dump(payload, ...),
+        #    BODY_FILE restait vide, curl envoyait un corps vide, la reponse
+        #    non-2xx empechait la purge, et CHAQUE Stop suivant recrashait a
+        #    l'identique sur la meme ligne empoisonnee (gel silencieux de
+        #    tout mnemos_log_exchange du fil, pas seulement reflexes). Les
+        #    entrees dont "evt" ou "t" ne sont pas des chaines sont
+        #    desormais exclues de CETTE logique (pas du tableau "reflexes"
+        #    envoye, qui les garde toutes) avant tout calcul.
+        # 2. "le plus recent" errone en cas d'egalite de "t" : "t" a une
+        #    resolution d'UNE SECONDE (mycelora_reflexe_log, format
+        #    %Y-%m-%dT%H:%M:%SZ) ; deux refus dans la meme seconde ont un
+        #    "t" identique, et max() renvoyait alors le PREMIER rencontre
+        #    (le plus ANCIEN dans le fichier), pas le plus recent. Le
+        #    journal etant append-only et lu dans l'ordre chronologique
+        #    d'ecriture, le DERNIER element de la liste filtree
+        #    (refus_entries[-1]) est a la fois plus simple (plus de
+        #    max()/key fragile) et correct meme a egalite de seconde.
+        signal_decision = bool(cwd) and os.path.exists(os.path.join(cwd, ".cc-attente-decision.md"))
+        signal_question = "?" in assistant_response
+        if signal_decision or signal_question:
+            refus_entries = [
+                e for e in entries
+                if isinstance(e.get("evt"), str) and e.get("evt") == "refus"
+                and isinstance(e.get("t"), str)
+            ]
+            if refus_entries:
+                refus_entries[-1]["question_humain"] = True
+        arguments["reflexes"] = entries
+
 payload = {
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -320,6 +396,11 @@ case "$HTTP_CODE" in
     # et sera rejoue au prochain Stop du fil (l'accuse tardif confirme).
     if [ -n "$ACK_FILE" ]; then
       rm -f "$ACK_FILE" 2>/dev/null || true
+    fi
+    # S-REFLEXES-5b : meme semantique que l'accuse de lots -- purge du
+    # journal local des reflexes SEULEMENT apres ce 2xx.
+    if [ -n "$REFLEXES_FILE" ]; then
+      rm -f "$REFLEXES_FILE" 2>/dev/null || true
     fi
     ;;
   *) mycelora_log "stop" "log_exchange" "$DURATION_MS" "error-http-$HTTP_CODE" "$RESP_SIZE" ;;
