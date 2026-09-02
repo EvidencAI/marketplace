@@ -147,6 +147,7 @@ REPORT_FILE="$(mktemp /tmp/mycelora-hook-pre-report.XXXXXX)"
 CLEANUP_FILES+=("$REPORT_FILE")
 RAPPORT_VIDE_FLAG="0"
 LOOKUP_EVT=""
+CARTE_AGE_JOURS=""
 
 if [ "$GESTE" = "infra" ]; then
   python3 - "$SOUS_TYPE" "$REPORT_FILE" <<'PYEOF'
@@ -231,6 +232,16 @@ except Exception:
     print('')
 " 2>/dev/null || echo '')"
   [ -n "$LOOKUP_EVT_META" ] && LOOKUP_EVT="$LOOKUP_EVT_META"
+  CARTE_AGE_JOURS="$(python3 -c "
+import json
+try:
+    with open('$META_FILE', encoding='utf-8') as f:
+        d = json.load(f)
+    v = d.get('carte_age_jours')
+    print(v if isinstance(v, int) and not isinstance(v, bool) else '')
+except Exception:
+    print('')
+" 2>/dev/null || echo '')"
 fi
 
 # Marque les N objets comme refuses pour ce fil (fusion avec l'existant).
@@ -258,7 +269,7 @@ except Exception:
 PYEOF
 fi
 
-mycelora_reflexe_log "$SESSION_ID" "refus" "Bash" "$OBJETS_JSON" "$EMPREINTE" "$RAPPORT_VIDE_FLAG"
+mycelora_reflexe_log "$SESSION_ID" "refus" "Bash" "$OBJETS_JSON" "$EMPREINTE" "$RAPPORT_VIDE_FLAG" "$CARTE_AGE_JOURS"
 case "$LOOKUP_EVT" in
   lookup_timeout|lookup_erreur)
     mycelora_reflexe_log "$SESSION_ID" "$LOOKUP_EVT" "Bash" "$OBJETS_JSON" "$EMPREINTE" "$RAPPORT_VIDE_FLAG"

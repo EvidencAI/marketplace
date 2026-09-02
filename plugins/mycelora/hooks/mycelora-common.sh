@@ -295,12 +295,16 @@ mycelora_purge_markers_anciens() {
   find /tmp -maxdepth 1 -name 'mycelora-impact-*' -type f -mmin +1440 -delete 2>/dev/null || true
 }
 
-# mycelora_reflexe_log <session_id> <evt> <outil> <objets_json_array> <empreinte> <rapport_vide 0|1>
+# mycelora_reflexe_log <session_id> <evt> <outil> <objets_json_array> <empreinte> <rapport_vide 0|1> [carte_age_jours]
 # Ecrit une ligne JSONL dans /tmp/mycelora-reflexes-<session_id>.jsonl,
 # tronque a 1 Mo comme mycelora_log (contrat FIGÉ, brief section 4.2). N'ecrit
 # rien si session_id est vide. Erreurs toujours avalees.
+# carte_age_jours (S-REFLEXES-5b) : 7e argument OPTIONNEL, chaine vide =
+# absent. N'ecrit la cle "carte_age_jours" dans le JSON QUE si la valeur
+# recue est non vide et numerique (jamais une cle a null, jamais une chaine
+# vide) -- meme discipline que tools.ts cote serveur pour ce meme champ.
 mycelora_reflexe_log() {
-  local session_id="$1" evt="$2" outil="$3" objets_json="$4" empreinte="$5" rapport_vide="$6"
+  local session_id="$1" evt="$2" outil="$3" objets_json="$4" empreinte="$5" rapport_vide="$6" carte_age_jours="${7:-}"
   local safe_session
   safe_session="$(printf '%s' "$session_id" | tr -cd 'A-Za-z0-9._-')"
   [ -z "$safe_session" ] && return 0
@@ -312,10 +316,10 @@ mycelora_reflexe_log() {
       : > "$journal_file" 2>/dev/null || true
     fi
   fi
-  python3 - "$journal_file" "$evt" "$outil" "$objets_json" "$empreinte" "$rapport_vide" <<'PYEOF' 2>/dev/null || true
+  python3 - "$journal_file" "$evt" "$outil" "$objets_json" "$empreinte" "$rapport_vide" "$carte_age_jours" <<'PYEOF' 2>/dev/null || true
 import json, sys, time
 
-journal_path, evt, outil, objets_json, empreinte, rapport_vide = sys.argv[1:7]
+journal_path, evt, outil, objets_json, empreinte, rapport_vide, carte_age_jours = sys.argv[1:8]
 try:
     objets = json.loads(objets_json)
     if not isinstance(objets, list):
@@ -331,6 +335,8 @@ ligne = {
     "empreinte": empreinte,
     "rapport_vide": rapport_vide == "1",
 }
+if carte_age_jours.strip().isdigit():
+    ligne["carte_age_jours"] = int(carte_age_jours.strip())
 try:
     with open(journal_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(ligne, ensure_ascii=False) + "\n")
@@ -887,6 +893,15 @@ def resume_liste(liste, max_affiches=3):
 
 lignes_objets = []
 vide_par_objet = []
+# carte_age_jours (S-REFLEXES-5b) : un candidat d'age par objet resolu,
+# collecte au fil de la boucle ci-dessous (voir choix documente en
+# .claude/v2-decisions/S-REFLEXES-5b.md) : 0 pour une resolution LOCALE
+# (grep frais, fraicheur immediate), age_jours(genere_le) pour une
+# resolution SERVEUR d'age connu. Un objet inconnu/non resolu ne contribue
+# aucun candidat (ne force pas l'absence globale). Le resultat final est le
+# MAXIMUM des candidats (le plus defavorable), sauf priorite absolue de
+# l'echec de lookup (voir plus bas).
+candidats_age = []
 
 for o in objets:
     loc = local_resultats.get(o) or {}
@@ -900,6 +915,7 @@ for o in objets:
             f"Écrit par : {resume_liste(ecrit_local)}. (grep local frais)"
         )
         vide_par_objet.append(False)
+        candidats_age.append(0)
         continue
 
     srv = server_objets.get(o)
@@ -913,6 +929,8 @@ for o in objets:
         section = premiere.get("section_carte") or ""
         genere_le = premiere.get("genere_le")
         age = age_jours(genere_le) if genere_le else None
+        if age is not None:
+            candidats_age.append(age)
         section_txt = ""
         if section:
             m = re.match(r"^(.*)\s\(l\.(\d+)\)$", section)
@@ -947,6 +965,19 @@ for o in objets:
 
 rapport_vide = all(vide_par_objet) if vide_par_objet else True
 
+# carte_age_jours (S-REFLEXES-5b) : priorite absolue a l'echec REEL de
+# l'appel serveur (lookup_timeout/lookup_erreur) -- "absent sur echec",
+# meme si par ailleurs un objet a ete resolu localement (candidat 0).
+# Sinon, le pire (max) des candidats collectes, ou None si aucun objet
+# resolu n'a pu fournir de candidat (rapport entierement construit sur de
+# l'inconnu).
+if lookup_evt in ("lookup_timeout", "lookup_erreur"):
+    carte_age_jours = None
+elif candidats_age:
+    carte_age_jours = max(candidats_age)
+else:
+    carte_age_jours = None
+
 if geste == "ddl":
     portee = "Portée : changement de PRODUIT (schéma), tous les comptes."
 elif geste == "update_delete":
@@ -973,7 +1004,7 @@ texte = "\n".join(
 with open(out_report, "w", encoding="utf-8") as f:
     f.write(texte)
 with open(out_meta, "w", encoding="utf-8") as f:
-    json.dump({"rapport_vide": rapport_vide, "lookup_evt": lookup_evt}, f)
+    json.dump({"rapport_vide": rapport_vide, "lookup_evt": lookup_evt, "carte_age_jours": carte_age_jours}, f)
 PYEOF
 
   # CORRECTION (relecture reviewer du 02/09, piege 3 du brief : "fail-open

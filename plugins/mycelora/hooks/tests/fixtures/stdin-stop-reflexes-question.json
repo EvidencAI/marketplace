@@ -1,0 +1,12 @@
+{
+  "session_id": "reflexe-stop-question",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "/home/claude",
+  "prompt_id": "67128ddd-4af5-4069-902c-42043a237e6f",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "Faut-il continuer sur ce plan ?",
+  "background_tasks": [],
+  "session_crons": []
+}
