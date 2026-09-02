@@ -174,6 +174,16 @@ Deux hooks embarqués dans le plugin assurent la mémoire automatique, sans acti
 
 Un journal technique est tenu dans `/tmp/mycelora-hook.log` (diagnostic local). Les deux hooks ignorent les notifications système et les messages trop courts pour être utiles. Limite connue : un rappel planifié (wakeup) au libellé libre peut ne pas être filtré et apparaître comme un message utilisateur normal.
 
+### Réflexes de senior (impact, état du fil, contradiction)
+
+Trois réflexes automatiques, indépendants du protocole d'ouverture/clôture ci-dessus.
+
+**Réflexe d'impact** (commandes shell uniquement, v1) : avant un geste structurant (modification de schéma, suppression ou mise à jour massive, opération sur la prod), l'appel est REFUSÉ une fois, avec un rapport (qui lit et qui écrit l'objet visé). Ce n'est pas un blocage définitif : LIS le rapport, traite ce qu'il signale, puis REJOUE LA MÊME commande telle quelle — le refus ne se répète jamais pour le même objet dans le même fil. N'essaie jamais de contourner ce refus par un chemin détourné ; un refus veut dire « vérifie avant de rejouer », pas « renonce ».
+
+**État du fil** : un court état du fil courant (objectif, périmètre en cours, ce qui est décidé, écarté, ouvert, corrections faites, etc.) peut apparaître à position fixe dans le rappel, seulement quand il a changé depuis la dernière injection. C'est une matière de contexte pour toi, pas un message à recopier ni à commenter à l'utilisateur.
+
+**Réflexe de contradiction** : quand ce qui vient d'être dit contredit une décision en vigueur connue ailleurs (un autre projet, un fil antérieur), une ligne `ALERTE (...)` peut apparaître dans le rappel, avec un identifiant court à acquitter. Dès que tu la vois, acquitte-la : `mnemos_ack_alerte(id:"<identifiant donné dans le texte>", verdict:"utile"|"bruit")`, après avoir jugé en une phrase si elle est pertinente ou du bruit, puis informe l'utilisateur en une phrase. Ce verdict est un signal d'appoint, pas la décision finale (Stéphane tranche dans le dashboard) : acquitter n'efface jamais l'alerte.
+
 ---
 
 ## COMMANDES EN LANGAGE NATUREL
