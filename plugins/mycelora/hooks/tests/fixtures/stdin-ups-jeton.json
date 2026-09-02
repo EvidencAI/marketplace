@@ -1,0 +1,9 @@
+{
+  "session_id": "s-reflexes-6-jeton-0001",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start-avec-jeton.jsonl",
+  "cwd": "/home/claude",
+  "prompt_id": "6b1a2c3d-4e5f-6071-8293-a4b5c6d7e8f9",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "peux-tu m'expliquer comment fonctionne le jeton de session hook maintenant ?"
+}

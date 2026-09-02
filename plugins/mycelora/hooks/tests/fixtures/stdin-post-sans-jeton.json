@@ -1,0 +1,13 @@
+{
+  "session_id": "s-reflexes-6-sans-jeton-post",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-no-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_sans_jeton_post",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "REPO_ROOT_PLACEHOLDER/supabase/migrations/20260902_sans_jeton.sql",
+    "content": "select 1;"
+  }
+}

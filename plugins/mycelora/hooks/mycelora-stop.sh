@@ -76,6 +76,16 @@ TRANSCRIPT_PATH="$(printf '%s\n' "$META_OUT" | sed -n '2p')"
 PROMPT_ID="$(printf '%s\n' "$META_OUT" | sed -n '3p')"
 CWD="$(printf '%s\n' "$META_OUT" | sed -n '4p')"
 
+# S-REFLEXES-6 : jeton de session hook. Priorite 1 (zip substitue) deja geree
+# par l'assignation de MYCELORA_HOOK_TOKEN ci-dessus ; sinon on tente le cache
+# v3 du fil. Sans jeton, le hook est inerte (premier message d'un fil, avant
+# l'ouverture : cas normal, jamais une erreur visible).
+mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
+if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
+  mycelora_log "stop" "auth" 0 "sans-jeton" 0
+  exit 0
+fi
+
 # find_last_user <transcript_path> <out_file> <prompt_id>
 # Sur un tour Cowork qui utilise des outils (la quasi-totalite des tours),
 # la DERNIERE entree type=user au moment du Stop est un tool_result
@@ -404,6 +414,15 @@ case "$HTTP_CODE" in
     # journal local des reflexes SEULEMENT apres ce 2xx.
     if [ -n "$REFLEXES_FILE" ]; then
       rm -f "$REFLEXES_FILE" 2>/dev/null || true
+    fi
+    ;;
+  401)
+    # S-REFLEXES-6 : 401 typé (jeton expiré/révoqué) -> se taire, ce hook
+    # n'a JAMAIS de sortie stdout. Un 401 générique reste dans "*)".
+    if grep -q '"jeton_session_expire"' "$RESP_FILE" 2>/dev/null; then
+      mycelora_log "stop" "auth" "$DURATION_MS" "jeton-expire" "$RESP_SIZE"
+    else
+      mycelora_log "stop" "log_exchange" "$DURATION_MS" "error-http-$HTTP_CODE" "$RESP_SIZE"
     fi
     ;;
   *) mycelora_log "stop" "log_exchange" "$DURATION_MS" "error-http-$HTTP_CODE" "$RESP_SIZE" ;;

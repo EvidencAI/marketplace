@@ -39,16 +39,16 @@ mycelora_log() {
 #                  titre HUMAIN, celui que l'utilisateur voit et renomme dans
 #                  son interface.
 #
-# CACHE INCREMENTAL (v2). L'ancien cache figeait le resultat des le premier
-# succes, ce qui interdisait de voir apparaitre plus tard une etiquette encore
-# absente — or l'utilisateur peut renommer son fil a tout moment, et
-# session_start peut etre appele apres le premier tour. Le cache garde donc
-# desormais l'OFFSET en octets deja lu, et chaque appel ne lit que la QUEUE
+# CACHE INCREMENTAL (v3, S-REFLEXES-6). L'ancien cache figeait le resultat des
+# le premier succes, ce qui interdisait de voir apparaitre plus tard une
+# etiquette encore absente — or l'utilisateur peut renommer son fil a tout
+# moment, et session_start peut etre appele apres le premier tour. Le cache
+# garde donc l'OFFSET en octets deja lu, et chaque appel ne lit que la QUEUE
 # ajoutee depuis. Cout constant, et rien n'est fige.
 #
-# Un cache d'ancienne generation (sans "v": 2) est traite comme ABSENT, pas
-# comme un resultat vide : sinon les fils deja en cours n'auraient jamais
-# d'etiquette.
+# Un cache d'ancienne generation (sans "v": 3, donc y compris un cache v2) est
+# traite comme ABSENT, pas comme un resultat vide : sinon les fils deja en
+# cours n'auraient jamais d'etiquette (meme regle qu'au passage v1 -> v2).
 #
 # LIMITE ASSUMEE, a connaitre avant d'en dependre : une etiquette n'est jamais
 # EFFACEE, seulement remplacee par une autre non vide. Si l'utilisateur revient
@@ -56,13 +56,14 @@ mycelora_log() {
 # et continue d'etre envoye. Ce comportement est volontaire (une etiquette vide
 # n'apprend rien et ne doit pas ecraser une etiquette utile), mais il rend le
 # cache sensible a la reutilisation d'un meme session_id sur deux transcripts
-# differents — cas de test, pas cas reel.
+# differents — cas de test, pas cas reel. hookToken suit la meme regle
+# ("dernier vu gagne", jamais efface par une absence).
 #
-# Format : {"v":2,"offset":<int>,"spaceId":"","sessionLabel":"","customTitle":""}
+# Format : {"v":3,"offset":<int>,"spaceId":"","sessionLabel":"","customTitle":"","hookToken":""}
 
 # _mycelora_charger_fil <session_id> <transcript_path>
-# Rend TROIS lignes sur stdout, dans cet ordre, chacune eventuellement vide :
-#   spaceId / sessionLabel / customTitle
+# Rend QUATRE lignes sur stdout, dans cet ordre, chacune eventuellement vide :
+#   spaceId / sessionLabel / customTitle / hookToken
 # Ne leve jamais, n'ecrit jamais sur stderr.
 _mycelora_charger_fil() {
   local session_id="$1" transcript_path="$2"
@@ -72,21 +73,21 @@ _mycelora_charger_fil() {
   fi
 
   python3 - "$cache_file" "$transcript_path" <<'PYEOF'
-import json, os, sys
+import json, os, re, sys
 
 cache_path, transcript_path = sys.argv[1], sys.argv[2]
 
-etat = {"v": 2, "offset": 0, "spaceId": "", "sessionLabel": "", "customTitle": ""}
+etat = {"v": 3, "offset": 0, "spaceId": "", "sessionLabel": "", "customTitle": "", "hookToken": ""}
 
-# Cache v2 uniquement. Une version anterieure (ou un fichier tronque par un
-# kill en pleine ecriture) est traitee comme absente : on repart de l'offset 0
-# et on reconstruit tout.
+# Cache v3 uniquement. Une version anterieure (v2, v1, ou un fichier tronque
+# par un kill en pleine ecriture) est traitee comme absente : on repart de
+# l'offset 0 et on reconstruit tout.
 if cache_path and os.path.exists(cache_path):
     try:
         with open(cache_path, "r", encoding="utf-8") as f:
             ancien = json.load(f)
-        if isinstance(ancien, dict) and ancien.get("v") == 2:
-            for cle in ("offset", "spaceId", "sessionLabel", "customTitle"):
+        if isinstance(ancien, dict) and ancien.get("v") == 3:
+            for cle in ("offset", "spaceId", "sessionLabel", "customTitle", "hookToken"):
                 if cle in ancien:
                     etat[cle] = ancien[cle]
     except Exception:
@@ -101,6 +102,21 @@ def propre(valeur):
     return " ".join(valeur.split()).strip()
 
 
+# S-REFLEXES-6 : le jeton de session hook voyage dans le TEXTE du brief rendu
+# par mnemos_session_start (le tool_result), sur une ligne dediee. Fonction
+# PURE, testee isolement et par mutation (regle 8bis).
+_RE_JETON = re.compile(r"^\[jeton-hook-session[^\]]*\][ \t]+(mk_sess_[A-Za-z0-9_-]+)[ \t]*$", re.MULTILINE)
+
+
+def extraire_jeton(texte):
+    """str -> str | None. Dernier match si plusieurs lignes candidates dans
+    le meme texte (rare, mais coherent avec 'le dernier vu gagne')."""
+    if not isinstance(texte, str):
+        return None
+    matches = _RE_JETON.findall(texte)
+    return matches[-1] if matches else None
+
+
 modifie = False
 if transcript_path and os.path.exists(transcript_path):
     try:
@@ -111,8 +127,20 @@ if transcript_path and os.path.exists(transcript_path):
             depart = 0
         with open(transcript_path, "r", encoding="utf-8", errors="replace") as f:
             f.seek(depart)
-            for line in f:
-                line = line.strip()
+            # Boucle manuelle (pas "for line in f") : une ligne renvoyee par
+            # readline() SANS "\n" final est une ecriture en cours, elle ne
+            # doit jamais etre consommee (sinon le contenu a moitie ecrit est
+            # perdu pour toujours des qu'il se complete). L'offset n'avance
+            # qu'apres une ligne confirmee "\n"-terminee.
+            dernier_offset_complet = depart
+            while True:
+                ligne_brute = f.readline()
+                if not ligne_brute:
+                    break
+                if not ligne_brute.endswith("\n"):
+                    break  # ligne en cours d'ecriture : ne pas la consommer
+                dernier_offset_complet = f.tell()
+                line = ligne_brute.strip()
                 if not line:
                     continue
                 try:
@@ -129,6 +157,38 @@ if transcript_path and os.path.exists(transcript_path):
                     if titre:
                         etat["customTitle"] = titre
                         modifie = True
+                    continue
+
+                # Resultat d'outil : c'est ICI, dans le texte du tool_result
+                # de mnemos_session_start, que voyage le jeton hook (pas dans
+                # l'appel type=assistant ci-dessous). PAS de correlation par
+                # tool_use_id (contrat figé S-REFLEXES-6) : on regarde juste
+                # si un bloc tool_result de cette entree porte la ligne
+                # jeton, quel que soit l'appel qu'il repond.
+                if entry.get("type") == "user":
+                    message = entry.get("message") or {}
+                    content = message.get("content")
+                    if isinstance(content, list):
+                        for block in content:
+                            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                                continue
+                            bcontent = block.get("content")
+                            texte_bloc = None
+                            if isinstance(bcontent, str):
+                                texte_bloc = bcontent
+                            elif isinstance(bcontent, list):
+                                morceaux = []
+                                for sous_bloc in bcontent:
+                                    if isinstance(sous_bloc, dict) and sous_bloc.get("type") == "text":
+                                        t = sous_bloc.get("text")
+                                        if isinstance(t, str):
+                                            morceaux.append(t)
+                                if morceaux:
+                                    texte_bloc = "\n".join(morceaux)
+                            jeton = extraire_jeton(texte_bloc) if texte_bloc is not None else None
+                            if jeton:
+                                etat["hookToken"] = jeton
+                                modifie = True
                     continue
 
                 if entry.get("type") != "assistant":
@@ -154,18 +214,24 @@ if transcript_path and os.path.exists(transcript_path):
                     if label:
                         etat["sessionLabel"] = label
                         modifie = True
-            etat["offset"] = f.tell()
+            etat["offset"] = dernier_offset_complet
             modifie = True
     except Exception:
         # Transcript illisible : on rend ce que le cache portait deja.
         pass
 
 # Ecriture atomique (tmp + os.replace) : un kill en pleine ecriture ne doit
-# jamais laisser un cache tronque a la place du bon.
+# jamais laisser un cache tronque a la place du bon. Le fichier porte
+# desormais un secret vivant (hookToken) : os.open(..., 0o600) CREE le
+# fichier DIRECTEMENT en 0600 (pas d'ouverture "w" suivie d'un chmod
+# separe), pour ne jamais laisser de fenetre ou le fichier existe sous
+# l'umask par defaut (souvent 0644, secret brievement lisible par d'autres
+# comptes locaux) avant d'etre resserre.
 if cache_path and modifie:
     tmp_path = cache_path + ".tmp"
     try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
             json.dump(etat, f)
         os.replace(tmp_path, cache_path)
     except Exception:
@@ -177,6 +243,7 @@ if cache_path and modifie:
 print(etat.get("spaceId", "") or "")
 print(etat.get("sessionLabel", "") or "")
 print(etat.get("customTitle", "") or "")
+print(etat.get("hookToken", "") or "")
 PYEOF
 }
 
@@ -192,6 +259,20 @@ mycelora_resolve_space_id() {
 # eventuellement vide). S-ALIAS-1.
 mycelora_resolve_etiquettes() {
   _mycelora_charger_fil "$1" "$2" | sed -n '2,3p'
+}
+
+# mycelora_resolve_hook_token <session_id> <transcript_path>
+# AFFECTE la variable globale MYCELORA_HOOK_TOKEN (ne la retourne pas sur
+# stdout). Contrat figé S-REFLEXES-6 :
+#   1) MYCELORA_HOOK_TOKEN deja non vide ET != "__MYCELORA_HOOK_KEY__" -> gardee
+#   2) sinon, hookToken du cache v3 (peut declencher sa lecture/reconstruction)
+#   3) sinon, chaine vide
+mycelora_resolve_hook_token() {
+  local session_id="$1" transcript_path="$2"
+  if [ -n "${MYCELORA_HOOK_TOKEN:-}" ] && [ "$MYCELORA_HOOK_TOKEN" != "__MYCELORA_HOOK_KEY__" ]; then
+    return 0
+  fi
+  MYCELORA_HOOK_TOKEN="$(_mycelora_charger_fil "$session_id" "$transcript_path" | sed -n '4p')"
 }
 
 # mycelora_curl_post <body_file> <cfgfile> <resp_file> [timeout_secondes]

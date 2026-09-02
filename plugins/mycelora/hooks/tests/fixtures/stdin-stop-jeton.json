@@ -1,0 +1,15 @@
+{
+ "session_id": "s-reflexes-6-jeton-0001",
+ "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start-avec-jeton.jsonl",
+ "cwd": "/home/claude",
+ "prompt_id": "6b1a2c3d-4e5f-6071-8293-a4b5c6d7e8f9",
+ "permission_mode": "default",
+ "effort": {
+  "level": "high"
+ },
+ "hook_event_name": "Stop",
+ "stop_hook_active": false,
+ "last_assistant_message": "Session Mnemos demarree sur le developpement Mycelora.",
+ "background_tasks": [],
+ "session_crons": []
+}

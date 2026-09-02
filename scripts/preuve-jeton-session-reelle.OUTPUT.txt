@@ -1,0 +1,108 @@
+======================================================================
+PREUVE REELLE -- jeton de session hook (S-REFLEXES-6)
+======================================================================
+
+Objectif : montrer que les QUATRE VRAIS scripts de hooks (pas une
+reimplementation) envoient bien le bearer mk_sess_... extrait d'un
+extrait de transcript reel, puis qu'apres un 401 type simule,
+UserPromptSubmit imprime la ligne de relance.
+
+--- Etape 1 : le transcript reel --------------------------------------
+Repris tel quel depuis :
+  /Users/stephanecommenge/Claude-Dev/evidencai-marketplace-worktrees/s-reflexes/plugins/mycelora/hooks/tests/fixtures/transcript-session-start-avec-jeton.jsonl
+Contenu (4 entrees JSONL ; la 3e porte le jeton dans le tool_result de
+mnemos_session_start) :
+  ligne 1 : type=user
+  ligne 2 : type=assistant
+  ligne 3 : type=user
+  ligne 4 : type=assistant
+
+Jeton attendu (present dans le transcript, sur la ligne dediee
+'[jeton-hook-session ...] mk_sess_...') : mk_sess_FIXTURE0123456789
+
+--- Etape 2 : mise en place du faux serveur (curl factice) -----------
+Meme mecanisme que les tests unitaires : un vrai binaire 'curl' place
+en tete de PATH, qui n'appelle jamais le reseau, capture le CORPS
+JSON-RPC (--data-binary) ET le fichier de config -K (donc l'en-tete
+Authorization REELLEMENT envoye par mycelora_curl_post), et rend une
+reponse canned au hook appelant.
+
+Faux curl en place : /var/folders/kd/dct86gwj1yd7jlf51d17vr1h0000gn/T/tmp.YpxZbqDrjV/bin/curl
+Verifie par resolution PATH : /var/folders/kd/dct86gwj1yd7jlf51d17vr1h0000gn/T/tmp.YpxZbqDrjV/bin/curl
+
+======================================================================
+Etape 3 : les QUATRE VRAIS scripts de hooks, contre ce transcript
+======================================================================
+
+--- mycelora-userpromptsubmit.sh --------------------------------------
+Prompt utilisateur : "peux-tu confirmer que le jeton de session hook est bien envoye sur ce fil ?"
+Lance : mycelora-userpromptsubmit.sh (stdin ci-dessus sur son entree standard)
+Stdout du hook (ce qui serait injecte dans le contexte du modele) :
+  [Mycelora] Rappel de memoire : le jeton de session hook est bien en place sur ce fil (S-REFLEXES-6).
+
+  Bearer capture pour UserPromptSubmit (appel mnemos_recall) :
+    header = "Authorization: Bearer mk_sess_FIXTURE0123456789"
+    -> CONFORME (bearer attendu Bearer mk_sess_FIXTURE0123456789)
+
+--- mycelora-stop.sh ---------------------------------------------------
+Dernier message assistant du tour : "Session Mnemos demarree sur le developpement Mycelora."
+(retrouve dans le transcript comme le message utilisateur d'ouverture)
+Lance : mycelora-stop.sh (stdin ci-dessus sur son entree standard)
+Stdout du hook (doit rester vide -- contrat Stop, aucune sortie jamais) : ''
+
+  Bearer capture pour Stop (appel mnemos_log_exchange) :
+    header = "Authorization: Bearer mk_sess_FIXTURE0123456789"
+    -> CONFORME (bearer attendu Bearer mk_sess_FIXTURE0123456789)
+
+--- mycelora-pretooluse.sh (reflexe d'impact) --------------------------
+Commande Bash structurante detectee : ALTER TABLE preuve_reelle_demo ADD COLUMN foo int;
+Lance : mycelora-pretooluse.sh (stdin ci-dessus sur son entree standard)
+Stdout du hook (decision de refus, RÉFLEXE D'IMPACT) :
+{
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "R\u00c9FLEXE D'IMPACT (refus unique, rejouez la commande telle quelle si les incidences sont trait\u00e9es).\nObjet : preuve_reelle_demo (table). Carte : jamais index\u00e9e pour cet espace, grep local : n\u00e9ant. V\u00e9rifiez vous-m\u00eame qui lit preuve_reelle_demo.\nObjet : preuve_reelle_demo.foo (colonne). Carte : jamais index\u00e9e pour cet espace, grep local : n\u00e9ant. V\u00e9rifiez vous-m\u00eame qui lit preuve_reelle_demo.foo.\nPort\u00e9e : changement de PRODUIT (sch\u00e9ma), tous les comptes."
+    }
+}
+
+  Bearer capture pour PreToolUse (appel mnemos_impact_lookup) :
+    header = "Authorization: Bearer mk_sess_FIXTURE0123456789"
+    -> CONFORME (bearer attendu Bearer mk_sess_FIXTURE0123456789)
+
+--- mycelora-posttooluse.sh (jalon d'impact) ---------------------------
+Jalon correspondant (geste deja execute) : ALTER TABLE preuve_reelle_demo_post ADD COLUMN foo int;
+Lance : mycelora-posttooluse.sh (stdin ci-dessus sur son entree standard)
+Stdout du hook (JALON D'IMPACT) :
+{
+    "hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "additionalContext": "JALON D'IMPACT : preuve_reelle_demo_post, preuve_reelle_demo_post.foo modifi\u00e9. Lecteurs : aucun connu. Lancez le reviewer frais avec ces r\u00e9f\u00e9rences avant de continuer."
+    }
+}
+
+  Bearer capture pour PostToolUse (appel mnemos_impact_lookup) :
+    header = "Authorization: Bearer mk_sess_FIXTURE0123456789"
+    -> CONFORME (bearer attendu Bearer mk_sess_FIXTURE0123456789)
+
+======================================================================
+Etape 4 : 401 jeton_session_expire simule, relance UserPromptSubmit
+======================================================================
+
+Simule une reponse HTTP 401 dont le corps porte
+error.data.code == "jeton_session_expire" sur le PROCHAIN appel
+mnemos_recall, puis relance mycelora-userpromptsubmit.sh avec un
+NOUVEAU prompt sur le meme fil (meme session_id, meme transcript).
+
+Stdout du hook (ligne de relance imprimee en clair, injectee dans le
+contexte du modele) :
+  Mycelora : jeton de session expiré, relancez l'ouverture du fil (mnemos_session_start) pour rétablir la mémoire.
+
+-> CONFORME : ligne de relance exacte.
+
+======================================================================
+PREUVE TERMINEE, TOUT CONFORME.
+Les quatre hooks reels envoient bien Bearer mk_sess_FIXTURE0123456789 extrait du
+transcript via le cache v3, et la relance de jeton expire s'affiche
+telle qu'attendue apres le 401 type simule.
+======================================================================

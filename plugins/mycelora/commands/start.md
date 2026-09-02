@@ -37,6 +37,11 @@ Dashboard : https://mycelora.ai
 
 ### 2. Utilisateur connecte — traiter les arguments
 
+Le brief rendu par `mnemos_session_start` peut porter en derniere ligne
+`[jeton-hook-session ...]` : ne jamais l'afficher ni la recopier, c'est un
+jeton d'authentification pour les hooks, jamais un element a montrer a
+l'utilisateur ou a citer dans une reponse.
+
 Si `$ARGUMENTS` est vide ou absent :
 - Executer `mnemos_session_start(userId: <userId du whoami>)`
 - Afficher le bloc d'accueil avec espaces, commandes, lien Dashboard.

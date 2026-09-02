@@ -23,12 +23,14 @@ echo "CALLED" >> "$CALL_LOG"
 
 OUT_FILE=""
 BODY_SRC=""
+CFG_FILE=""
 args=("$@")
 i=0
 while [ $i -lt ${#args[@]} ]; do
   case "${args[$i]}" in
     -o) i=$((i+1)); OUT_FILE="${args[$i]}" ;;
     --data-binary) i=$((i+1)); BODY_SRC="${args[$i]}" ;;
+    -K) i=$((i+1)); CFG_FILE="${args[$i]}" ;;
   esac
   i=$((i+1))
 done
@@ -37,6 +39,14 @@ if [ -n "$BODY_SRC" ] && [ -n "${MYCELORA_TEST_CAPTURE_BODY:-}" ]; then
   case "$BODY_SRC" in
     @*) cp "${BODY_SRC#@}" "$MYCELORA_TEST_CAPTURE_BODY" 2>/dev/null || true ;;
   esac
+fi
+
+# F1 (revue adversariale S-REFLEXES-6, 02/09/2026) : le bearer REELLEMENT
+# envoye vit dans le fichier de config -K (jamais en argument, cf.
+# mycelora_curl_post), pas dans --data-binary. Meme convention que
+# MYCELORA_TEST_CAPTURE_BODY : copie du CONTENU du fichier -K si demande.
+if [ -n "$CFG_FILE" ] && [ -n "${MYCELORA_TEST_CAPTURE_CFG:-}" ]; then
+  cp "$CFG_FILE" "$MYCELORA_TEST_CAPTURE_CFG" 2>/dev/null || true
 fi
 
 if [ "$SHOULD_FAIL" = "1" ]; then
@@ -55,6 +65,17 @@ printf '%s' "$HTTP_CODE"
 exit 0
 EOF
 chmod +x "$FAKE_CURL_SCRIPT"
+
+# S-REFLEXES-6 (02/09/2026) : jeton de session hook. Les 93 tests ECRITS
+# AVANT cette story ne connaissent pas le jeton et doivent continuer d'agir
+# EXACTEMENT comme avant (aucune regression) : on exporte donc globalement
+# une fausse valeur "deja substituee" (priorite 1 du contrat de
+# mycelora_resolve_hook_token -> gardee telle quelle, jamais touchee au
+# cache), qui met tous les hooks dans l'etat "jeton present" par defaut. Les
+# tests dedies au canal marketplace (sans-jeton, cache v3, priorites) unsetent
+# CLAUDE_PLUGIN_OPTION_HOOK_KEY localement (sous-shell) pour retomber sur la
+# resolution reelle.
+export CLAUDE_PLUGIN_OPTION_HOOK_KEY="mk_live_TESTFAKE0000000000000000"
 
 # Compteurs de resultats reels (pas un comptage sur le code source)
 TOTAL_TESTS=0
@@ -1086,7 +1107,15 @@ PYEOF
 )"
 journal_a_lookup_timeout="0"
 grep -q '"evt": "lookup_timeout"' /tmp/mycelora-reflexes-reflexe-ddl-alter.jsonl 2>/dev/null && journal_a_lookup_timeout="1"
-# Restaure le faux curl "normal" pour la suite des tests.
+# Restaure le faux curl "normal" pour la suite des tests. F1 (revue
+# adversariale S-REFLEXES-6, 02/09/2026) : cette restauration ecrasait le
+# faux curl par une COPIE FIGEE, anterieure a l'ajout de la capture -K/
+# MYCELORA_TEST_CAPTURE_CFG dans le generateur du haut de ce fichier -- toute
+# la suite des tests execut apres ce point (la quasi-totalite du fichier,
+# dont toute la section S-REFLEXES-6) tournait donc avec un faux curl QUI NE
+# SAVAIT PAS CAPTURER LE BEARER, meme apres l'avoir ajoute plus haut. Meme
+# contenu que le generateur initial desormais (les deux DOIVENT rester
+# identiques).
 cat > "$FAKE_BIN_DIR/curl" <<'EOF'
 #!/usr/bin/env bash
 CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
@@ -1096,12 +1125,14 @@ SHOULD_FAIL="${MYCELORA_TEST_CURL_FAIL:-0}"
 echo "CALLED" >> "$CALL_LOG"
 OUT_FILE=""
 BODY_SRC=""
+CFG_FILE=""
 args=("$@")
 i=0
 while [ $i -lt ${#args[@]} ]; do
   case "${args[$i]}" in
     -o) i=$((i+1)); OUT_FILE="${args[$i]}" ;;
     --data-binary) i=$((i+1)); BODY_SRC="${args[$i]}" ;;
+    -K) i=$((i+1)); CFG_FILE="${args[$i]}" ;;
   esac
   i=$((i+1))
 done
@@ -1109,6 +1140,9 @@ if [ -n "$BODY_SRC" ] && [ -n "${MYCELORA_TEST_CAPTURE_BODY:-}" ]; then
   case "$BODY_SRC" in
     @*) cp "${BODY_SRC#@}" "$MYCELORA_TEST_CAPTURE_BODY" 2>/dev/null || true ;;
   esac
+fi
+if [ -n "$CFG_FILE" ] && [ -n "${MYCELORA_TEST_CAPTURE_CFG:-}" ]; then
+  cp "$CFG_FILE" "$MYCELORA_TEST_CAPTURE_CFG" 2>/dev/null || true
 fi
 if [ "$SHOULD_FAIL" = "1" ]; then
   exit 7
@@ -2033,6 +2067,530 @@ else
 fi
 rm -rf "$c9_tmp"
 rm -f "$c5_journal"
+
+# ============================================================================
+# S-REFLEXES-6 (02/09/2026) — jeton de session hook, canal marketplace.
+# Cache v3 (spaceId/sessionLabel/customTitle/hookToken), extraire_jeton,
+# mycelora_resolve_hook_token, cas sans-jeton des quatre hooks, 401 type
+# (jeton_session_expire) distinct d'un 401 generique.
+# ============================================================================
+
+COMMON_SH="$REPO_ROOT/plugins/mycelora/hooks/mycelora-common.sh"
+JETON_TRANSCRIPT="$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/transcript-session-start-avec-jeton.jsonl"
+JETON_TRANSCRIPT_STRING="$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/transcript-session-start-jeton-content-string.jsonl"
+NO_SESSION_START_TRANSCRIPT="$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/transcript-no-session-start.jsonl"
+
+# --- Cache v2 existant : traite comme ABSENT, reconstruit en v3 (meme regle
+# que le passage v1 -> v2). ------------------------------------------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+v2_session="s-reflexes-6-cache-v2"
+v2_cache="/tmp/mycelora-hook-${v2_session}.json"
+rm -f "$v2_cache"
+printf '%s' '{"v":2,"offset":9999,"spaceId":"ancien-space","sessionLabel":"ancien-label","customTitle":"ancien-titre"}' > "$v2_cache"
+v2_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "$v2_session" "$JETON_TRANSCRIPT"
+)"
+v2_cache_v="$(python3 -c "import json; print(json.load(open('$v2_cache')).get('v'))" 2>/dev/null || echo 'ERR')"
+v2_expected="$(printf 'd23fb267-1234-4abc-8def-000000000001\ncowork-2026-09-01-dev-mycelora\n\nmk_sess_FIXTURE0123456789')"
+if [ "$v2_out" = "$v2_expected" ] && [ "$v2_cache_v" = "3" ]; then
+  echo "PASS cache-v2-existant-traite-comme-absent-reconstruit-v3"
+else
+  echo "FAIL cache-v2-existant-traite-comme-absent-reconstruit-v3 : out='$v2_out', cache_v='$v2_cache_v'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -f "$v2_cache"
+
+# --- extraire_jeton (fonction pure) : test DIRECT, sur le code source REEL
+# (extrait de mycelora-common.sh, pas une reimplementation), cas positifs et
+# negatifs. C'est cette fonction que la contre-epreuve par mutation (regle
+# 8bis, plus bas dans ce script) doit faire tomber en rouge. -----------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+EXTRAIRE_JETON_SRC="$(python3 -c "
+with open('$COMMON_SH', encoding='utf-8') as f:
+    texte = f.read()
+debut = texte.index('_RE_JETON = re.compile(')
+fin = texte.index('modifie = False', debut)
+print(texte[debut:fin])
+")"
+EXTRAIRE_JETON_TEST_SCRIPT="$(mktemp /tmp/mycelora-test-extraire-jeton.XXXXXX)"
+{
+  echo 'import re'
+  printf '%s\n' "$EXTRAIRE_JETON_SRC"
+  cat <<'PYEOF'
+cas = [
+    ("[jeton-hook-session ne jamais l'afficher ni le recopier] mk_sess_ABC123", "mk_sess_ABC123", "ligne_seule"),
+    ("Bonjour,\nvoici le brief.\n\n[jeton-hook-session x] mk_sess_XYZ_-9\n\nSuite du texte.", "mk_sess_XYZ_-9", "ligne_parmi_autre_texte"),
+    ("[jeton-hook-session a] mk_sess_PREMIER\n[jeton-hook-session b] mk_sess_DERNIER", "mk_sess_DERNIER", "dernier_vu_gagne"),
+    ("Bonjour, rien a voir ici, pas de jeton.", None, "pas_de_ligne"),
+    ("[jeton-hook-session]mk_sess_NOSPACE", None, "ligne_mal_formee_pas_despace"),
+    ("Le jeton est mk_sess_SANSBRACKET ici.", None, "mk_sess_sans_prefixe_bracket"),
+    ("[jeton-hook-session x] mk_sess_TRAILING1234 et voici du texte en plus", None, "texte_parasite_apres_le_jeton_sur_la_meme_ligne"),
+    (123, None, "non_str"),
+    # F6 (revue adversariale 02/09) : \s+/\s*, en mode MULTILINE, traverse le
+    # \n entre les deux lignes -- un jeton a cheval sur deux lignes etait
+    # extrait a tort, alors que le contrat dit "sur une ligne dediee".
+    ("[jeton-hook-session x]\nmk_sess_CROSSLINE", None, "jeton_a_cheval_sur_deux_lignes"),
+]
+erreurs = []
+for texte, attendu, nom in cas:
+    obtenu = extraire_jeton(texte)
+    if obtenu != attendu:
+        erreurs.append("%s: attendu=%r obtenu=%r" % (nom, attendu, obtenu))
+print("FAIL:" + "; ".join(erreurs) if erreurs else "OK")
+PYEOF
+} > "$EXTRAIRE_JETON_TEST_SCRIPT"
+extraire_jeton_verdict="$(python3 "$EXTRAIRE_JETON_TEST_SCRIPT" 2>&1)"
+if [ "$extraire_jeton_verdict" = "OK" ]; then
+  echo "PASS extraire-jeton-direct-cas-positifs-negatifs"
+else
+  echo "FAIL extraire-jeton-direct-cas-positifs-negatifs : $extraire_jeton_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# --- format du content d'un tool_result : liste de blocs {type:text} (deja
+# couvert par le cache-v2 ci-dessus, transcript avec-jeton) ET chaine directe
+# (transcript dedie) : extraire_jeton doit fonctionner sur les DEUX. ---------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "/tmp/mycelora-hook-s-reflexes-6-jeton-string-0001.json"
+str_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "s-reflexes-6-jeton-string-0001" "$JETON_TRANSCRIPT_STRING"
+)"
+str_token="$(printf '%s\n' "$str_out" | sed -n '4p')"
+if [ "$str_token" = "mk_sess_FIXTURE0123456789" ]; then
+  echo "PASS charger-fil-format-content-chaine-directe"
+else
+  echo "FAIL charger-fil-format-content-chaine-directe : obtenu='$str_token'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -f "/tmp/mycelora-hook-s-reflexes-6-jeton-string-0001.json"
+
+# --- mycelora_resolve_hook_token : les trois priorites du contrat figé, plus
+# le cas explicite du DoD (zip substitue ET jeton de session presents en
+# meme temps -> le substitue gagne). -----------------------------------------
+resolve_hook_token_test() {
+  local initial="$1" session="$2" transcript="$3"
+  (
+    source "$COMMON_SH"
+    MYCELORA_HOOK_TOKEN="$initial"
+    mycelora_resolve_hook_token "$session" "$transcript"
+    printf '%s' "$MYCELORA_HOOK_TOKEN"
+  )
+}
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "/tmp/mycelora-hook-s-reflexes-6-prio1.json"
+prio1="$(resolve_hook_token_test "mk_live_SUBSTITUTED_ZIP_TEST" "s-reflexes-6-prio1" "$JETON_TRANSCRIPT")"
+if [ "$prio1" = "mk_live_SUBSTITUTED_ZIP_TEST" ] && [ ! -f "/tmp/mycelora-hook-s-reflexes-6-prio1.json" ]; then
+  echo "PASS resolve-hook-token-priorite-1-zip-substitue-gagne"
+else
+  echo "FAIL resolve-hook-token-priorite-1-zip-substitue-gagne : obtenu='$prio1', cache_cree=$([ -f "/tmp/mycelora-hook-s-reflexes-6-prio1.json" ] && echo oui || echo non)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "/tmp/mycelora-hook-s-reflexes-6-prio2.json"
+prio2="$(resolve_hook_token_test "__MYCELORA_HOOK_KEY__" "s-reflexes-6-prio2" "$JETON_TRANSCRIPT")"
+if [ "$prio2" = "mk_sess_FIXTURE0123456789" ]; then
+  echo "PASS resolve-hook-token-priorite-2-cache-v3"
+else
+  echo "FAIL resolve-hook-token-priorite-2-cache-v3 : obtenu='$prio2'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+rm -f "/tmp/mycelora-hook-s-reflexes-6-prio3.json"
+prio3="$(resolve_hook_token_test "__MYCELORA_HOOK_KEY__" "s-reflexes-6-prio3" "$NO_SESSION_START_TRANSCRIPT")"
+if [ -z "$prio3" ]; then
+  echo "PASS resolve-hook-token-priorite-3-vide"
+else
+  echo "FAIL resolve-hook-token-priorite-3-vide : obtenu='$prio3'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+zip_session="s-reflexes-6-zip-et-session"
+zip_cache="/tmp/mycelora-hook-${zip_session}.json"
+rm -f "$zip_cache"
+printf '%s' '{"v":3,"offset":0,"spaceId":"","sessionLabel":"","customTitle":"","hookToken":"mk_sess_DEPUIS_CACHE_DIFFERENT"}' > "$zip_cache"
+zip_et_session="$(resolve_hook_token_test "mk_live_SUBSTITUE_DEPUIS_ZIP" "$zip_session" "$JETON_TRANSCRIPT")"
+if [ "$zip_et_session" = "mk_live_SUBSTITUE_DEPUIS_ZIP" ]; then
+  echo "PASS resolve-hook-token-zip-et-session-le-substitue-gagne"
+else
+  echo "FAIL resolve-hook-token-zip-et-session-le-substitue-gagne : obtenu='$zip_et_session'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -f "$zip_cache"
+
+# --- Offset : une ligne de transcript NON terminee par "\n" (ecriture en
+# cours) ne doit jamais etre consommee a moitie ; completee, elle est extraite
+# au passage suivant. Fixture construite par printf SANS retour final. ------
+offset_session="s-reflexes-6-offset-partiel"
+offset_cache="/tmp/mycelora-hook-${offset_session}.json"
+offset_transcript="$(mktemp /tmp/mycelora-test-offset-transcript.XXXXXX)"
+rm -f "$offset_cache"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_offset","name":"mnemos_session_start","input":{"sessionId":"sess-offset","spaceId":"space-offset"}}]}}\n' > "$offset_transcript"
+printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_offset","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_OFFSETPARTIEL_0"}]}]}}' >> "$offset_transcript"
+# PAS de "\n" final ici : simule une ligne en cours d'ecriture.
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+offset_pass1_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "$offset_session" "$offset_transcript"
+)"
+offset_pass1_token="$(printf '%s\n' "$offset_pass1_out" | sed -n '4p')"
+if [ -z "$offset_pass1_token" ]; then
+  echo "PASS offset-ligne-non-terminee-pas-consommee-au-premier-passage"
+else
+  echo "FAIL offset-ligne-non-terminee-pas-consommee-au-premier-passage : obtenu='$offset_pass1_token'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+printf '\n' >> "$offset_transcript"
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+offset_pass2_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "$offset_session" "$offset_transcript"
+)"
+offset_pass2_token="$(printf '%s\n' "$offset_pass2_out" | sed -n '4p')"
+if [ "$offset_pass2_token" = "mk_sess_OFFSETPARTIEL_0" ]; then
+  echo "PASS offset-ligne-completee-extraite-au-passage-suivant"
+else
+  echo "FAIL offset-ligne-completee-extraite-au-passage-suivant : obtenu='$offset_pass2_token'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -f "$offset_cache" "$offset_transcript"
+
+# --- Chaque hook, cas sans-jeton : transcript sans mnemos_session_start ->
+# exit 0, AUCUN appel curl, log "auth"/"sans-jeton"/duree 0 litterale. Unset
+# LOCAL de CLAUDE_PLUGIN_OPTION_HOOK_KEY (sous-shell) : sinon la fausse valeur
+# globale (priorite 1, tests pre-existants) masquerait le cas reel. ---------
+assert_sans_jeton() {
+  local test_name="$1" hook_name="$2" hook_script="$3" stdin_fixture="$4" placeholder="${5:-no}"
+  local tmp call_log out_file rc
+  tmp="$(mktemp -d)"
+  call_log="$tmp/call.log"
+  out_file="$tmp/stdout"
+
+  (
+    unset CLAUDE_PLUGIN_OPTION_HOOK_KEY
+    export MYCELORA_TEST_CURL_LOG="$call_log"
+    export PATH="$FAKE_BIN_DIR:$PATH"
+    if [ "$placeholder" = "yes" ]; then
+      reflexe_stdin "$stdin_fixture" | "$REPO_ROOT/plugins/mycelora/hooks/$hook_script" > "$out_file" 2>"$tmp/stderr"
+    else
+      cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/$stdin_fixture" | "$REPO_ROOT/plugins/mycelora/hooks/$hook_script" > "$out_file" 2>"$tmp/stderr"
+    fi
+  )
+  rc=$?
+
+  local actual_stdout last_log_line log_hook log_event log_dur log_status log_size
+  actual_stdout="$(cat "$out_file")"
+  last_log_line="$(tail -n 1 /tmp/mycelora-hook.log 2>/dev/null)"
+  IFS=$'\t' read -r _ log_hook log_event log_dur log_status log_size <<< "$last_log_line"
+
+  TOTAL_TESTS=$((TOTAL_TESTS+1))
+  if [ "$rc" -ne 0 ]; then
+    echo "FAIL $test_name : exit code $rc (stderr: $(cat "$tmp/stderr" 2>/dev/null))"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+  elif [ -n "$actual_stdout" ]; then
+    echo "FAIL $test_name : stdout attendu vide, obtenu '$actual_stdout'"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+  elif [ -f "$call_log" ]; then
+    echo "FAIL $test_name : appel curl inattendu"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+  elif [ "$log_hook" != "$hook_name" ] || [ "$log_event" != "auth" ] || [ "$log_dur" != "0" ] || [ "$log_status" != "sans-jeton" ] || [ "$log_size" != "0" ]; then
+    echo "FAIL $test_name : ligne de log inattendue : '$last_log_line'"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+  else
+    echo "PASS $test_name"
+  fi
+  rm -rf "$tmp"
+}
+
+assert_sans_jeton "sans-jeton-userpromptsubmit" "userpromptsubmit" "mycelora-userpromptsubmit.sh" "stdin-ups-sans-jeton.json"
+assert_sans_jeton "sans-jeton-stop" "stop" "mycelora-stop.sh" "stdin-stop-sans-jeton.json"
+assert_sans_jeton "sans-jeton-pretooluse" "pretooluse" "mycelora-pretooluse.sh" "stdin-pre-sans-jeton.json" "yes"
+assert_sans_jeton "sans-jeton-posttooluse" "posttooluse" "mycelora-posttooluse.sh" "stdin-post-sans-jeton.json" "yes"
+
+# --- Jeton resolu via le cache v3 reel (pas la fausse valeur globale) : la
+# resolution end-to-end via un VRAI hook fonctionne (pas seulement en direct
+# sur la fonction). ----------------------------------------------------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+ups_jeton_tmp="$(mktemp -d)"
+cat > "$ups_jeton_tmp/resp.json" <<'EOF'
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"FACE-A CANNED TEXT"}]},"id":1}
+EOF
+ups_jeton_out="$(
+  unset CLAUDE_PLUGIN_OPTION_HOOK_KEY
+  export MYCELORA_TEST_CURL_LOG="$ups_jeton_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$ups_jeton_tmp/resp.json"
+  export MYCELORA_TEST_CURL_HTTP_CODE="200"
+  export MYCELORA_TEST_CAPTURE_CFG="$ups_jeton_tmp/cfg.txt"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-ups-jeton.json" | "$REPO_ROOT/plugins/mycelora/hooks/mycelora-userpromptsubmit.sh"
+)"
+if [ "$ups_jeton_out" = "FACE-A CANNED TEXT" ] && [ -f "$ups_jeton_tmp/call.log" ]; then
+  echo "PASS ups-jeton-resolu-via-cache-v3-appel-reussi"
+else
+  echo "FAIL ups-jeton-resolu-via-cache-v3-appel-reussi : obtenu='$ups_jeton_out', curl_appele=$([ -f "$ups_jeton_tmp/call.log" ] && echo oui || echo non)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# --- F1 (revue adversariale 02/09) : le bearer REELLEMENT envoye sur cet
+# appel (fichier -K, pas --data-binary) n'etait jamais verifie. -------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+ups_bearer_line="$(grep '^header = "Authorization:' "$ups_jeton_tmp/cfg.txt" 2>/dev/null)"
+if [ "$ups_bearer_line" = 'header = "Authorization: Bearer mk_sess_FIXTURE0123456789"' ]; then
+  echo "PASS ups-bearer-reellement-envoye-cache-v3"
+else
+  echo "FAIL ups-bearer-reellement-envoye-cache-v3 : cfg='$ups_bearer_line'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$ups_jeton_tmp"
+
+# --- F1/F2 (revue adversariale 02/09) : Stop, meme verification du bearer
+# reellement envoye via le cache v3, sur le VRAI script (mycelora-stop.sh),
+# avec la fixture stdin-stop-jeton.json (creee des l'origine mais jusqu'ici
+# jamais utilisee par aucun test -- F2, trou comble en meme temps que F1).
+# Le transcript associe contient un vrai message user en tete
+# ("peux-tu demarrer la session mnemos...") et l'assistant final
+# correspondant a last_assistant_message : le hook trouve un echange non
+# vide et appelle reellement mnemos_log_exchange. -----------------------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+stop_bearer_tmp="$(mktemp -d)"
+cat > "$stop_bearer_tmp/resp.json" <<'EOF'
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\"success\": true, \"sessionId\": \"whatever\"}"}]},"id":1}
+EOF
+stop_bearer_out="$(
+  unset CLAUDE_PLUGIN_OPTION_HOOK_KEY
+  export MYCELORA_TEST_CURL_LOG="$stop_bearer_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$stop_bearer_tmp/resp.json"
+  export MYCELORA_TEST_CURL_HTTP_CODE="200"
+  export MYCELORA_TEST_CAPTURE_CFG="$stop_bearer_tmp/cfg.txt"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-jeton.json" | "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh"
+)"
+stop_bearer_line="$(grep '^header = "Authorization:' "$stop_bearer_tmp/cfg.txt" 2>/dev/null)"
+if [ -z "$stop_bearer_out" ] && [ -f "$stop_bearer_tmp/call.log" ] && [ "$stop_bearer_line" = 'header = "Authorization: Bearer mk_sess_FIXTURE0123456789"' ]; then
+  echo "PASS stop-bearer-reellement-envoye-cache-v3"
+else
+  echo "FAIL stop-bearer-reellement-envoye-cache-v3 : stdout='$stop_bearer_out', cfg='$stop_bearer_line', curl_appele=$([ -f "$stop_bearer_tmp/call.log" ] && echo oui || echo non)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$stop_bearer_tmp"
+
+# --- UserPromptSubmit : 401 type (jeton_session_expire) -> ligne de relance
+# EXACTE (comparaison stricte) ; 401 GENERIQUE (sans ce code) -> stdout VIDE,
+# distinct du cas precedent. -------------------------------------------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+ups401_tmp="$(mktemp -d)"
+cat > "$ups401_tmp/resp-401-typed.json" <<'EOF'
+{"jsonrpc":"2.0","error":{"code":-32001,"message":"Unauthorized","data":{"code":"jeton_session_expire"}},"id":null}
+EOF
+ups401_out="$(
+  export MYCELORA_TEST_CURL_LOG="$ups401_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$ups401_tmp/resp-401-typed.json"
+  export MYCELORA_TEST_CURL_HTTP_CODE="401"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-ups-normal.json" | "$REPO_ROOT/plugins/mycelora/hooks/mycelora-userpromptsubmit.sh"
+)"
+ups401_expected="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mnemos_session_start) pour rétablir la mémoire."
+if [ "$ups401_out" = "$ups401_expected" ]; then
+  echo "PASS ups-401-type-ligne-de-relance-exacte"
+else
+  echo "FAIL ups-401-type-ligne-de-relance-exacte : obtenu='$ups401_out'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$ups401_tmp"
+
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+ups401g_tmp="$(mktemp -d)"
+cat > "$ups401g_tmp/resp-401-generic.json" <<'EOF'
+{"jsonrpc":"2.0","error":{"code":-32001,"message":"Unauthorized"},"id":null}
+EOF
+ups401g_out="$(
+  export MYCELORA_TEST_CURL_LOG="$ups401g_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$ups401g_tmp/resp-401-generic.json"
+  export MYCELORA_TEST_CURL_HTTP_CODE="401"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-ups-normal.json" | "$REPO_ROOT/plugins/mycelora/hooks/mycelora-userpromptsubmit.sh"
+)"
+if [ -z "$ups401g_out" ]; then
+  echo "PASS ups-401-generique-stdout-vide"
+else
+  echo "FAIL ups-401-generique-stdout-vide : obtenu='$ups401g_out'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$ups401g_tmp"
+
+# --- Stop : 401 type -> TOUJOURS stdout vide (contrat "aucune sortie stdout,
+# jamais" inchange), log dedie auth/jeton-expire. ----------------------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+stop401_tmp="$(mktemp -d)"
+cat > "$stop401_tmp/resp-401-typed.json" <<'EOF'
+{"jsonrpc":"2.0","error":{"code":-32001,"message":"Unauthorized","data":{"code":"jeton_session_expire"}},"id":null}
+EOF
+stop401_out="$(
+  export MYCELORA_TEST_CURL_LOG="$stop401_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$stop401_tmp/resp-401-typed.json"
+  export MYCELORA_TEST_CURL_HTTP_CODE="401"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-stop-normal.json" | "$REPO_ROOT/plugins/mycelora/hooks/mycelora-stop.sh"
+)"
+stop401_last_log="$(tail -n 1 /tmp/mycelora-hook.log 2>/dev/null)"
+IFS=$'\t' read -r _ stop401_hook stop401_event _ stop401_status _ <<< "$stop401_last_log"
+if [ -z "$stop401_out" ] && [ "$stop401_hook" = "stop" ] && [ "$stop401_event" = "auth" ] && [ "$stop401_status" = "jeton-expire" ]; then
+  echo "PASS stop-401-type-stdout-vide-log-jeton-expire"
+else
+  echo "FAIL stop-401-type-stdout-vide-log-jeton-expire : stdout='$stop401_out', log='$stop401_last_log'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$stop401_tmp"
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+
+# --- PreToolUse : jeton resolu (cache v3 reel) mais 401/jeton_session_expire
+# sur le LOOKUP (mnemos_impact_lookup) -> refuse quand meme (deny inchange,
+# rapport vide assumé -- brief section 5, NE PAS toucher la logique de refus
+# elle-meme). -----------------------------------------------------------------
+rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+pre401_tmp="$(mktemp -d)"
+cat > "$pre401_tmp/resp-401-typed.json" <<'EOF'
+{"jsonrpc":"2.0","error":{"code":-32001,"message":"Unauthorized","data":{"code":"jeton_session_expire"}},"id":null}
+EOF
+pre401_out="$(
+  unset CLAUDE_PLUGIN_OPTION_HOOK_KEY
+  export MYCELORA_TEST_CURL_LOG="$pre401_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$pre401_tmp/resp-401-typed.json"
+  export MYCELORA_TEST_CURL_HTTP_CODE="401"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  reflexe_stdin "stdin-pre-jeton-refus-quand-meme.json" | "$PRETOOLUSE"
+)"
+printf '%s' "$pre401_out" > "$pre401_tmp/stdout.json"
+pre401_verdict="$(python3 - "$pre401_tmp/stdout.json" <<'PYEOF'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    ok = (
+        d["hookSpecificOutput"]["permissionDecision"] == "deny"
+        and "table_jeton_expire" in d["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+    print("OK" if ok else "FAIL:%r" % d)
+except Exception as e:
+    print("FAIL:%s" % e)
+PYEOF
+)"
+if [ "$pre401_verdict" = "OK" ]; then
+  echo "PASS pretooluse-401-jeton-expire-sur-lookup-refuse-quand-meme"
+else
+  echo "FAIL pretooluse-401-jeton-expire-sur-lookup-refuse-quand-meme : $pre401_verdict (stdout='$pre401_out')"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$pre401_tmp"
+rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+
+# --- PostToolUse : jeton resolu (cache v3 reel) mais 401/jeton_session_expire
+# sur le LOOKUP -> log dedie auth/jeton-expire, best-effort, SANS toucher au
+# jalon qui se construit normalement ensuite (contrat "se taisent" du DoD,
+# comme Stop : pas de sortie stdout supplementaire). --------------------------
+rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+post401_tmp="$(mktemp -d)"
+cat > "$post401_tmp/resp-401-typed.json" <<'EOF'
+{"jsonrpc":"2.0","error":{"code":-32001,"message":"Unauthorized","data":{"code":"jeton_session_expire"}},"id":null}
+EOF
+# Le log auth/jeton-expire n'est pas forcement la DERNIERE ligne (le jalon se
+# construit normalement ensuite et journalise a son tour) : on capture les
+# lignes AJOUTEES par cet appel, pas seulement la derniere.
+post401_lines_avant="$(wc -l < /tmp/mycelora-hook.log 2>/dev/null || echo 0)"
+post401_out="$(
+  unset CLAUDE_PLUGIN_OPTION_HOOK_KEY
+  export MYCELORA_TEST_CURL_LOG="$post401_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$post401_tmp/resp-401-typed.json"
+  export MYCELORA_TEST_CURL_HTTP_CODE="401"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  reflexe_stdin "stdin-post-jeton-401.json" | "$POSTTOOLUSE"
+)"
+post401_nouvelles_lignes="$(tail -n "+$((post401_lines_avant+1))" /tmp/mycelora-hook.log 2>/dev/null)"
+post401_auth_trouve="0"
+while IFS=$'\t' read -r _ p_hook p_event _ p_status p_size; do
+  if [ "$p_hook" = "posttooluse" ] && [ "$p_event" = "auth" ] && [ "$p_status" = "jeton-expire" ] && [ "$p_size" = "0" ]; then
+    post401_auth_trouve="1"
+  fi
+done <<< "$post401_nouvelles_lignes"
+if [ "$post401_auth_trouve" = "1" ]; then
+  echo "PASS posttooluse-401-jeton-expire-sur-lookup-log-dedie"
+else
+  echo "FAIL posttooluse-401-jeton-expire-sur-lookup-log-dedie : nouvelles lignes='$post401_nouvelles_lignes' (stdout='$post401_out')"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$post401_tmp"
+rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+
+# --- F1 (revue adversariale 02/09) : PreToolUse, le bearer REELLEMENT envoye
+# sur l'appel reseau du reflexe d'impact (mycelora_reflexe_lookup_serveur ->
+# mycelora_curl_post, fichier -K) n'etait jamais verifie -- seul le CORPS
+# JSON-RPC l'etait. Meme fixture que le refus 401 ci-dessus
+# (stdin-pre-jeton-refus-quand-meme.json), mais reponse 200 : l'appel reseau
+# reussit, ce qui est le chemin nominal ou le bearer compte vraiment. --------
+rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+pre_bearer_tmp="$(mktemp -d)"
+pre_bearer_out="$(
+  unset CLAUDE_PLUGIN_OPTION_HOOK_KEY
+  export MYCELORA_TEST_CURL_LOG="$pre_bearer_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$REFLEXE_IMPACT_RESPONSE"
+  export MYCELORA_TEST_CURL_HTTP_CODE="200"
+  export MYCELORA_TEST_CAPTURE_CFG="$pre_bearer_tmp/cfg.txt"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  reflexe_stdin "stdin-pre-jeton-refus-quand-meme.json" | "$PRETOOLUSE"
+)"
+pre_bearer_line="$(grep '^header = "Authorization:' "$pre_bearer_tmp/cfg.txt" 2>/dev/null)"
+if [ -f "$pre_bearer_tmp/call.log" ] && [ "$pre_bearer_line" = 'header = "Authorization: Bearer mk_sess_FIXTURE0123456789"' ]; then
+  echo "PASS pretooluse-bearer-reellement-envoye-cache-v3"
+else
+  echo "FAIL pretooluse-bearer-reellement-envoye-cache-v3 : cfg='$pre_bearer_line', curl_appele=$([ -f "$pre_bearer_tmp/call.log" ] && echo oui || echo non) (stdout='$pre_bearer_out')"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$pre_bearer_tmp"
+rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+
+# --- F1 (revue adversariale 02/09) : PostToolUse, meme verification du
+# bearer reellement envoye sur l'appel reseau du jalon (le meme point d'appel
+# mycelora_reflexe_lookup_serveur que PreToolUse). Meme fixture que le test
+# 401 ci-dessus (stdin-post-jeton-401.json), reponse 200 cette fois. --------
+rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+post_bearer_tmp="$(mktemp -d)"
+post_bearer_out="$(
+  unset CLAUDE_PLUGIN_OPTION_HOOK_KEY
+  export MYCELORA_TEST_CURL_LOG="$post_bearer_tmp/call.log"
+  export MYCELORA_TEST_CURL_RESPONSE="$REFLEXE_IMPACT_RESPONSE"
+  export MYCELORA_TEST_CURL_HTTP_CODE="200"
+  export MYCELORA_TEST_CAPTURE_CFG="$post_bearer_tmp/cfg.txt"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  reflexe_stdin "stdin-post-jeton-401.json" | "$POSTTOOLUSE"
+)"
+post_bearer_line="$(grep '^header = "Authorization:' "$post_bearer_tmp/cfg.txt" 2>/dev/null)"
+if [ -f "$post_bearer_tmp/call.log" ] && [ "$post_bearer_line" = 'header = "Authorization: Bearer mk_sess_FIXTURE0123456789"' ]; then
+  echo "PASS posttooluse-bearer-reellement-envoye-cache-v3"
+else
+  echo "FAIL posttooluse-bearer-reellement-envoye-cache-v3 : cfg='$post_bearer_line', curl_appele=$([ -f "$post_bearer_tmp/call.log" ] && echo oui || echo non) (stdout='$post_bearer_out')"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$post_bearer_tmp"
+rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
+export MYCELORA_TEST_CURL_HTTP_CODE="200"
+
+# Nettoyage des caches S-REFLEXES-6 crees par cette section.
+rm -f /tmp/mycelora-hook-s-reflexes-6-*.json
 
 # Nettoyage final des artefacts de test (marqueurs, journaux, reponse canned).
 rm -f /tmp/mycelora-reflexes-*.jsonl /tmp/mycelora-impact-* "$REFLEXE_IMPACT_RESPONSE" "$REPO_ROOT/.carte-perimee" "$REPO_ROOT/.mycelora-reflexes-off"
