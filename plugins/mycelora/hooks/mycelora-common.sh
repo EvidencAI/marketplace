@@ -5,6 +5,33 @@
 MYCELORA_EDGE_URL="https://api.mycelora.ai/functions/v1/mycelora-mcp"
 MYCELORA_LOG_FILE="/tmp/mycelora-hook.log"
 
+# 0.11.4 (03/09/2026) : outils porteurs d'une COMMANDE shell, donc du reflexe
+# d'impact (refus en PreToolUse, jalon en PostToolUse). Rend l'etiquette
+# courte de l'outil ("Bash", "Desktop_Commander"), ou rien si l'outil n'est
+# pas concerne. Desktop Commander est reconnu par le SUFFIXE de son nom :
+# "mcp__remote-devices__Desktop_Commander__start_process" sur un fil cloud
+# relie au Mac, "mcp__Desktop_Commander__start_process" (ou autre prefixe)
+# sur un fil local. Motivation : l'outil Bash de Cowork tourne dans la VM
+# cloud, sans cle ssh ni sql.sh ; le seul chemin vers la prod est Desktop
+# Commander, que la v1 (brief 4.2) laissait hors du reflexe. Decision
+# Stephane du 03/09 : start_process seulement ; interact_with_process
+# (texte envoye a un programme deja lance) reste en dette.
+mycelora_outil_commande() {
+  local nom_min
+  case "$1" in
+    Bash) printf 'Bash'; return 0 ;;
+    *start_process) ;;
+    *) printf ''; return 0 ;;
+  esac
+  # Seuls les noms finissant par start_process paient le tr (casse
+  # normalisee, bash 3.2 du Mac sans ${var,,}).
+  nom_min="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
+  case "$nom_min" in
+    *desktop_commander__start_process|*desktop-commander__start_process) printf 'Desktop_Commander' ;;
+    *) printf '' ;;
+  esac
+}
+
 # mycelora_log <hook> <event> <duration_ms> <status> <response_size>
 # Ecrit une ligne dans MYCELORA_LOG_FILE. Si le fichier depasse 1000000 octets
 # avant l'ecriture, le vider (troncature simple) avant d'ecrire la nouvelle ligne.
@@ -739,7 +766,62 @@ if m_fichier:
     except Exception:
         pass
 
-texte_nettoye = nettoyer_sql(texte_a_analyser)
+# 0.11.4 (fil du 03/09/2026) : psql -c "…" / -c '…' / --command=… . Le motif
+# DDL est ancre en tete d'instruction (un SELECT ne matche jamais, une prose
+# "alter table" dans un echo non plus) : un ALTER passe EN LIGNE a psql etait
+# donc invisible, et pire avec des guillemets simples, nettoyer_sql effacant le
+# litteral avant le matching. Prouve en reel le 03/09 : psql "postgresql://…"
+# -c "ALTER TABLE atoms ADD COLUMN …" = no-match. Correctif : chaque argument
+# de -c est extrait AVANT le nettoyage et ajoute comme ligne propre du texte
+# analyse, meme traitement que le fichier < x.sql. Marche aussi dans un ssh
+# (guillemets echappes \" a l'interieur d'une chaine double). Seulement si la
+# commande invoque psql : un `bash -c` ordinaire n'est pas concerne.
+RE_PSQL_MOT = re.compile(r"\bpsql\b")
+RE_PSQL_C = re.compile(
+    r"(?:^|\s)(?:-c|--command)(?:=|\s+)"
+    r"(?:\\\"((?:[^\"\\]|\\.)*?)\\\""     # \"…\" (echappe dans un ssh)
+    r"|\"((?:[^\"\\]|\\.)*)\""            # "…"
+    r"|'((?:[^'\\]|\\.)*)'"               # '…'
+    r"|(\S+))",                           # mot nu
+    re.DOTALL,
+)
+
+# Separateurs de segment shell : le mot psql doit preceder le -c DANS LE
+# MEME segment (revue adversariale 0.11.4, defaut confirme : `grep -c
+# "alter table" /var/log/psql.log` satisfaisait le gate global \bpsql\b et
+# produisait un refus absurde, la famille de faux positifs deja corrigee le
+# 02/09 sur npm update / docker restart).
+RE_SEPARATEUR_SEGMENT = re.compile(r"&&|\|\||;|\||\n")
+
+def extraire_arguments_psql_c(commande_brute):
+    """Rend la liste des arguments de -c/--command dont le segment shell
+    contient psql AVANT le -c, guillemets retires et \" desechappes.
+    Fonction pure, testable."""
+    if not RE_PSQL_MOT.search(commande_brute):
+        return []
+    resultats = []
+    for m in RE_PSQL_C.finditer(commande_brute):
+        avant = commande_brute[:m.start()]
+        seps = list(RE_SEPARATEUR_SEGMENT.finditer(avant))
+        debut_segment = seps[-1].end() if seps else 0
+        if not RE_PSQL_MOT.search(avant[debut_segment:]):
+            continue
+        valeur = next((g for g in m.groups() if g is not None), "")
+        valeur = valeur.replace('\\"', '"').strip()
+        if valeur:
+            resultats.append(valeur)
+    return resultats
+
+arguments_c = extraire_arguments_psql_c(commande)
+
+# Nettoyage FRAGMENT PAR FRAGMENT (revue adversariale 0.11.4, defaut
+# confirme) : nettoyer_sql apparie les apostrophes sur tout le texte et
+# [^'\\] traverse les sauts de ligne ; une apostrophe impaire dans la
+# commande (`# l'admin`, `don't`) s'appariait avec la premiere apostrophe de
+# la ligne ajoutee et EFFACAIT le DDL, seul endroit ou il est ancre en tete
+# de ligne. Chaque argument -c est donc nettoye seul, puis les morceaux
+# sont joints.
+texte_nettoye = "\n".join([nettoyer_sql(texte_a_analyser)] + [nettoyer_sql(a) for a in arguments_c])
 
 geste = None
 sous_type = None
@@ -770,6 +852,16 @@ else:
     objets = extraire_objets(texte_nettoye, commande, geste)
     if not objets:
         objets = [f"{geste}:non-identifie"]
+    # 0.11.4 (revue adversariale, regression confirmee) : un DDL arrive par
+    # le wrapper ssh + docker exec + psql etait classe infra:ssh_psql en
+    # 0.11.3 (refus aveugle, mais UN SEUL par fil pour toute la forme). Le
+    # classer ddl avec objets, sans plus, laissait un second refus infra au
+    # premier SELECT ssh suivant, et perdait l'avertissement "acces direct a
+    # la base de prod". L'objet infra est donc AJOUTE aux objets du geste :
+    # le marqueur du fil le consomme (refus unique tenu), le rapport garde
+    # la ligne infra (voir mycelora_reflexe_construire_rapport).
+    if detecter_infra(commande) == "ssh_psql":
+        objets.append("infra:ssh_psql")
 
 empreinte = hashlib.sha1(
     json.dumps(tool_input, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -882,7 +974,7 @@ try:
     objets = json.loads(objets_json)
 except Exception:
     objets = []
-non_resolus = [o for o in objets if not (resultats.get(o) or {}).get("lu_par") and not (resultats.get(o) or {}).get("ecrit_par")]
+non_resolus = [o for o in objets if not o.startswith("infra:") and not (resultats.get(o) or {}).get("lu_par") and not (resultats.get(o) or {}).get("ecrit_par")]
 with open(out_path, "w", encoding="utf-8") as f:
     json.dump(non_resolus, f)
 PYEOF
@@ -1033,6 +1125,15 @@ vide_par_objet = []
 candidats_age = []
 
 for o in objets:
+    # 0.11.4 : pseudo-objet infra accompagnant un DDL/UPDATE-DELETE arrive
+    # par ssh + docker exec + psql. Pas de carte, pas de grep : une ligne
+    # d'avertissement, qui ne compte ni pour rapport_vide ni pour l'age.
+    if o == "infra:ssh_psql":
+        lignes_objets.append(
+            "Objet : accès direct à la base de prod par SSH + docker exec + psql "
+            "(hors migration versionnée). Existe-t-il une procédure versionnée à la place ?"
+        )
+        continue
     loc = local_resultats.get(o) or {}
     lu_local = loc.get("lu_par") or []
     ecrit_local = loc.get("ecrit_par") or []

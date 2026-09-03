@@ -1,0 +1,13 @@
+{
+  "session_id": "reflexe-post-dc-ddl",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_reflexe-post-dc-ddl",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "mcp__remote-devices__Desktop_Commander__start_process",
+  "tool_input": {
+    "command": "psql <<'SQL'\nALTER TABLE table_gamma ADD COLUMN z int;\nSQL",
+    "timeout_ms": 20000
+  }
+}

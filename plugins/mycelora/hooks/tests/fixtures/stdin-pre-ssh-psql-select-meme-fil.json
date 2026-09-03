@@ -1,0 +1,12 @@
+{
+  "session_id": "reflexe-ssh-psql-c-ddl",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_reflexe-ssh-psql-c-ddl",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ssh -o BatchMode=yes host \"sudo docker exec -i my-db psql -U admin -d postgres -c \\\"SELECT count(*) FROM memory_atoms\\\"\""
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "session_id": "reflexe-psql-c-dq",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_reflexe-psql-c-dq",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "psql \"postgresql://admin@127.0.0.1:5432/postgres\" -c \"ALTER TABLE memory_atoms ADD COLUMN foo int\""
+  }
+}
