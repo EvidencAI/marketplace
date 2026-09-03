@@ -39,11 +39,19 @@ cat > "$STDIN_FILE"
 # ici. mycelora_log est du bash pur (date/wc/printf, aucun python).
 # ----------------------------------------------------------------------------
 TOOL_NAME="$(grep -o '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$STDIN_FILE" | head -n 1 | sed -E 's/.*"tool_name"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/')"
+# 0.11.4 : OUTIL vaut "Bash" ou "Desktop_Commander" pour les outils porteurs
+# d'une commande (jalon niveau 1), vide pour Edit/Write/MultiEdit (niveau 2)
+# et pour tout le reste, qui sort ici. Le journal des reflexes recoit
+# l'etiquette courte, jamais le nom MCP complet.
+OUTIL="$(mycelora_outil_commande "$TOOL_NAME")"
 case "$TOOL_NAME" in
-  Bash|Edit|Write|MultiEdit) ;;
+  Edit|Write|MultiEdit) ;;
   *)
-    mycelora_log "posttooluse" "detect" 0 "skip-out-of-scope" 0
-    exit 0
+    if [ -z "$OUTIL" ]; then
+      mycelora_log "posttooluse" "detect" 0 "skip-out-of-scope" 0
+      exit 0
+    fi
+    TOOL_NAME="$OUTIL"
     ;;
 esac
 
@@ -103,7 +111,7 @@ LOCAL_RESULT_FILE=""
 SERVER_RESULT_FILE=""
 EMPREINTE=""
 
-if [ "$TOOL_NAME" = "Bash" ]; then
+if [ -n "$OUTIL" ]; then
   DETECTION_FILE="$(mktemp /tmp/mycelora-hook-post-detect.XXXXXX)"
   CLEANUP_FILES+=("$DETECTION_FILE")
   mycelora_reflexe_detecter "$STDIN_FILE" "$DETECTION_FILE"

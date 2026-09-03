@@ -880,6 +880,161 @@ assert_reflexe_json "reflexe-pre-schema-public-normalise-table" "stdin-pre-ddl-s
   'd["hookSpecificOutput"]["permissionDecision"] == "deny" and "Objet : memory_atoms (table)" in d["hookSpecificOutput"]["permissionDecisionReason"] and "Objet : memory_atoms.foo (colonne)" in d["hookSpecificOutput"]["permissionDecisionReason"] and "public.memory_atoms" not in d["hookSpecificOutput"]["permissionDecisionReason"]' \
   "yes"
 
+# ============================================================================
+# 0.11.4 (03/09/2026) : DDL EN LIGNE (psql -c) et DESKTOP COMMANDER.
+# Prouve en reel le 03/09 : `psql "…" -c "ALTER TABLE atoms ADD COLUMN …"`
+# = no-match (motif DDL ancre en tete de ligne, litteral '…' efface par
+# nettoyer_sql). Et les commandes Desktop Commander (seul chemin vers la
+# prod depuis un fil cloud) sortaient au chemin rapide (tool_name != Bash).
+# ============================================================================
+
+# --- psql -c "…" (guillemets doubles) : refus DDL avec objets ---------------
+rm -f /tmp/mycelora-impact-reflexe-psql-c-dq /tmp/mycelora-reflexes-reflexe-psql-c-dq.jsonl
+assert_reflexe_json "reflexe-0114-psql-c-double-quote-refus-ddl" "stdin-pre-psql-c-double-quote.json" \
+  'd["hookSpecificOutput"]["permissionDecision"] == "deny" and "Objet : memory_atoms (table)" in d["hookSpecificOutput"]["permissionDecisionReason"] and "Objet : memory_atoms.foo (colonne)" in d["hookSpecificOutput"]["permissionDecisionReason"]' \
+  "yes"
+
+# --- psql -c '…' (guillemets simples, litteral efface avant 0.11.4) --------
+rm -f /tmp/mycelora-impact-reflexe-psql-c-sq /tmp/mycelora-reflexes-reflexe-psql-c-sq.jsonl
+assert_reflexe_json "reflexe-0114-psql-c-simple-quote-refus-ddl" "stdin-pre-psql-c-simple-quote.json" \
+  'd["hookSpecificOutput"]["permissionDecision"] == "deny" and "Objet : memory_atoms (table)" in d["hookSpecificOutput"]["permissionDecisionReason"] and "Objet : memory_atoms.foo (colonne)" in d["hookSpecificOutput"]["permissionDecisionReason"]' \
+  "yes"
+
+# --- ssh + docker exec psql -c \"ALTER…\" : geste DDL AVEC objets, plus le
+# refus infra aveugle ("vérifiez manuellement") ------------------------------
+rm -f /tmp/mycelora-impact-reflexe-ssh-psql-c-ddl /tmp/mycelora-reflexes-reflexe-ssh-psql-c-ddl.jsonl
+assert_reflexe_json "reflexe-0114-ssh-psql-c-ddl-objets-identifies-et-ligne-infra" "stdin-pre-ssh-psql-c-ddl.json" \
+  'd["hookSpecificOutput"]["permissionDecision"] == "deny" and "Objet : memory_atoms (table)" in d["hookSpecificOutput"]["permissionDecisionReason"] and "accès direct à la base de prod" in d["hookSpecificOutput"]["permissionDecisionReason"] and "infra:ssh_psql (" not in d["hookSpecificOutput"]["permissionDecisionReason"]' \
+  "yes"
+
+# --- Meme fil : un SELECT ssh + docker exec psql apres le DDL ssh = passage
+# (refus unique tenu, regression relevee par la revue adversariale) --------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+sshsel_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$sshsel_tmp/call.log"
+out_sshsel="$(reflexe_stdin stdin-pre-ssh-psql-select-meme-fil.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE")"
+if [ -z "$out_sshsel" ] && [ ! -f "$sshsel_tmp/call.log" ] && grep -q '"evt": "passage"' /tmp/mycelora-reflexes-reflexe-ssh-psql-c-ddl.jsonl 2>/dev/null; then
+  echo "PASS reflexe-0114-ssh-select-apres-ddl-meme-fil-passage"
+else
+  echo "FAIL reflexe-0114-ssh-select-apres-ddl-meme-fil-passage : stdout='$out_sshsel'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$sshsel_tmp"
+
+# --- grep -c "alter table" psql.log : psql hors du segment du -c = no-match
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+grepc_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$grepc_tmp/call.log"
+out_grepc="$(reflexe_stdin stdin-pre-grep-c-psql-log.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE")"
+if [ -z "$out_grepc" ] && [ ! -f "$grepc_tmp/call.log" ]; then
+  echo "PASS reflexe-0114-grep-c-psql-log-ne-declenche-pas"
+else
+  echo "FAIL reflexe-0114-grep-c-psql-log-ne-declenche-pas : stdout='$out_grepc'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$grepc_tmp"
+
+# --- Apostrophe impaire dans la commande (# l'admin) : le DDL reste vu ----
+rm -f /tmp/mycelora-impact-reflexe-psql-c-apostrophe /tmp/mycelora-reflexes-reflexe-psql-c-apostrophe.jsonl
+assert_reflexe_json "reflexe-0114-psql-c-apostrophe-impaire-refus" "stdin-pre-psql-c-apostrophe-impaire.json" \
+  'd["hookSpecificOutput"]["permissionDecision"] == "deny" and "Objet : memory_atoms (table)" in d["hookSpecificOutput"]["permissionDecisionReason"]' \
+  "yes"
+
+# --- psql -c "SELECT … 'alter table'" : un SELECT en ligne ne declenche pas -
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+sel_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$sel_tmp/call.log"
+out_sel="$(reflexe_stdin stdin-pre-psql-c-select-litteral.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE")"
+if [ -z "$out_sel" ] && [ ! -f "$sel_tmp/call.log" ]; then
+  echo "PASS reflexe-0114-psql-c-select-ne-declenche-pas"
+else
+  echo "FAIL reflexe-0114-psql-c-select-ne-declenche-pas : stdout='$out_sel'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$sel_tmp"
+
+# --- Desktop Commander start_process : DDL refuse, journal outil court -------
+rm -f /tmp/mycelora-impact-reflexe-dc-ddl /tmp/mycelora-reflexes-reflexe-dc-ddl.jsonl
+assert_reflexe_json "reflexe-0114-dc-start-process-ddl-refus" "stdin-pre-dc-ddl.json" \
+  'd["hookSpecificOutput"]["permissionDecision"] == "deny" and "Objet : memory_atoms (table)" in d["hookSpecificOutput"]["permissionDecisionReason"]' \
+  "yes"
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+if grep -q '"evt": "refus", "outil": "Desktop_Commander"' /tmp/mycelora-reflexes-reflexe-dc-ddl.jsonl 2>/dev/null; then
+  echo "PASS reflexe-0114-dc-journal-outil-court"
+else
+  echo "FAIL reflexe-0114-dc-journal-outil-court : $(cat /tmp/mycelora-reflexes-reflexe-dc-ddl.jsonl 2>/dev/null)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# --- Desktop Commander : rejeu identique = passage (refus unique) -----------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+dcp_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$dcp_tmp/call.log"
+out_dcp="$(reflexe_stdin stdin-pre-dc-ddl.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE")"
+if [ -z "$out_dcp" ] && [ ! -f "$dcp_tmp/call.log" ] && grep -q '"evt": "passage", "outil": "Desktop_Commander"' /tmp/mycelora-reflexes-reflexe-dc-ddl.jsonl 2>/dev/null; then
+  echo "PASS reflexe-0114-dc-rejeu-passage"
+else
+  echo "FAIL reflexe-0114-dc-rejeu-passage : stdout='$out_dcp'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$dcp_tmp"
+
+# --- Desktop Commander : commande ordinaire = no-match, aucun appel ---------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+dcn_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$dcn_tmp/call.log"
+out_dcn="$(reflexe_stdin stdin-pre-dc-no-match.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE")"
+if [ -z "$out_dcn" ] && [ ! -f "$dcn_tmp/call.log" ]; then
+  echo "PASS reflexe-0114-dc-no-match"
+else
+  echo "FAIL reflexe-0114-dc-no-match : stdout='$out_dcn'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$dcn_tmp"
+
+# --- Desktop Commander read_file (pas start_process) : hors perimetre -------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+dca_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$dca_tmp/call.log"
+: > /tmp/mycelora-hook.log
+out_dca="$(reflexe_stdin stdin-pre-dc-autre-outil.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE")"
+if [ -z "$out_dca" ] && [ ! -f "$dca_tmp/call.log" ] && grep -q 'skip-not-bash' /tmp/mycelora-hook.log; then
+  echo "PASS reflexe-0114-dc-autre-outil-hors-perimetre"
+else
+  echo "FAIL reflexe-0114-dc-autre-outil-hors-perimetre : stdout='$out_dca'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$dca_tmp"
+
+# --- PostToolUse Desktop Commander : jalon apres DDL execute ----------------
+rm -f /tmp/mycelora-reflexes-reflexe-post-dc-ddl.jsonl
+pdc_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$pdc_tmp/call.log"
+export MYCELORA_TEST_CURL_RESPONSE="$REFLEXE_IMPACT_RESPONSE"
+out_pdc="$(reflexe_stdin stdin-post-dc-ddl-executed.json | PATH="$FAKE_BIN_DIR:$PATH" "$POSTTOOLUSE")"
+printf '%s' "$out_pdc" > "$pdc_tmp/stdout.json"
+verdict_pdc="$(python3 - "$pdc_tmp/stdout.json" <<'PYEOF'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.loads(f.read())
+    r = d["hookSpecificOutput"]
+    ok = (r.get("hookEventName") == "PostToolUse" and "JALON D'IMPACT" in r.get("additionalContext", "")
+          and "table_gamma" in r.get("additionalContext", ""))
+    print("OK" if ok else "FAIL:contenu")
+except Exception as e:
+    print("FAIL:%s" % e)
+PYEOF
+)"
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+if [ "$verdict_pdc" = "OK" ] && grep -q '"evt": "jalon", "outil": "Desktop_Commander"' /tmp/mycelora-reflexes-reflexe-post-dc-ddl.jsonl 2>/dev/null; then
+  echo "PASS reflexe-0114-post-dc-jalon"
+else
+  echo "FAIL reflexe-0114-post-dc-jalon : $verdict_pdc / $(cat /tmp/mycelora-reflexes-reflexe-post-dc-ddl.jsonl 2>/dev/null)"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$pdc_tmp"
+
 # --- Cas obligatoire : passage au second geste sur le meme objet (dedup) --
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 dedup_tmp="$(mktemp -d)"

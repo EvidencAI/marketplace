@@ -41,7 +41,10 @@ cat > "$STDIN_FILE"
 # aucun python) : l'appeler ici ne rompt pas le chemin rapide.
 # ----------------------------------------------------------------------------
 TOOL_NAME="$(grep -o '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$STDIN_FILE" | head -n 1 | sed -E 's/.*"tool_name"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/')"
-if [ "$TOOL_NAME" != "Bash" ]; then
+# 0.11.4 : Bash OU Desktop Commander start_process (meme champ
+# tool_input.command, meme detection). Voir mycelora_outil_commande.
+OUTIL="$(mycelora_outil_commande "$TOOL_NAME")"
+if [ -z "$OUTIL" ]; then
   mycelora_log "pretooluse" "detect" 0 "skip-not-bash" 0
   exit 0
 fi
@@ -117,7 +120,7 @@ fi
 REPO_ROOT="$(mycelora_repo_root "$CWD")"
 DESARME="$(mycelora_reflexe_desarme "$REPO_ROOT")"
 if [ "$DESARME" = "1" ]; then
-  mycelora_reflexe_log "$SESSION_ID" "desarme" "Bash" "$OBJETS_JSON" "$EMPREINTE" "0"
+  mycelora_reflexe_log "$SESSION_ID" "desarme" "$OUTIL" "$OBJETS_JSON" "$EMPREINTE" "0"
   mycelora_log "pretooluse" "detect" "$DURATION_MS" "desarme" 0
   exit 0
 fi
@@ -156,7 +159,7 @@ PYEOF
 TOUS_DEJA_VUS="$(printf '%s' "$NOUVEAUX_JSON" | python3 -c "import json,sys; print('1' if json.load(sys.stdin).get('tous_deja_vus') else '0')" 2>/dev/null || echo 0)"
 
 if [ "$TOUS_DEJA_VUS" = "1" ]; then
-  mycelora_reflexe_log "$SESSION_ID" "passage" "Bash" "$OBJETS_JSON" "$EMPREINTE" "0"
+  mycelora_reflexe_log "$SESSION_ID" "passage" "$OUTIL" "$OBJETS_JSON" "$EMPREINTE" "0"
   mycelora_log "pretooluse" "detect" "$DURATION_MS" "passage" 0
   exit 0
 fi
@@ -290,14 +293,14 @@ except Exception:
 PYEOF
 fi
 
-mycelora_reflexe_log "$SESSION_ID" "refus" "Bash" "$OBJETS_JSON" "$EMPREINTE" "$RAPPORT_VIDE_FLAG" "$CARTE_AGE_JOURS"
+mycelora_reflexe_log "$SESSION_ID" "refus" "$OUTIL" "$OBJETS_JSON" "$EMPREINTE" "$RAPPORT_VIDE_FLAG" "$CARTE_AGE_JOURS"
 case "$LOOKUP_EVT" in
   lookup_timeout|lookup_erreur)
-    mycelora_reflexe_log "$SESSION_ID" "$LOOKUP_EVT" "Bash" "$OBJETS_JSON" "$EMPREINTE" "$RAPPORT_VIDE_FLAG"
+    mycelora_reflexe_log "$SESSION_ID" "$LOOKUP_EVT" "$OUTIL" "$OBJETS_JSON" "$EMPREINTE" "$RAPPORT_VIDE_FLAG"
     ;;
 esac
 if [ "$RAPPORT_VIDE_FLAG" = "1" ]; then
-  mycelora_reflexe_log "$SESSION_ID" "rapport_vide" "Bash" "$OBJETS_JSON" "$EMPREINTE" "1"
+  mycelora_reflexe_log "$SESSION_ID" "rapport_vide" "$OUTIL" "$OBJETS_JSON" "$EMPREINTE" "1"
 fi
 
 DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"

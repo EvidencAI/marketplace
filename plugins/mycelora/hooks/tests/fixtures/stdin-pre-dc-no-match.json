@@ -1,0 +1,13 @@
+{
+  "session_id": "reflexe-dc-no-match",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_reflexe-dc-no-match",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "mcp__remote-devices__Desktop_Commander__start_process",
+  "tool_input": {
+    "command": "cd /Users/x/repo && git status -sb && ls -la",
+    "timeout_ms": 20000
+  }
+}
