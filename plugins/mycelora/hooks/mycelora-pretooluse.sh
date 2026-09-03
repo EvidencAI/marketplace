@@ -95,16 +95,22 @@ OBJETS_JSON="$(printf '%s\n' "$FIELDS" | sed -n '10p')"
 # l'ouverture : cas normal, jamais une erreur visible — conséquence assumée :
 # aucun refus de geste structurant tant que le fil n'a pas ouvert, voir
 # .claude/v2-decisions/S-REFLEXES-6.md).
-mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
-if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
-  mycelora_log "pretooluse" "auth" 0 "sans-jeton" 0
+DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
+
+# 0.11.3 : la detection se juge AVANT le jeton. Quand ok=false, le python
+# ci-dessus rend un session_id vide et la resolution du jeton echouait
+# forcement : le journal ecrivait "auth sans-jeton" pour un simple no-match,
+# ce qui masquait le vrai cas sans jeton (observe le 02/09 sur un fil
+# marketplace ouvert). Un no-match ne coute aucun appel et n'a pas besoin
+# de jeton.
+if [ "$OK" != "1" ]; then
+  mycelora_log "pretooluse" "detect" "$DURATION_MS" "no-match" 0
   exit 0
 fi
 
-DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
-
-if [ "$OK" != "1" ]; then
-  mycelora_log "pretooluse" "detect" "$DURATION_MS" "no-match" 0
+mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
+if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
+  mycelora_log "pretooluse" "auth" 0 "sans-jeton" 0
   exit 0
 fi
 

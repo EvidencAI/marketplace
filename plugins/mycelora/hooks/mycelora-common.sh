@@ -653,8 +653,19 @@ RE_DROP_COLUMN = re.compile(r"drop\s+(?:column\s+)?(?:if\s+exists\s+)?[\"'`]?(\w
 RE_RENAME_COLUMN = re.compile(r"rename\s+column\s+[\"'`]?(\w+)", re.IGNORECASE)
 RE_EDGE_FOLDER = re.compile(r"supabase/functions/([a-zA-Z0-9_-]+)/")
 
+# 0.11.3 : la carte vive nomme les tables SANS schema ("session_hook_tokens",
+# jamais "public.session_hook_tokens"). Un DDL qualifie par le schema par
+# defaut ne resolvait donc rien (objet inconnu, rapport vide) et le rapport
+# l'etiquetait "(colonne)" a cause du point. On retire le prefixe "public."
+# seulement ; un autre schema (cron.job, vault.secrets) est garde tel quel,
+# il n'est pas dans la carte et reste lisible dans le rapport.
 def _nom(m):
-    return m.group(1).strip("\"'`") if m else None
+    if not m:
+        return None
+    nom = m.group(1).strip("\"'`")
+    if nom.lower().startswith("public."):
+        nom = nom[len("public."):]
+    return nom
 
 def extraire_objets(texte_nettoye, texte_brut, geste):
     objets = []
@@ -1025,7 +1036,14 @@ for o in objets:
     loc = local_resultats.get(o) or {}
     lu_local = loc.get("lu_par") or []
     ecrit_local = loc.get("ecrit_par") or []
-    type_txt = "colonne" if "." in o else "table"
+    # 0.11.3 : "schema.table" n'est pas une colonne. Le prefixe public. est
+    # deja retire a l'extraction ; pour un autre schema (cron.job), le
+    # premier segment est un schema Postgres connu, pas une table.
+    _SCHEMAS = ("public", "cron", "vault", "auth", "storage", "net", "extensions", "pg_catalog", "information_schema", "realtime", "supabase_functions")
+    if "." in o and o.split(".", 1)[0].lower() not in _SCHEMAS:
+        type_txt = "colonne"
+    else:
+        type_txt = "table"
 
     if lu_local or ecrit_local:
         lignes_objets.append(

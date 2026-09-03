@@ -1,0 +1,12 @@
+{
+  "session_id": "reflexe-no-match-sans-jeton",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-no-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_no_match_sans_jeton",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la /tmp"
+  }
+}

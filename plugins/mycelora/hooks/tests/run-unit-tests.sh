@@ -872,6 +872,14 @@ assert_reflexe_json "reflexe-pre-deny-alter-table" "stdin-pre-ddl-alter-table.js
   'd["hookSpecificOutput"]["hookEventName"] == "PreToolUse" and d["hookSpecificOutput"]["permissionDecision"] == "deny" and "memory_atoms" in d["hookSpecificOutput"]["permissionDecisionReason"] and "Lu par" in d["hookSpecificOutput"]["permissionDecisionReason"] and "Portée : changement de PRODUIT" in d["hookSpecificOutput"]["permissionDecisionReason"]' \
   "yes"
 
+# --- 0.11.3 : "public.memory_atoms" est normalise en "memory_atoms" (nom
+# de la carte vive), resolu par le serveur et etiquete (table), jamais
+# (colonne) ; la colonne memory_atoms.foo reste une colonne. --------------
+rm -f /tmp/mycelora-impact-reflexe-ddl-schema-public /tmp/mycelora-reflexes-reflexe-ddl-schema-public.jsonl
+assert_reflexe_json "reflexe-pre-schema-public-normalise-table" "stdin-pre-ddl-schema-public.json" \
+  'd["hookSpecificOutput"]["permissionDecision"] == "deny" and "Objet : memory_atoms (table)" in d["hookSpecificOutput"]["permissionDecisionReason"] and "Objet : memory_atoms.foo (colonne)" in d["hookSpecificOutput"]["permissionDecisionReason"] and "public.memory_atoms" not in d["hookSpecificOutput"]["permissionDecisionReason"]' \
+  "yes"
+
 # --- Cas obligatoire : passage au second geste sur le meme objet (dedup) --
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 dedup_tmp="$(mktemp -d)"
@@ -2372,6 +2380,28 @@ assert_sans_jeton "sans-jeton-userpromptsubmit" "userpromptsubmit" "mycelora-use
 assert_sans_jeton "sans-jeton-stop" "stop" "mycelora-stop.sh" "stdin-stop-sans-jeton.json"
 assert_sans_jeton "sans-jeton-pretooluse" "pretooluse" "mycelora-pretooluse.sh" "stdin-pre-sans-jeton.json" "yes"
 assert_sans_jeton "sans-jeton-posttooluse" "posttooluse" "mycelora-posttooluse.sh" "stdin-post-sans-jeton.json" "yes"
+
+# --- 0.11.3 : une commande SANS geste structurant (ls) sur un fil SANS jeton
+# se journalise "detect no-match", pas "auth sans-jeton" : la detection se
+# juge avant le jeton, sinon le vrai cas sans jeton est noye. ---------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+nm_tmp="$(mktemp -d)"
+(
+  unset CLAUDE_PLUGIN_OPTION_HOOK_KEY
+  export MYCELORA_TEST_CURL_LOG="$nm_tmp/call.log"
+  export PATH="$FAKE_BIN_DIR:$PATH"
+  reflexe_stdin "stdin-pre-no-match-sans-jeton.json" | "$PRETOOLUSE" > "$nm_tmp/stdout" 2>"$nm_tmp/stderr"
+)
+nm_rc=$?
+nm_last="$(tail -n 1 /tmp/mycelora-hook.log 2>/dev/null)"
+IFS=$'\t' read -r _ nm_hook nm_event _ nm_status _ <<< "$nm_last"
+if [ "$nm_rc" -eq 0 ] && [ -z "$(cat "$nm_tmp/stdout")" ] && [ ! -f "$nm_tmp/call.log" ] && [ "$nm_hook" = "pretooluse" ] && [ "$nm_event" = "detect" ] && [ "$nm_status" = "no-match" ]; then
+  echo "PASS no-match-avant-jeton-pretooluse"
+else
+  echo "FAIL no-match-avant-jeton-pretooluse : rc=$nm_rc, log='$nm_last', stdout='$(cat "$nm_tmp/stdout")'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$nm_tmp"
 
 # --- Jeton resolu via le cache v3 reel (pas la fausse valeur globale) : la
 # resolution end-to-end via un VRAI hook fonctionne (pas seulement en direct
