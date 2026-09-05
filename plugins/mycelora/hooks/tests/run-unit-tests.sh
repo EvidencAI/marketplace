@@ -934,6 +934,48 @@ else
 fi
 rm -rf "$grepc_tmp"
 
+# ============================================================================
+# 0.11.5 (05/09/2026) : SEGMENTATION SENSIBLE AUX GUILLEMETS ET AUX HEREDOCS,
+# ssh_psql gate par la tete du segment (non-executants exclus). Prouve en
+# reel le 05/09 sur ce depot : un grep dont le motif contient "docker
+# exec\|docker restart" etait refuse (\| pris pour un pipe), un python
+# heredoc portant « docker exec … psql » consommait le refus unique du fil.
+# ============================================================================
+for cas in "stdin-pre-0115-grep-docker-exec-psql.json:reflexe-0115-grep-docker-exec-psql-ne-declenche-pas" \
+           "stdin-pre-0115-grep-pipe-docker-restart.json:reflexe-0115-grep-pipe-docker-restart-ne-declenche-pas" \
+           "stdin-pre-0115-python-heredoc-docker-exec-psql.json:reflexe-0115-python-heredoc-docker-exec-psql-ne-declenche-pas"; do
+  fixture="${cas%%:*}"; nom="${cas#*:}"
+  session="$(python3 -c "import json; print(json.load(open('$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/$fixture'))['session_id'])")"
+  rm -f "/tmp/mycelora-impact-${session}" "/tmp/mycelora-reflexes-${session}.jsonl"
+  TOTAL_TESTS=$((TOTAL_TESTS+1))
+  nm_tmp="$(mktemp -d)"
+  export MYCELORA_TEST_CURL_LOG="$nm_tmp/call.log"
+  out_nm="$(reflexe_stdin "$fixture" | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE")"
+  if [ -z "$out_nm" ] && [ ! -f "$nm_tmp/call.log" ]; then
+    echo "PASS $nom"
+  else
+    echo "FAIL $nom : stdout='$out_nm'"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+  fi
+  rm -rf "$nm_tmp"
+done
+
+# --- grep en tete de ligne PUIS un vrai ssh+docker exec+psql derriere && :
+# le refus tient (segment par segment, le grep ne masque pas le ssh) -------
+rm -f /tmp/mycelora-impact-reflexe-0115-grep-puis-ssh-psql /tmp/mycelora-reflexes-reflexe-0115-grep-puis-ssh-psql.jsonl
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+gps_tmp="$(mktemp -d)"
+export MYCELORA_TEST_CURL_LOG="$gps_tmp/call.log"
+out_gps="$(reflexe_stdin stdin-pre-0115-grep-puis-ssh-psql.json | PATH="$FAKE_BIN_DIR:$PATH" "$PRETOOLUSE")"
+printf '%s' "$out_gps" > "$gps_tmp/stdout.json"
+if python3 -c "import json,sys; d=json.load(open('$gps_tmp/stdout.json')); sys.exit(0 if d['hookSpecificOutput']['permissionDecision']=='deny' and 'accès direct à la base de prod' in d['hookSpecificOutput']['permissionDecisionReason'] else 1)" 2>/dev/null; then
+  echo "PASS reflexe-0115-grep-puis-ssh-psql-refus-tenu"
+else
+  echo "FAIL reflexe-0115-grep-puis-ssh-psql-refus-tenu : stdout='$out_gps'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+rm -rf "$gps_tmp"
+
 # --- Apostrophe impaire dans la commande (# l'admin) : le DDL reste vu ----
 rm -f /tmp/mycelora-impact-reflexe-psql-c-apostrophe /tmp/mycelora-reflexes-reflexe-psql-c-apostrophe.jsonl
 assert_reflexe_json "reflexe-0114-psql-c-apostrophe-impaire-refus" "stdin-pre-psql-c-apostrophe-impaire.json" \

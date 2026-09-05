@@ -637,13 +637,134 @@ RE_ENVS_URL = re.compile(r"/envs\b", re.IGNORECASE)
 # brief) -- un gating de position aurait casse son propre cas d'usage
 # vise. Gap assume pour docker_restart/coolify_patch imbriques de la meme
 # facon via ssh (non observe dans ce depot), documente en v2-decisions.
+# 0.11.5 (05/09/2026) : la segmentation par regex ci-dessus (conservee pour
+# memoire) ignorait les GUILLEMETS et les HEREDOCS. Prouve en reel le 05/09
+# sur ce meme depot : `grep -n "docker exec\|docker restart plus tard" f`
+# etait refuse (le `\|` du motif grep pris pour un pipe shell, puis "docker
+# restart" en tete de faux segment), puis journalise en jalon "docker_restart
+# execute" par PostToolUse ; et un grep ou un python dont le TEXTE contient
+# « docker exec … psql » consommait le refus unique du fil (ssh_psql n'avait
+# aucun gating). Trois changements :
+#   1. `_segments_shell` decoupe en segments reels : un separateur entre
+#      guillemets simples ou doubles n'en est pas un, et le corps d'un
+#      heredoc (<<EOF … EOF, <<-, <<'EOF') appartient au segment de la
+#      commande qui l'ouvre (c'est de la DONNEE pour elle, pas des commandes).
+#   2. Chaque segment porte sa TETE : premier mot apres les affectations
+#      d'environnement (FOO=bar) et les enveloppes transparentes (sudo, env,
+#      nohup, time, command, exec), chemin retire (./x/grep -> grep).
+#   3. ssh_psql exige que la tete du segment qui porte "docker exec" ne soit
+#      pas un NON-EXECUTANT (grep, sed, echo, cat, python, git, ...) : ces
+#      commandes ne font que LIRE, AFFICHER ou COMPARER leur argument. Liste
+#      d'exclusion et non d'admission : un wrapper inconnu reste refuse (la
+#      forme reelle `ssh hote "docker exec -i … psql"` garde sa tete ssh).
+# Gap assume : `python3 - <<EOF` dont le corps lance ssh+psql par subprocess
+# est un python (non-executant) -> pas de refus. Documente en v2-decisions.
 RE_DEBUT_SEGMENT = re.compile(r"(?:\A|&&|\|\||;|\||\n)\s*")
+RE_HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+RE_AFFECTATION_ENV = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+ENVELOPPES_TRANSPARENTES = {"sudo", "env", "nohup", "time", "command", "exec", "builtin"}
+NON_EXECUTANTS = {
+    "grep", "egrep", "fgrep", "rg", "ag", "ack",
+    "sed", "awk", "gawk", "cut", "tr", "sort", "uniq", "wc", "head", "tail", "less", "more",
+    "echo", "printf", "cat", "tee", "diff", "cmp", "comm", "column", "fold", "fmt",
+    "python", "python3", "python2", "node", "perl", "ruby", "deno", "jq", "yq",
+    "git", "gh", "ls", "find", "fd", "mdfind", "md5", "md5sum", "shasum", "sha256sum",
+    "test", "[", "true", "false", "type", "which", "file", "stat", "open", "pbcopy", "pbpaste",
+}
+
+def _segments_shell(texte):
+    """Rend [(debut, fin, tete)] : segments reels d'une ligne de commande,
+    sensibles aux guillemets et aux heredocs. `tete` peut etre '' (segment
+    vide). Best-effort : pas un vrai parseur shell, mais suffisant pour ne
+    plus prendre un `\\|` de grep ou une ligne de heredoc pour un segment."""
+    n = len(texte)
+    debuts = [0]
+    i = 0
+    quote = None
+    while i < n:
+        c = texte[i]
+        if quote:
+            if c == "\\" and quote == '"' and i + 1 < n:
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            i += 1
+            continue
+        if c == "\\" and i + 1 < n:
+            i += 2
+            continue
+        if c in ("'", '"'):
+            quote = c
+            i += 1
+            continue
+        m = RE_HEREDOC.match(texte, i)
+        if m:
+            terminateur = m.group(2)
+            fin_ligne = texte.find("\n", m.end())
+            if fin_ligne == -1:
+                break
+            # Le corps court jusqu'a la ligne egale au terminateur (tabs
+            # tolerés pour <<-), ou jusqu'a la fin du texte.
+            j = fin_ligne + 1
+            while j < n:
+                fin = texte.find("\n", j)
+                ligne = texte[j:] if fin == -1 else texte[j:fin]
+                j = n if fin == -1 else fin + 1
+                if ligne.strip("\t") == terminateur:
+                    break
+            i = j
+            if i < n:
+                debuts.append(i)
+            continue
+        if texte.startswith("&&", i) or texte.startswith("||", i):
+            i += 2
+            debuts.append(i)
+            continue
+        if c in (";", "|", "\n"):
+            i += 1
+            debuts.append(i)
+            continue
+        i += 1
+    debuts = sorted(set(debuts))
+    segments = []
+    for k, d in enumerate(debuts):
+        f = debuts[k + 1] if k + 1 < len(debuts) else n
+        segments.append((d, f, _tete_segment(texte[d:f])))
+    return segments
+
+def _tete_segment(segment):
+    for mot in segment.split():
+        mot = mot.strip("\"'`()[]{},")
+        if not mot:
+            continue
+        if RE_AFFECTATION_ENV.match(mot):
+            continue
+        base = mot.rsplit("/", 1)[-1].lower()
+        if base in ENVELOPPES_TRANSPARENTES or base.startswith("-"):
+            continue
+        return base
+    return ""
 
 def _positions_debut_segment(texte):
-    return {m.end() for m in RE_DEBUT_SEGMENT.finditer(texte)}
+    positions = set()
+    for debut, fin, _tete in _segments_shell(texte):
+        reste = texte[debut:fin]
+        positions.add(debut + (len(reste) - len(reste.lstrip())))
+    return positions
+
+def _ssh_psql_execute(texte):
+    """Vrai si UN segment reel porte "docker exec … psql" ET n'est pas tenu
+    par un non-executant. Segment par segment (et non sur le texte entier)
+    pour qu'un grep en tete de ligne ne masque pas un vrai ssh+psql derriere
+    un &&, et inversement."""
+    for debut, fin, tete in _segments_shell(texte):
+        if RE_SSH_PSQL.search(texte[debut:fin]) and tete not in NON_EXECUTANTS:
+            return True
+    return False
 
 def detecter_infra(texte_brut):
-    if RE_SSH_PSQL.search(texte_brut):
+    if _ssh_psql_execute(texte_brut):
         return "ssh_psql"
 
     positions = _positions_debut_segment(texte_brut)

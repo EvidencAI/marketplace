@@ -1,0 +1,12 @@
+{
+  "session_id": "reflexe-0115-python-heredoc",
+  "transcript_path": "plugins/mycelora/hooks/tests/fixtures/transcript-session-start.jsonl",
+  "cwd": "REPO_ROOT_PLACEHOLDER",
+  "tool_use_id": "toolu_test_reflexe-0115-python-heredoc",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "python3 - <<'PY'\nimport subprocess\nsubprocess.run(['ssh','h','docker exec -i db psql -c 1'])\nPY"
+  }
+}
