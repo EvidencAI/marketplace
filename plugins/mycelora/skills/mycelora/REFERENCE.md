@@ -28,22 +28,34 @@ Dette technique (mono-tenant) : dans ce déploiement, toute valeur de `userId` q
 
 ---
 
-## 10 types d'atomes (heuristique de typage)
+## 6 types d'atomes (grille 2.1, heuristique de typage)
 
-| Type | Decay | Déclencheurs typiques |
-|------|-------|----------------------|
-| decision | 180j | "on part sur X", "décidé que" |
-| position | 180j | "je pense que", "notre position est" |
-| fact | 90j | fait vérifiable, info technique |
-| contradiction | 90j | "d'un côté... de l'autre", tension |
-| apprentissage | 90j | "j'ai appris que", "erreur: ne plus faire X" |
-| signal_externe | 60j | feedback, article, "on m'a dit que" |
-| reflexion | 60j | "je me demande si", question ouverte |
-| intention | 30j | "je vais", "prochaine étape" |
-| event | 30j | événement daté, "hier", "le 15 mars" |
-| contact | 365j | personne, relation, "Jean-Marc est le DG" |
+Source de vérité : `supabase/functions/_shared/grille-atomes.ts` (`TYPES_ATOME`,
+`DEFINITIONS_TYPE_ATOME`). Cette table en est le reflet, jamais l'original : si
+les deux divergent, c'est le module qui a raison.
 
-Ne PAS mapper mécaniquement. Analyser le contenu. En cas de doute, préférer le type avec la demi-vie la plus longue.
+| Type | Répond à | Portée naturelle | Périme par l'âge | Déclencheurs typiques |
+|------|----------|------------------|------------------|----------------------|
+| regle | comment agir ici : décision en vigueur, méthode, préférence, consigne | locale ou transverse | non | "on part sur X", "décidé que", "toujours faire ainsi" |
+| piege | ce qui échoue et pourquoi, payé au moins une fois | transverse | non | "j'ai appris que", "erreur : ne plus faire X" |
+| refute | ce qu'il ne faut plus croire | locale ou transverse | non | "en fait non", "c'était faux", démenti |
+| repere | où, qui, combien, comment c'est fait : pointeur, chiffre, contact, identifiant, fait de structure | locale | non | fait vérifiable, chiffre, chemin, "Jean-Marc est le DG" |
+| etat | où on en est, ce qui attend | locale | **oui** | "on en est là", "il reste à", prochaine étape |
+| non_affecte | ce qui n'entre dans aucune des cinq autres familles | locale | non | rien : c'est une pile de tri à la main, pas un choix |
+
+Ne PAS mapper mécaniquement. Analyser le contenu. `non_affecte` n'est pas un
+repli commode : un fil qui en produit surtout a mal classé. `etat` est le seul
+type que l'horloge périme ; les cinq autres sortent par remplacement, clôture,
+revue humaine ou filet d'usage.
+
+**Portée obligatoire pour `regle` et `refute`** : un atome de ces deux types
+sans `portee` est refusé. `perime_si` est optionnel partout : la condition qui
+rendra ce souvenir faux, en clair.
+
+Ancienne grille (`fact`, `decision`, `position`, `intention`, `event`,
+`contact`, `contradiction`, `signal_externe`, `apprentissage`, `reflexion`) :
+abandonnée. Les atomes déjà écrits sous ces types restent lisibles, mais aucun
+nouveau ne doit être créé avec.
 
 ---
 

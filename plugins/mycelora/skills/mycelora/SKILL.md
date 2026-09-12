@@ -2,7 +2,7 @@
 name: mycelora
 description: >
   Mémoire contextuelle et réflexive pour Claude. Graphe de connaissances avec
-  atomes (10 types), espaces (projets), profil utilisateur et neurone cross-insights.
+  atomes (6 types, grille 2.1), espaces (projets), profil utilisateur et neurone cross-insights.
   Déclencher pour : ouverture/clôture de fil, "mycelora in/out", "souviens-toi",
   "cherche dans ma mémoire", "mes espaces", "retiens que", "brief matinal",
   "analyse les tensions", ou toute référence à la mémoire persistante.
@@ -10,7 +10,7 @@ description: >
 
 # Mycelora — Mémoire contextuelle et réflexive
 
-Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil** (principes + portrait), **neurone** (cross-insights).
+Graphe de connaissances : **atomes** (6 types, grille 2.1), **espaces** (projets), **profil** (principes + portrait), **neurone** (cross-insights).
 
 ## QUICK REFERENCE
 
@@ -108,7 +108,16 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
    - 1000 à 1500 mots, la matière commande la longueur DANS cette bande. **LE CODEX EST BORNÉ** (décision du 31/08/2026) : il est lu à l'ouverture de CHAQUE conversation, sur toutes les surfaces, donc un codex qui enfle mange le contexte de tous tes fils. Sous ~10 000 caractères, il grandit et ne rétrécit que par retrait de lignes périmées. **AU-DESSUS de 10 000 caractères il entre en CONDENSATION** (le serveur bascule au même seuil) : tu le ramènes vers la cible en FUSIONNANT plusieurs lignes anciennes d'un même thème en UNE ligne dense qui porte TOUTES leurs dates (« - 12/08, 19/08 : ... »), jamais en supprimant une ligne. Tu réduis la LONGUEUR, jamais l'INFORMATION : une date présente dans l'ancien codex doit se retrouver dans le nouveau. Condense en priorité les lignes les plus anciennes et les plus détaillées, garde intactes celles des sept derniers jours ;
    - une même chose ne figure jamais dans deux sections. Depuis le 31/08 le serveur RETIRE la redite (première occurrence gardée) au lieu de refuser tout le codex, mais ne compte pas dessus pour ranger à ta place.
    Le serveur contrôle ce codex avec les MÊMES garde-fous que le modèle, sans exemption : taille minimale = 60 % de l'ancien MAIS jamais plus de 8 500 caractères (c'est ce plafond du plancher qui rend la condensation possible), et 60 % au moins des dates antérieures à la fenêtre de handovers conservées. S'il est refusé, l'ancien codex reste protégé et C'EST À TOI de resoumettre (S-CLOTURE-ASYNC, 31/08/2026 : le repli modèle du chemin client est SUPPRIMÉ, le frontier est l'unique rédacteur quand un pilote est présent).
-3. **Handover** : `mnemos_session_end(userId:USER_ALIAS, spaceId:L'ESPACE DU FIL, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
+3. **Atomes de clôture** (S-CLOT-1, sprint S-CLOTURE-2) : AVANT le handover et avec le MÊME `sessionId`, écris les souvenirs du fil par `mnemos_session_end_atoms(sessionId:L'IDENTIFIANT RENDU À L'OUVERTURE, atomes:[...])`, de 1 à 20 en UN seul appel. C'est le seul appel qui fait qu'un fil laisse une trace réutilisable ailleurs ; le handover, lui, ne se relit que dans cet espace.
+
+   **L'ordre compte** : les atomes d'abord, la clôture ensuite, pour que les souvenirs fraîchement écrits nourrissent le compte rendu.
+
+   Chaque entrée porte `type` et `contenu`, plus `portee` (**OBLIGATOIRE pour `regle` et `refute`**, sinon l'atome est refusé), et optionnellement `perime_si`. Le lot REFUSE `remplace` : remplacer un souvenir devenu faux passe par `create_atom_manual`, un à la fois. Types et critère d'écriture : voir § Création proactive d'atomes.
+
+   **Si tu oublies cet appel**, la clôture n'est PAS refusée : elle est acceptée et **marquée INCOMPLETE**, et sa réponse te rend le `sessionId` à reprendre. Rappelle alors `mnemos_session_end_atoms` dans la foulée. Une clôture incomplète est comptée : c'est une mesure, pas une punition, et elle dit exactement une chose, que ce fil n'a rien laissé.
+
+   **Si le fil n'a vraiment rien à retenir** (lecture seule, question ponctuelle), dis-le par le champ `sansAtomes` de `mnemos_session_end`, avec la justification en clair. Le vide déclaré et le vide oublié ne sont pas la même chose.
+4. **Handover** : `mnemos_session_end(userId:USER_ALIAS, spaceId:L'ESPACE DU FIL, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
 
    **`spaceId` EST OBLIGATOIRE À LA CLÔTURE, même si le fil a été ouvert avec.**
    Le serveur ne le retrouve pas tout seul : `sessionEnd` le résout depuis le
@@ -130,9 +139,9 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
    - `nonVerifie` : ce que tu affirmes sans preuve (non testé, non mesuré, repris d'un souvenir).
 
    **Une liste vide est refusée.** Si le fil n'a rien à mettre dans un champ, la justification EST l'entrée : `["aucune réfutation : fil de lecture seule"]`. Dates : cite la date de l'événement quand tu la connais. Ces champs sont rendus à l'ouverture du fil suivant dans l'ordre : prochaine action, réfutations, pièges, corrections, décisions, pointeurs, non vérifié, résumé ; et les réfutations et pièges alimentent la section « Réfuté ou abandonné » du codex.
-4. **Mémoire** : ton codex accepté est écrit par `session_end` (frontmatter `author: client`) et la clôture ne fait alors AUCUN appel modèle. **S'il est refusé, PLUS AUCUN repli modèle ne prend la main** (S-CLOTURE-ASYNC, décision du 31/08/2026) : l'ancien codex est conservé et la réponse porte les raisons du refus. La resoumission t'appartient : corrige le codex D'APRÈS CES RAISONS puis écris-le par `mnemos_write_memory(spaceId, type:"codex", content:...)`, qui applique désormais les MÊMES garde-fous déterministes que la clôture (canal contrôlé, plus une porte dérobée) et rend ses propres raisons en cas de nouveau refus. Aucun appel `read_memory` n'est nécessaire. Le repli modèle ne subsiste que pour les fils SANS pilote (clôtures automatiques), via une file de fond (`codex_regen_queue`, worker toutes les 5 min) — jamais sur ton chemin.
-5. **Vérifier** la réponse de l'outil. **`context_snapshot.source_listes` doit valoir `client`** (sinon tes listes n'ont pas été prises en compte : client trop ancien, ou `workSummary` sous le seuil). **Le bloc `codex` de la réponse doit porter `source:"client", accepte:true`** : s'il porte un refus, ANNONCE ses `raisons` à l'utilisateur, corrige le codex d'après elles et resoumets-le par `mnemos_write_memory(type:"codex")` (étape 4) ; ne relance JAMAIS `session_end` pour retenter — le handover est déjà écrit, et depuis S-CLOTURE-ASYNC le serveur rendrait de toute façon le handover existant tel quel (filet d'idempotence de 10 min, champ `rejeu: true`) sans rien réécrire. Si échec → voir REFERENCE.md § Gestion des erreurs.
-6. **Confirmer** : "Session clôturée. Handover (XXX mots) et codex mis à jour pour [espace]." — en citant le sort du codex (accepté du premier coup, ou resoumis après refus avec la raison).
+5. **Mémoire** : ton codex accepté est écrit par `session_end` (frontmatter `author: client`) et la clôture ne fait alors AUCUN appel modèle. **S'il est refusé, PLUS AUCUN repli modèle ne prend la main** (S-CLOTURE-ASYNC, décision du 31/08/2026) : l'ancien codex est conservé et la réponse porte les raisons du refus. La resoumission t'appartient : corrige le codex D'APRÈS CES RAISONS puis écris-le par `mnemos_write_memory(spaceId, type:"codex", content:...)`, qui applique désormais les MÊMES garde-fous déterministes que la clôture (canal contrôlé, plus une porte dérobée) et rend ses propres raisons en cas de nouveau refus. Aucun appel `read_memory` n'est nécessaire. Le repli modèle ne subsiste que pour les fils SANS pilote (clôtures automatiques), via une file de fond (`codex_regen_queue`, worker toutes les 5 min) — jamais sur ton chemin.
+6. **Vérifier** la réponse de l'outil. **`context_snapshot.source_listes` doit valoir `client`** (sinon tes listes n'ont pas été prises en compte : client trop ancien, ou `workSummary` sous le seuil). **Le bloc `codex` de la réponse doit porter `source:"client", accepte:true`** : s'il porte un refus, ANNONCE ses `raisons` à l'utilisateur, corrige le codex d'après elles et resoumets-le par `mnemos_write_memory(type:"codex")` (étape 5) ; ne relance JAMAIS `session_end` pour retenter — le handover est déjà écrit, et depuis S-CLOTURE-ASYNC le serveur rendrait de toute façon le handover existant tel quel (filet d'idempotence de 10 min, champ `rejeu: true`) sans rien réécrire. Si échec → voir REFERENCE.md § Gestion des erreurs.
+7. **Confirmer** : "Session clôturée. Handover (XXX mots) et codex mis à jour pour [espace]." — en citant le sort du codex (accepté du premier coup, ou resoumis après refus avec la raison).
 
 ---
 
@@ -142,14 +151,34 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
 Depuis le watcher v3 embarqué dans le plugin (0.8.0), la collecte est automatique : chaque échange est capturé puis transformé en atomes sans action de l'utilisateur (voir § Watcher v3 ci-dessous). La création proactive d'atomes ci-dessous reste recommandée pour les décisions importantes, mais n'est plus le seul canal d'alimentation de la mémoire.
 
 ### Création proactive d'atomes
-Si l'utilisateur exprime une décision, leçon, contradiction, intention, fait notable...
+Si l'utilisateur exprime une décision, une leçon payée, un démenti, un repère, un état...
 Le LLM **DOIT** créer l'atome via `create_atom_manual` et informer : "Je retiens ça comme [type]."
 DOIT, pas PEUT. "PEUT" = ne le fait jamais. L'utilisateur peut corriger le type ou refuser.
 
+**Le critère, unique : ce souvenir servira-t-il ailleurs ou plus tard ?** Un autre modèle, dans un autre fil, doit pouvoir s'en servir sans avoir lu celui-ci. Chaque souvenir est une phrase COMPLÈTE et AUTONOME : « Il a dit oui » ne vaut rien, « Le client X a validé le devis de 12 k€ le 12/09/2026 » vaut quelque chose.
+
+**Les six types de la grille 2.1** (il n'en existe aucun autre ; un type hors de cette liste est rabattu sur `non_affecte`). Source : `_shared/grille-atomes.ts`, jamais recopiée à la main :
+
+| type | la question à laquelle il répond | portée naturelle |
+|---|---|---|
+| `regle` | comment agir ici : décision en vigueur, méthode, préférence, consigne | locale ou transverse |
+| `piege` | ce qui échoue et pourquoi, payé au moins une fois | transverse |
+| `refute` | ce qu'il ne faut plus croire | locale ou transverse |
+| `repere` | où, qui, combien, comment c'est fait : pointeur, chiffre, contact, identifiant, fait de structure | locale |
+| `etat` | où on en est, ce qui attend | locale |
+| `non_affecte` | ce qui n'entre dans aucune des cinq autres familles : à voir et à traiter à la main | locale |
+
+`non_affecte` n'est pas un repli commode, c'est une pile de tri à la main : un fil qui en produit surtout a mal classé. `etat` est le seul type qui périme par l'âge ; les cinq autres sortent par remplacement, clôture ou revue humaine.
+
+**La portée** dit où le souvenir vaut : `locale` = seulement dans cet espace, `transverse` = dans tous. Elle est **OBLIGATOIRE pour `regle` et `refute`**, facultative ailleurs. Une méthode qui vaut partout est `transverse` ; une décision propre au dossier est `locale`.
+
+**`perime_si`**, optionnel : la condition qui rendra ce souvenir faux, en clair et en quelques mots. Un souvenir qui porte sa condition de péremption vaut mieux qu'un souvenir qu'il faudra deviner périmé.
+
 Exemples — ça mérite un atome :
-- "On part sur Next.js pour le site" → decision
-- "J'ai appris que les mails arrivent en double si le cron est < 1h" → apprentissage
-- "Jean-Marc quitte le projet fin avril" → event + contact
+- "On part sur Next.js pour le site" → `regle`, locale
+- "J'ai appris que les mails arrivent en double si le cron est < 1h" → `piege`, transverse
+- "Finalement le cron ne tourne pas la nuit, il tourne tous les quarts d'heure" → `refute`, locale
+- "Jean-Marc est le DG, il quitte le projet fin avril" → `repere`, locale
 Exemples — ça n'en mérite PAS :
 - "Oui, bonne idée" (acquiescement sans contenu)
 - "Passe-moi le fichier X" (instruction opérationnelle ponctuelle)
@@ -192,8 +221,8 @@ Trois réflexes automatiques, indépendants du protocole d'ouverture/clôture ci
 |-------------------|--------|
 | (auto au 1er message) | session_start (sans spaceId) |
 | mycelora in X, ouvre X | session_start(spaceId:X) |
-| mycelora out, fin de fil | session_end(workSummary, decisions, pendingTasks, ..., codex) — le codex est RÉDIGÉ par toi (protocole de clôture, étape 2) |
-| retiens que..., décision:, fait:, j'ai appris | create_atom_manual (type selon contenu) |
+| mycelora out, fin de fil | session_end_atoms(atomes) PUIS session_end(workSummary, decisions, pendingTasks, ..., codex) — dans cet ordre ; le codex est RÉDIGÉ par toi (protocole de clôture, étape 2) |
+| retiens que..., décision:, fait:, j'ai appris | create_atom_manual (type de la grille 2.1, + portee si regle ou refute) |
 | cherche Y, dans ma mémoire | search_atoms(query:Y) |
 | mes espaces, mes dossiers | list_spaces |
 | crée dossier X | create_space(name:X) |
