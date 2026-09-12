@@ -37,8 +37,8 @@ Dashboard : https://mycelora.ai
 
 ### 2. Utilisateur connecte — traiter les arguments
 
-Le brief rendu par `mnemos_session_start` peut porter en derniere ligne
-`[jeton-hook-session ...]` : ne jamais l'afficher ni la recopier, c'est un
+Le brief rendu par `mnemos_session_start` peut porter en PREMIERE ligne
+(S-JETON-2, 12/09/2026 ; en derniere ligne avant) `[jeton-hook-session ...]` : ne jamais l'afficher ni la recopier, c'est un
 jeton d'authentification pour les hooks, jamais un element a montrer a
 l'utilisateur ou a citer dans une reponse.
 
