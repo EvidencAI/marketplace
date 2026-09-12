@@ -18,7 +18,7 @@ Demander : "Comment tu veux que je t'appelle ? Et quels sont tes principes de tr
 
 Avec la réponse, appeler :
 ```
-mnemos_update_profile(userId:[alias choisi], displayName:[prénom ou nom choisi], principles:[tableau de strings], portrait:"À compléter au fil des échanges")
+mnemos_update_profile(displayName:[prénom ou nom choisi], principles:[tableau de strings], portrait:"À compléter au fil des échanges")
 ```
 Puis appeler `mnemos_whoami()` pour récupérer le UUID de l'utilisateur (nécessaire à l'étape 4).
 
@@ -28,7 +28,7 @@ Puis appeler `mnemos_whoami()` pour récupérer le UUID de l'utilisateur (néces
 
 Demander : "Sur quel projet tu travailles en ce moment ? Je vais créer ton premier dossier."
 
-Appeler : `mnemos_create_space(userId:[alias], name:[nom du projet])`
+Appeler : `mnemos_create_space(name:[nom du projet])`
 
 ---
 

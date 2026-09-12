@@ -2,7 +2,7 @@
 name: mycelora
 description: >
   Mémoire contextuelle et réflexive pour Claude. Graphe de connaissances avec
-  atomes (10 types), espaces (projets), profil utilisateur et neurone cross-insights.
+  atomes (6 types, grille 2.1), espaces (projets), profil utilisateur et neurone cross-insights.
   Déclencher pour : ouverture/clôture de fil, "mycelora in/out", "souviens-toi",
   "cherche dans ma mémoire", "mes espaces", "retiens que", "brief matinal",
   "analyse les tensions", ou toute référence à la mémoire persistante.
@@ -10,7 +10,7 @@ description: >
 
 # Mycelora — Mémoire contextuelle et réflexive
 
-Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil** (principes + portrait), **neurone** (cross-insights).
+Graphe de connaissances : **atomes** (6 types, grille 2.1), **espaces** (projets), **profil** (principes + portrait), **neurone** (cross-insights).
 
 ## QUICK REFERENCE
 
@@ -20,8 +20,8 @@ Graphe de connaissances : **atomes** (10 types), **espaces** (projets), **profil
 | Canal 1 | Plugin Cowork (skills + hooks automatiques, rien à configurer) |
 | Canal 2 | Connecteur claude.ai / Claude Desktop "Mycelora" (OAuth) → outils MCP mnemos_* |
 
-OUTILS : fournis par le connecteur custom claude.ai "Mycelora" (48 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
-USERID : userId:USER_ALIAS (identifiant court, ex: "stephane", défini à l'onboarding), toujours requis dans les appels MCP.
+OUTILS : fournis par le connecteur custom claude.ai "Mycelora" (51 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
+USERID : `userId` est IGNORÉ par le serveur (identité résolue depuis la connexion, S-USERID-1 du 25/08/2026, écrasement inconditionnel dans `mycelora-mcp/index.ts`) : OMETS-LE dans tous les appels, sur toutes les surfaces. Seule exception : le chemin de la clé de service (tâches planifiées avec `x-mnemos-key`), où il désigne le compte cible en UUID.
 Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, SYNC-MAIL-AGENDA-PROMPT.md
 
 ---
@@ -29,7 +29,7 @@ Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, SYNC-MAIL-AGEN
 ## POST-COMPACTION
 
 Après toute compression de contexte :
-1. Appeler `mnemos_get_profile(userId:USER_ALIAS)` puis suivre le protocole REPRISE POST-COMPRESSION ci-dessous
+1. Appeler `mnemos_get_profile()` puis suivre le protocole REPRISE POST-COMPRESSION ci-dessous
 2. RELIRE ce skill en entier
 3. Résumer ce qui a été retrouvé, demander confirmation
 NE JAMAIS continuer en se fiant uniquement au résumé compressé.
@@ -41,7 +41,7 @@ NE JAMAIS continuer en se fiant uniquement au résumé compressé.
 Triggers : "ouvre un fil", "mycelora in", "session start", "lance Mycelora", ou appel implicite du skill.
 
 ### Étape 1 : Boot
-Appeler `mnemos_session_start(userId:USER_ALIAS, sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé.
+Appeler `mnemos_session_start(sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé.
 
 **L'IDENTIFIANT DÉFINITIF DU FIL EST CELUI QUE LE SERVEUR REND, pas celui que tu as envoyé.** Depuis le fil 86 (26/08/2026), le serveur horodate lui-même le sessionId à l'heure LOCALE et l'annonce en tête du bloc d'ouverture, sur la ligne `Fil : ...`. Ne calcule pas l'heure toi-même, ne la devine pas : **relis cette ligne et reprends cet identifiant-là dans TOUS les appels suivants**, jusqu'à la clôture comprise.
 
@@ -72,8 +72,8 @@ Sur quel espace on travaille ?
 ```
 
 Le lien Dashboard DOIT apparaître à chaque ouverture de fil.
-Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(userId:USER_ALIAS, sessionId:L'IDENTIFIANT RENDU À L'ÉTAPE 1, spaceId:X)` pour attacher la session à l'espace. Le serveur rattache ce second appel au seau déjà ouvert, il n'en crée pas un second.
-Note : userId est TOUJOURS requis dans les appels MCP, sauf si la doc de l'outil le marque explicitement optionnel.
+Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(sessionId:L'IDENTIFIANT RENDU À L'ÉTAPE 1, spaceId:X)` pour attacher la session à l'espace. Le serveur rattache ce second appel au seau déjà ouvert, il n'en crée pas un second.
+Note : `userId` s'omet (voir QUICK REFERENCE) ; les exemples de ce skill ne le portent plus.
 Résolution nom : `list_spaces` + matching souple insensible à la casse.
 
 ---
@@ -85,8 +85,8 @@ Trigger : "continued from a previous conversation", "context compaction", résum
 CE SCÉNARIO EST CRITIQUE : le LLM a perdu ~70% du contexte. Sans ce protocole, la session reprend sans mémoire.
 
 1. Détecter l'espace actif dans le résumé compressé
-2. `mnemos_session_start(userId:USER_ALIAS, sessionId:"resume-AAAA-MM-JJ", spaceId:"[espace]")` — le serveur horodate, reprends l'identifiant qu'il rend
-3. `mnemos_read_memory(userId:USER_ALIAS, spaceId:"[espace]", type:"all")`
+2. `mnemos_session_start(sessionId:"resume-AAAA-MM-JJ", spaceId:"[espace]")` — le serveur horodate, reprends l'identifiant qu'il rend
+3. `mnemos_read_memory(spaceId:"[espace]", type:"all")`
 4. Croiser résumé compressé + mémoire Mycelora
 5. "Je reprends après compression. Voici ce que j'ai retrouvé : [résumé croisé]. On continue ?"
 
@@ -108,7 +108,16 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
    - 1000 à 1500 mots, la matière commande la longueur DANS cette bande. **LE CODEX EST BORNÉ** (décision du 31/08/2026) : il est lu à l'ouverture de CHAQUE conversation, sur toutes les surfaces, donc un codex qui enfle mange le contexte de tous tes fils. Sous ~10 000 caractères, il grandit et ne rétrécit que par retrait de lignes périmées. **AU-DESSUS de 10 000 caractères il entre en CONDENSATION** (le serveur bascule au même seuil) : tu le ramènes vers la cible en FUSIONNANT plusieurs lignes anciennes d'un même thème en UNE ligne dense qui porte TOUTES leurs dates (« - 12/08, 19/08 : ... »), jamais en supprimant une ligne. Tu réduis la LONGUEUR, jamais l'INFORMATION : une date présente dans l'ancien codex doit se retrouver dans le nouveau. Condense en priorité les lignes les plus anciennes et les plus détaillées, garde intactes celles des sept derniers jours ;
    - une même chose ne figure jamais dans deux sections. Depuis le 31/08 le serveur RETIRE la redite (première occurrence gardée) au lieu de refuser tout le codex, mais ne compte pas dessus pour ranger à ta place.
    Le serveur contrôle ce codex avec les MÊMES garde-fous que le modèle, sans exemption : taille minimale = 60 % de l'ancien MAIS jamais plus de 8 500 caractères (c'est ce plafond du plancher qui rend la condensation possible), et 60 % au moins des dates antérieures à la fenêtre de handovers conservées. S'il est refusé, l'ancien codex reste protégé et C'EST À TOI de resoumettre (S-CLOTURE-ASYNC, 31/08/2026 : le repli modèle du chemin client est SUPPRIMÉ, le frontier est l'unique rédacteur quand un pilote est présent).
-3. **Handover** : `mnemos_session_end(userId:USER_ALIAS, spaceId:L'ESPACE DU FIL, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
+3. **Atomes de clôture** (S-CLOT-1, sprint S-CLOTURE-2) : AVANT le handover et avec le MÊME `sessionId`, écris les souvenirs du fil par `mnemos_session_end_atoms(sessionId:L'IDENTIFIANT RENDU À L'OUVERTURE, atomes:[...])`, de 1 à 20 en UN seul appel. C'est le seul appel qui fait qu'un fil laisse une trace réutilisable ailleurs ; le handover, lui, ne se relit que dans cet espace.
+
+   **L'ordre compte** : les atomes d'abord, la clôture ensuite, pour que les souvenirs fraîchement écrits nourrissent le compte rendu.
+
+   Chaque entrée porte `type` et `contenu`, plus `portee` (**OBLIGATOIRE pour `regle` et `refute`**, sinon l'atome est refusé), et optionnellement `perime_si`. Le lot REFUSE `remplace` : remplacer un souvenir devenu faux passe par `create_atom_manual`, un à la fois. Types et critère d'écriture : voir § Création proactive d'atomes.
+
+   **Si tu oublies cet appel**, la clôture n'est PAS refusée : elle est acceptée et **marquée INCOMPLETE**, et sa réponse te rend le `sessionId` à reprendre. Rappelle alors `mnemos_session_end_atoms` dans la foulée. Une clôture incomplète est comptée : c'est une mesure, pas une punition, et elle dit exactement une chose, que ce fil n'a rien laissé.
+
+   **Si le fil n'a vraiment rien à retenir** (lecture seule, question ponctuelle), dis-le par le champ `sansAtomes` de `mnemos_session_end`, avec la justification en clair. Le vide déclaré et le vide oublié ne sont pas la même chose.
+4. **Handover** : `mnemos_session_end(spaceId:L'ESPACE DU FIL, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
 
    **`spaceId` EST OBLIGATOIRE À LA CLÔTURE, même si le fil a été ouvert avec.**
    Le serveur ne le retrouve pas tout seul : `sessionEnd` le résout depuis le
@@ -130,26 +139,46 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
    - `nonVerifie` : ce que tu affirmes sans preuve (non testé, non mesuré, repris d'un souvenir).
 
    **Une liste vide est refusée.** Si le fil n'a rien à mettre dans un champ, la justification EST l'entrée : `["aucune réfutation : fil de lecture seule"]`. Dates : cite la date de l'événement quand tu la connais. Ces champs sont rendus à l'ouverture du fil suivant dans l'ordre : prochaine action, réfutations, pièges, corrections, décisions, pointeurs, non vérifié, résumé ; et les réfutations et pièges alimentent la section « Réfuté ou abandonné » du codex.
-4. **Mémoire** : ton codex accepté est écrit par `session_end` (frontmatter `author: client`) et la clôture ne fait alors AUCUN appel modèle. **S'il est refusé, PLUS AUCUN repli modèle ne prend la main** (S-CLOTURE-ASYNC, décision du 31/08/2026) : l'ancien codex est conservé et la réponse porte les raisons du refus. La resoumission t'appartient : corrige le codex D'APRÈS CES RAISONS puis écris-le par `mnemos_write_memory(spaceId, type:"codex", content:...)`, qui applique désormais les MÊMES garde-fous déterministes que la clôture (canal contrôlé, plus une porte dérobée) et rend ses propres raisons en cas de nouveau refus. Aucun appel `read_memory` n'est nécessaire. Le repli modèle ne subsiste que pour les fils SANS pilote (clôtures automatiques), via une file de fond (`codex_regen_queue`, worker toutes les 5 min) — jamais sur ton chemin.
-5. **Vérifier** la réponse de l'outil. **`context_snapshot.source_listes` doit valoir `client`** (sinon tes listes n'ont pas été prises en compte : client trop ancien, ou `workSummary` sous le seuil). **Le bloc `codex` de la réponse doit porter `source:"client", accepte:true`** : s'il porte un refus, ANNONCE ses `raisons` à l'utilisateur, corrige le codex d'après elles et resoumets-le par `mnemos_write_memory(type:"codex")` (étape 4) ; ne relance JAMAIS `session_end` pour retenter — le handover est déjà écrit, et depuis S-CLOTURE-ASYNC le serveur rendrait de toute façon le handover existant tel quel (filet d'idempotence de 10 min, champ `rejeu: true`) sans rien réécrire. Si échec → voir REFERENCE.md § Gestion des erreurs.
-6. **Confirmer** : "Session clôturée. Handover (XXX mots) et codex mis à jour pour [espace]." — en citant le sort du codex (accepté du premier coup, ou resoumis après refus avec la raison).
+5. **Mémoire** : ton codex accepté est écrit par `session_end` (frontmatter `author: client`) et la clôture ne fait alors AUCUN appel modèle. **S'il est refusé, PLUS AUCUN repli modèle ne prend la main** (S-CLOTURE-ASYNC, décision du 31/08/2026) : l'ancien codex est conservé et la réponse porte les raisons du refus. La resoumission t'appartient : corrige le codex D'APRÈS CES RAISONS puis écris-le par `mnemos_write_memory(spaceId, type:"codex", content:...)`, qui applique désormais les MÊMES garde-fous déterministes que la clôture (canal contrôlé, plus une porte dérobée) et rend ses propres raisons en cas de nouveau refus. Aucun appel `read_memory` n'est nécessaire. Le repli modèle ne subsiste que pour les fils SANS pilote (clôtures automatiques), via une file de fond (`codex_regen_queue`, worker toutes les 5 min) — jamais sur ton chemin.
+6. **Vérifier** la réponse de l'outil. **`context_snapshot.source_listes` doit valoir `client`** (sinon tes listes n'ont pas été prises en compte : client trop ancien, ou `workSummary` sous le seuil). **Le bloc `codex` de la réponse doit porter `source:"client", accepte:true`** : s'il porte un refus, ANNONCE ses `raisons` à l'utilisateur, corrige le codex d'après elles et resoumets-le par `mnemos_write_memory(type:"codex")` (étape 5) ; ne relance JAMAIS `session_end` pour retenter — le handover est déjà écrit, et depuis S-CLOTURE-ASYNC le serveur rendrait de toute façon le handover existant tel quel (filet d'idempotence de 10 min, champ `rejeu: true`) sans rien réécrire. Si échec → voir REFERENCE.md § Gestion des erreurs.
+7. **Confirmer** : "Session clôturée. Handover (XXX mots) et codex mis à jour pour [espace]." — en citant le sort du codex (accepté du premier coup, ou resoumis après refus avec la raison).
 
 ---
 
 ## COMPORTEMENT AUTOMATIQUE
 
-### Extraction d'atomes
-Depuis le watcher v3 embarqué dans le plugin (0.8.0), la collecte est automatique : chaque échange est capturé puis transformé en atomes sans action de l'utilisateur (voir § Watcher v3 ci-dessous). La création proactive d'atomes ci-dessous reste recommandée pour les décisions importantes, mais n'est plus le seul canal d'alimentation de la mémoire.
+### Écriture des atomes : par toi, plus par extraction
+Depuis le 12/09/2026, l'extraction automatique d'atomes depuis les échanges est ÉTEINTE (cron `extract-from-exchanges` désactivé, décision D-2 du fil 117) : un petit modèle qui découpait les échanges produisait surtout du bruit. Les atomes d'un fil sont désormais écrits par le modèle du fil, c'est-à-dire par toi, à deux moments : en cours de fil quand un fait décisif tombe (§ Création proactive ci-dessous) et à la clôture, par lot (§ Protocole de clôture, étape 3). Ce qui n'est pas écrit par toi n'existe pas en mémoire. Le watcher collecte encore les échanges, mais pour d'autres usages (voir § Watcher v3).
 
 ### Création proactive d'atomes
-Si l'utilisateur exprime une décision, leçon, contradiction, intention, fait notable...
+Si l'utilisateur exprime une décision, une leçon payée, un démenti, un repère, un état...
 Le LLM **DOIT** créer l'atome via `create_atom_manual` et informer : "Je retiens ça comme [type]."
 DOIT, pas PEUT. "PEUT" = ne le fait jamais. L'utilisateur peut corriger le type ou refuser.
 
+**Le critère, unique : ce souvenir servira-t-il ailleurs ou plus tard ?** Un autre modèle, dans un autre fil, doit pouvoir s'en servir sans avoir lu celui-ci. Chaque souvenir est une phrase COMPLÈTE et AUTONOME : « Il a dit oui » ne vaut rien, « Le client X a validé le devis de 12 k€ le 12/09/2026 » vaut quelque chose.
+
+**Les six types de la grille 2.1** (il n'en existe aucun autre ; un type hors de cette liste est rabattu sur `non_affecte`). Source : `_shared/grille-atomes.ts`, jamais recopiée à la main :
+
+| type | la question à laquelle il répond | portée naturelle |
+|---|---|---|
+| `regle` | comment agir ici : décision en vigueur, méthode, préférence, consigne | locale ou transverse |
+| `piege` | ce qui échoue et pourquoi, payé au moins une fois | transverse |
+| `refute` | ce qu'il ne faut plus croire | locale ou transverse |
+| `repere` | où, qui, combien, comment c'est fait : pointeur, chiffre, contact, identifiant, fait de structure | locale |
+| `etat` | où on en est, ce qui attend | locale |
+| `non_affecte` | ce qui n'entre dans aucune des cinq autres familles : à voir et à traiter à la main | locale |
+
+`non_affecte` n'est pas un repli commode, c'est une pile de tri à la main : un fil qui en produit surtout a mal classé. `etat` est le seul type qui périme par l'âge ; les cinq autres sortent par remplacement, clôture ou revue humaine.
+
+**La portée** dit où le souvenir vaut : `locale` = seulement dans cet espace, `transverse` = dans tous. Elle est **OBLIGATOIRE pour `regle` et `refute`**, facultative ailleurs. Une méthode qui vaut partout est `transverse` ; une décision propre au dossier est `locale`.
+
+**`perime_si`**, optionnel : la condition qui rendra ce souvenir faux, en clair et en quelques mots. Un souvenir qui porte sa condition de péremption vaut mieux qu'un souvenir qu'il faudra deviner périmé.
+
 Exemples — ça mérite un atome :
-- "On part sur Next.js pour le site" → decision
-- "J'ai appris que les mails arrivent en double si le cron est < 1h" → apprentissage
-- "Jean-Marc quitte le projet fin avril" → event + contact
+- "On part sur Next.js pour le site" → `regle`, locale
+- "J'ai appris que les mails arrivent en double si le cron est < 1h" → `piege`, transverse
+- "Finalement le cron ne tourne pas la nuit, il tourne tous les quarts d'heure" → `refute`, locale
+- "Jean-Marc est le DG, il quitte le projet fin avril" → `repere`, locale
 Exemples — ça n'en mérite PAS :
 - "Oui, bonne idée" (acquiescement sans contenu)
 - "Passe-moi le fichier X" (instruction opérationnelle ponctuelle)
@@ -170,9 +199,16 @@ bien. Un fait par atome se retrouve mieux que trois faits dans un pavé.
 ### Watcher v3 (hooks du plugin)
 Deux hooks embarqués dans le plugin assurent la mémoire automatique, sans action de l'utilisateur :
 - **À chaque message utilisateur** : rappel contextuel FACE-A injecté avant la réponse.
-- **À la fin de chaque échange** : l'échange est collecté automatiquement pour alimenter les atomes.
+- **À la fin de chaque échange** : l'échange est collecté (`mnemos_log_exchange`) pour nourrir le compte rendu automatique des fils abandonnés (`auto-session-end`), l'état du fil et le réflexe de contradiction. Il n'alimente PLUS les atomes depuis le 12/09/2026.
 
 Un journal technique est tenu dans `/tmp/mycelora-hook.log` (diagnostic local). Les deux hooks ignorent les notifications système et les messages trop courts pour être utiles. Limite connue : un rappel planifié (wakeup) au libellé libre peut ne pas être filtré et apparaître comme un message utilisateur normal.
+
+### Deux surfaces, un seul skill
+Mycelora tourne sur DEUX surfaces avec le même skill et le même connecteur : **Cowork** (plugin installé, watcher v3 actif) et le **Chat claude.ai / Claude Desktop** (connecteur seul, pas de hooks, donc pas de watcher). Le skill ne sait pas où il tourne, et il n'a pas besoin de le savoir : la consigne est écrite pour être juste sur les deux.
+
+- **Ce qui est identique partout** : l'ouverture (`session_start`), la création proactive d'atomes, les atomes de clôture et le handover. Tu écris les souvenirs toi-même dans tous les cas.
+- **Le seul écart : le rappel contextuel.** Sur Cowork, le watcher l'injecte avant chaque réponse. Sur le Chat, rien n'arrive tout seul. Et même sur Cowork il peut manquer : rien de pertinent ce tour (bloc vide, normal), message filtré, ou watcher sans jeton (bloc d'ouverture trop gros pour le transcript, défaut connu du 12/09/2026). **Règle unique** : quand une question porte sur le contexte de l'utilisateur (ses projets, ses décisions, ses chiffres) et qu'aucun rappel n'est arrivé, appelle `mnemos_search_atoms` ou `mnemos_recall` toi-même avant de répondre. Un rappel demandé en trop coûte un appel ; un rappel manqué coûte une décision retranchée à l'aveugle.
+- **Ne jamais appeler `mnemos_log_exchange` toi-même** : c'est l'appel du watcher, et le serveur refuse un lot connecteur quand un lot hook existe pour le fil (règle D5). Sur le Chat, sans watcher, le fil n'est pas collecté : c'est connu et assumé, sa mémoire est ce que tu écris en atomes et à la clôture.
 
 ### Réflexes de senior (impact, état du fil, contradiction)
 
@@ -192,8 +228,8 @@ Trois réflexes automatiques, indépendants du protocole d'ouverture/clôture ci
 |-------------------|--------|
 | (auto au 1er message) | session_start (sans spaceId) |
 | mycelora in X, ouvre X | session_start(spaceId:X) |
-| mycelora out, fin de fil | session_end(workSummary, decisions, pendingTasks, ..., codex) — le codex est RÉDIGÉ par toi (protocole de clôture, étape 2) |
-| retiens que..., décision:, fait:, j'ai appris | create_atom_manual (type selon contenu) |
+| mycelora out, fin de fil | session_end_atoms(atomes) PUIS session_end(workSummary, decisions, pendingTasks, ..., codex) — dans cet ordre ; le codex est RÉDIGÉ par toi (protocole de clôture, étape 2) |
+| retiens que..., décision:, fait:, j'ai appris | create_atom_manual (type de la grille 2.1, + portee si regle ou refute) |
 | cherche Y, dans ma mémoire | search_atoms(query:Y) |
 | mes espaces, mes dossiers | list_spaces |
 | crée dossier X | create_space(name:X) |
