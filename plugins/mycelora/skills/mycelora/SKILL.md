@@ -20,8 +20,8 @@ Graphe de connaissances : **atomes** (6 types, grille 2.1), **espaces** (projets
 | Canal 1 | Plugin Cowork (skills + hooks automatiques, rien à configurer) |
 | Canal 2 | Connecteur claude.ai / Claude Desktop "Mycelora" (OAuth) → outils MCP mnemos_* |
 
-OUTILS : fournis par le connecteur custom claude.ai "Mycelora" (48 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
-USERID : userId:USER_ALIAS (identifiant court, ex: "stephane", défini à l'onboarding), toujours requis dans les appels MCP.
+OUTILS : fournis par le connecteur custom claude.ai "Mycelora" (51 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
+USERID : `userId` est IGNORÉ par le serveur (identité résolue depuis la connexion, S-USERID-1 du 25/08/2026, écrasement inconditionnel dans `mycelora-mcp/index.ts`) : OMETS-LE dans tous les appels, sur toutes les surfaces. Seule exception : le chemin de la clé de service (tâches planifiées avec `x-mnemos-key`), où il désigne le compte cible en UUID.
 Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, SYNC-MAIL-AGENDA-PROMPT.md
 
 ---
@@ -29,7 +29,7 @@ Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, SYNC-MAIL-AGEN
 ## POST-COMPACTION
 
 Après toute compression de contexte :
-1. Appeler `mnemos_get_profile(userId:USER_ALIAS)` puis suivre le protocole REPRISE POST-COMPRESSION ci-dessous
+1. Appeler `mnemos_get_profile()` puis suivre le protocole REPRISE POST-COMPRESSION ci-dessous
 2. RELIRE ce skill en entier
 3. Résumer ce qui a été retrouvé, demander confirmation
 NE JAMAIS continuer en se fiant uniquement au résumé compressé.
@@ -41,7 +41,7 @@ NE JAMAIS continuer en se fiant uniquement au résumé compressé.
 Triggers : "ouvre un fil", "mycelora in", "session start", "lance Mycelora", ou appel implicite du skill.
 
 ### Étape 1 : Boot
-Appeler `mnemos_session_start(userId:USER_ALIAS, sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé.
+Appeler `mnemos_session_start(sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé.
 
 **L'IDENTIFIANT DÉFINITIF DU FIL EST CELUI QUE LE SERVEUR REND, pas celui que tu as envoyé.** Depuis le fil 86 (26/08/2026), le serveur horodate lui-même le sessionId à l'heure LOCALE et l'annonce en tête du bloc d'ouverture, sur la ligne `Fil : ...`. Ne calcule pas l'heure toi-même, ne la devine pas : **relis cette ligne et reprends cet identifiant-là dans TOUS les appels suivants**, jusqu'à la clôture comprise.
 
@@ -72,8 +72,8 @@ Sur quel espace on travaille ?
 ```
 
 Le lien Dashboard DOIT apparaître à chaque ouverture de fil.
-Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(userId:USER_ALIAS, sessionId:L'IDENTIFIANT RENDU À L'ÉTAPE 1, spaceId:X)` pour attacher la session à l'espace. Le serveur rattache ce second appel au seau déjà ouvert, il n'en crée pas un second.
-Note : userId est TOUJOURS requis dans les appels MCP, sauf si la doc de l'outil le marque explicitement optionnel.
+Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(sessionId:L'IDENTIFIANT RENDU À L'ÉTAPE 1, spaceId:X)` pour attacher la session à l'espace. Le serveur rattache ce second appel au seau déjà ouvert, il n'en crée pas un second.
+Note : `userId` s'omet (voir QUICK REFERENCE) ; les exemples de ce skill ne le portent plus.
 Résolution nom : `list_spaces` + matching souple insensible à la casse.
 
 ---
@@ -85,8 +85,8 @@ Trigger : "continued from a previous conversation", "context compaction", résum
 CE SCÉNARIO EST CRITIQUE : le LLM a perdu ~70% du contexte. Sans ce protocole, la session reprend sans mémoire.
 
 1. Détecter l'espace actif dans le résumé compressé
-2. `mnemos_session_start(userId:USER_ALIAS, sessionId:"resume-AAAA-MM-JJ", spaceId:"[espace]")` — le serveur horodate, reprends l'identifiant qu'il rend
-3. `mnemos_read_memory(userId:USER_ALIAS, spaceId:"[espace]", type:"all")`
+2. `mnemos_session_start(sessionId:"resume-AAAA-MM-JJ", spaceId:"[espace]")` — le serveur horodate, reprends l'identifiant qu'il rend
+3. `mnemos_read_memory(spaceId:"[espace]", type:"all")`
 4. Croiser résumé compressé + mémoire Mycelora
 5. "Je reprends après compression. Voici ce que j'ai retrouvé : [résumé croisé]. On continue ?"
 
@@ -117,7 +117,7 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
    **Si tu oublies cet appel**, la clôture n'est PAS refusée : elle est acceptée et **marquée INCOMPLETE**, et sa réponse te rend le `sessionId` à reprendre. Rappelle alors `mnemos_session_end_atoms` dans la foulée. Une clôture incomplète est comptée : c'est une mesure, pas une punition, et elle dit exactement une chose, que ce fil n'a rien laissé.
 
    **Si le fil n'a vraiment rien à retenir** (lecture seule, question ponctuelle), dis-le par le champ `sansAtomes` de `mnemos_session_end`, avec la justification en clair. Le vide déclaré et le vide oublié ne sont pas la même chose.
-4. **Handover** : `mnemos_session_end(userId:USER_ALIAS, spaceId:L'ESPACE DU FIL, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
+4. **Handover** : `mnemos_session_end(spaceId:L'ESPACE DU FIL, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ...")`
 
    **`spaceId` EST OBLIGATOIRE À LA CLÔTURE, même si le fil a été ouvert avec.**
    Le serveur ne le retrouve pas tout seul : `sessionEnd` le résout depuis le
@@ -147,8 +147,8 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
 
 ## COMPORTEMENT AUTOMATIQUE
 
-### Extraction d'atomes
-Depuis le watcher v3 embarqué dans le plugin (0.8.0), la collecte est automatique : chaque échange est capturé puis transformé en atomes sans action de l'utilisateur (voir § Watcher v3 ci-dessous). La création proactive d'atomes ci-dessous reste recommandée pour les décisions importantes, mais n'est plus le seul canal d'alimentation de la mémoire.
+### Écriture des atomes : par toi, plus par extraction
+Depuis le 12/09/2026, l'extraction automatique d'atomes depuis les échanges est ÉTEINTE (cron `extract-from-exchanges` désactivé, décision D-2 du fil 117) : un petit modèle qui découpait les échanges produisait surtout du bruit. Les atomes d'un fil sont désormais écrits par le modèle du fil, c'est-à-dire par toi, à deux moments : en cours de fil quand un fait décisif tombe (§ Création proactive ci-dessous) et à la clôture, par lot (§ Protocole de clôture, étape 3). Ce qui n'est pas écrit par toi n'existe pas en mémoire. Le watcher collecte encore les échanges, mais pour d'autres usages (voir § Watcher v3).
 
 ### Création proactive d'atomes
 Si l'utilisateur exprime une décision, une leçon payée, un démenti, un repère, un état...
@@ -199,9 +199,16 @@ bien. Un fait par atome se retrouve mieux que trois faits dans un pavé.
 ### Watcher v3 (hooks du plugin)
 Deux hooks embarqués dans le plugin assurent la mémoire automatique, sans action de l'utilisateur :
 - **À chaque message utilisateur** : rappel contextuel FACE-A injecté avant la réponse.
-- **À la fin de chaque échange** : l'échange est collecté automatiquement pour alimenter les atomes.
+- **À la fin de chaque échange** : l'échange est collecté (`mnemos_log_exchange`) pour nourrir le compte rendu automatique des fils abandonnés (`auto-session-end`), l'état du fil et le réflexe de contradiction. Il n'alimente PLUS les atomes depuis le 12/09/2026.
 
 Un journal technique est tenu dans `/tmp/mycelora-hook.log` (diagnostic local). Les deux hooks ignorent les notifications système et les messages trop courts pour être utiles. Limite connue : un rappel planifié (wakeup) au libellé libre peut ne pas être filtré et apparaître comme un message utilisateur normal.
+
+### Deux surfaces, un seul skill
+Mycelora tourne sur DEUX surfaces avec le même skill et le même connecteur : **Cowork** (plugin installé, watcher v3 actif) et le **Chat claude.ai / Claude Desktop** (connecteur seul, pas de hooks, donc pas de watcher). Le skill ne sait pas où il tourne, et il n'a pas besoin de le savoir : la consigne est écrite pour être juste sur les deux.
+
+- **Ce qui est identique partout** : l'ouverture (`session_start`), la création proactive d'atomes, les atomes de clôture et le handover. Tu écris les souvenirs toi-même dans tous les cas.
+- **Le seul écart : le rappel contextuel.** Sur Cowork, le watcher l'injecte avant chaque réponse. Sur le Chat, rien n'arrive tout seul. Et même sur Cowork il peut manquer : rien de pertinent ce tour (bloc vide, normal), message filtré, ou watcher sans jeton (bloc d'ouverture trop gros pour le transcript, défaut connu du 12/09/2026). **Règle unique** : quand une question porte sur le contexte de l'utilisateur (ses projets, ses décisions, ses chiffres) et qu'aucun rappel n'est arrivé, appelle `mnemos_search_atoms` ou `mnemos_recall` toi-même avant de répondre. Un rappel demandé en trop coûte un appel ; un rappel manqué coûte une décision retranchée à l'aveugle.
+- **Ne jamais appeler `mnemos_log_exchange` toi-même** : c'est l'appel du watcher, et le serveur refuse un lot connecteur quand un lot hook existe pour le fil (règle D5). Sur le Chat, sans watcher, le fil n'est pas collecté : c'est connu et assumé, sa mémoire est ce que tu écris en atomes et à la clôture.
 
 ### Réflexes de senior (impact, état du fil, contradiction)
 

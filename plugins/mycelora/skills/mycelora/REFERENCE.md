@@ -17,10 +17,10 @@ Un utilisateur du plugin n'a jamais besoin d'une clé service_role Supabase : ce
 
 | Variable | Description | Exemple (Stéphane) |
 |----------|--------------|---------------------|
-| USER_ALIAS | Identifiant court passé en `userId` aux outils MCP `mnemos_*` | "stephane" |
+| USER_ALIAS | Identifiant court historique. `userId` est IGNORÉ par le serveur depuis S-USERID-1 (25/08/2026) : ne plus le passer, sauf chemin clé de service (UUID cible) | "stephane" |
 | SUPABASE_PROJECT_REF | Référence projet Supabase | hpbsowihyydzdnxuzoxs |
 
-- `mnemos_get_profile(userId:USER_ALIAS)` → principes, portrait, instructions
+- `mnemos_get_profile()` → principes, portrait, instructions
 
 Premier setup : voir ONBOARDING.md.
 
@@ -61,7 +61,7 @@ nouveau ne doit être créé avec.
 
 ## Outils MCP (référence rapide)
 
-48 outils exposés au LLM, regroupés par domaine :
+51 outils exposés au LLM, regroupés par domaine :
 
 **Espaces** (4) : list_spaces, create_space, update_space, suggest_spaces
 **Atomes** (4) : search_atoms, create_atom_manual, update_atom, toggle_pin_atom
@@ -215,7 +215,7 @@ Note : le cosine est inadapté pour détecter la supersession (vocabulaire oppos
 GC v2 pgvector : calculs de similarité côté PostgreSQL. 3 étapes : lifecycle insights, archivage obsolètes, déduplication (>=0.95 fusion auto, 0.85-0.95 rapport). Consolidation orphelins par espace. Fonctions SQL : `find_duplicate_atoms`, `find_orphan_atoms`, `find_orphan_pairs_by_space`.
 
 ### health_check (pg_cron quotidien 5h UTC)
-Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, purge connexions obsolètes. Aussi appelable manuellement : `mnemos_health_check(userId:USER_ALIAS, repair:true)`.
+Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, purge connexions obsolètes. Aussi appelable manuellement : `mnemos_health_check(repair:true)`.
 
 ---
 
