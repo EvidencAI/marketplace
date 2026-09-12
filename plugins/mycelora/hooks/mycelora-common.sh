@@ -86,7 +86,8 @@ mycelora_log() {
 # differents — cas de test, pas cas reel. hookToken suit la meme regle
 # ("dernier vu gagne", jamais efface par une absence).
 #
-# Format : {"v":3,"offset":<int>,"spaceId":"","sessionLabel":"","customTitle":"","hookToken":""}
+# Format : {"v":3,"offset":<int>,"spaceId":"","sessionLabel":"","customTitle":"","hookToken":"","attenteJeton":[]}
+# (attenteJeton ajoute par S-JETON-2, 12/09/2026, optionnel a la lecture)
 
 # _mycelora_charger_fil <session_id> <transcript_path>
 # Rend QUATRE lignes sur stdout, dans cet ordre, chacune eventuellement vide :
@@ -104,7 +105,12 @@ import json, os, re, sys
 
 cache_path, transcript_path = sys.argv[1], sys.argv[2]
 
-etat = {"v": 3, "offset": 0, "spaceId": "", "sessionLabel": "", "customTitle": "", "hookToken": ""}
+# S-JETON-2 (12/09/2026) : attenteJeton = identifiants (tool_use id) des
+# appels mnemos_session_start deja vus dont la reponse n'est pas encore
+# passee. Le jeton et la ligne « Fil : » ne sont acceptes QUE dans un
+# tool_result qui repond a l'un d'eux. Un cache v3 anterieur sans ce champ
+# reste valide (liste vide au chargement).
+etat = {"v": 3, "offset": 0, "spaceId": "", "sessionLabel": "", "customTitle": "", "hookToken": "", "attenteJeton": []}
 
 # Cache v3 uniquement. Une version anterieure (v2, v1, ou un fichier tronque
 # par un kill en pleine ecriture) est traitee comme absente : on repart de
@@ -117,6 +123,9 @@ if cache_path and os.path.exists(cache_path):
             for cle in ("offset", "spaceId", "sessionLabel", "customTitle", "hookToken"):
                 if cle in ancien:
                     etat[cle] = ancien[cle]
+            attente = ancien.get("attenteJeton")
+            if isinstance(attente, list):
+                etat["attenteJeton"] = [a for a in attente if isinstance(a, str)][-8:]
     except Exception:
         pass
 
@@ -235,7 +244,36 @@ if transcript_path and os.path.exists(transcript_path):
                                             morceaux.append(t)
                                 if morceaux:
                                     texte_bloc = "\n".join(morceaux)
-                            jeton = extraire_jeton(texte_bloc) if texte_bloc is not None else None
+                            # S-JETON-2 (12/09/2026) : GARDE PAR CORRELATION.
+                            # Un jeton (et la ligne « Fil : ») n'est retenu
+                            # que dans le tool_result qui REPOND a un appel
+                            # mnemos_session_start deja vu (tool_use_id dans
+                            # attenteJeton, rempli plus bas sur l'entree
+                            # assistant, toujours ecrite AVANT sa reponse).
+                            # Paye le 12/09 sur le fil 128 : un tail sur un
+                            # fichier de test a affiche une ligne de forme
+                            # jeton dans le resultat d'un autre outil, « le
+                            # dernier vu gagne » l'a prise pour le vrai
+                            # jeton, le serveur l'a rejetee (jeton-expire)
+                            # et le watcher est reste inerte jusqu'a une
+                            # reouverture. Une garde par co-presence du
+                            # bandeau MNEMOS IN a ete essayee et refutee le
+                            # meme soir (revue adversariale) : un cat des
+                            # exemplaires du depot porte les deux. Seule la
+                            # reponse a l'appel d'ouverture fait foi ; ceci
+                            # retranche la clause « pas de correlation par
+                            # tool_use_id » de S-REFLEXES-6 (02/09), decision
+                            # Stephane du 12/09.
+                            # Le jeton est en PREMIERE ligne du bloc cote
+                            # serveur depuis S-JETON-2 : il survit a l'apercu
+                            # 2 Ko de <persisted-output> que Cowork substitue
+                            # au-dela de ~50 Ko (la ligne « Fil : » aussi).
+                            tuid = block.get("tool_use_id")
+                            est_brief = isinstance(tuid, str) and tuid in etat["attenteJeton"]
+                            if est_brief:
+                                etat["attenteJeton"] = [a for a in etat["attenteJeton"] if a != tuid]
+                                modifie = True
+                            jeton = extraire_jeton(texte_bloc) if est_brief else None
                             if jeton:
                                 etat["hookToken"] = jeton
                                 modifie = True
@@ -244,12 +282,10 @@ if transcript_path and os.path.exists(transcript_path):
                             # l'appel, lu plus bas dans l'entree assistant, car
                             # le tool_result arrive toujours APRES l'appel dans
                             # le transcript (le dernier vu gagne, regle R1).
-                            # Garde : seulement dans un brief d'ouverture
-                            # (jeton present dans le meme bloc, ou bandeau
-                            # MNEMOS IN), jamais dans le resultat d'un autre
-                            # outil qui citerait une ligne « Fil : ... ».
-                            est_brief = bool(jeton) or (texte_bloc is not None and "MNEMOS IN" in texte_bloc)
-                            fil = extraire_fil(texte_bloc) if (est_brief and texte_bloc is not None) else None
+                            # Meme garde (correlation) : jamais dans le
+                            # resultat d'un autre outil qui citerait une
+                            # ligne « Fil : ... ».
+                            fil = extraire_fil(texte_bloc) if est_brief else None
                             if fil:
                                 etat["sessionLabel"] = fil
                                 modifie = True
@@ -267,6 +303,13 @@ if transcript_path and os.path.exists(transcript_path):
                     name = block.get("name", "")
                     if not (isinstance(name, str) and name.endswith("mnemos_session_start")):
                         continue
+                    # S-JETON-2 : l'id de cet appel autorise le PROCHAIN
+                    # tool_result qui le porte a livrer jeton et ligne Fil.
+                    # Borne a 8 (un fil rouvre rarement plus).
+                    tuid = block.get("id")
+                    if isinstance(tuid, str) and tuid and tuid not in etat["attenteJeton"]:
+                        etat["attenteJeton"] = (etat["attenteJeton"] + [tuid])[-8:]
+                        modifie = True
                     input_data = block.get("input") or {}
                     # spaceId : conserve TEL QUEL (peut etre un nom ou un UUID),
                     # contrat historique de cette resolution.

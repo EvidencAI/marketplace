@@ -2429,6 +2429,85 @@ else
 fi
 rm -f "/tmp/mycelora-hook-s-reflexes-6-jeton-string-0001.json"
 
+# --- S-JETON-2 (12/09/2026), garde du jeton PAR CORRELATION : un BRIEF
+# COMPLET (bandeau MNEMOS IN, ligne Fil, jeton en tete) recopie dans le
+# resultat d'un AUTRE outil (cat d'un exemplaire du depot) ne remplace NI le
+# jeton NI le label du vrai brief, parce que ce tool_result ne repond pas a
+# un appel mnemos_session_start. Paye sur le fil 128 (tail d'un fichier de
+# test, watcher detourne en silence) ; la garde par co-presence du bandeau a
+# ete refutee le meme soir (l'exemplaire porte les deux).
+# Contre-epreuve par mutation : remplacer `est_brief = isinstance(tuid, str)
+# and tuid in etat["attenteJeton"]` par `est_brief = True` rend
+# mk_sess_FIXTUREPARASITE0002 et le label exemplaire-essai ici. -------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+PARASITE_TRANSCRIPT="$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/transcript-s-jeton-2-parasite-autre-outil.jsonl"
+rm -f "/tmp/mycelora-hook-s-jeton-2-parasite-0001.json"
+parasite_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "s-jeton-2-parasite-0001" "$PARASITE_TRANSCRIPT"
+)"
+parasite_label="$(printf '%s\n' "$parasite_out" | sed -n '2p')"
+parasite_token="$(printf '%s\n' "$parasite_out" | sed -n '4p')"
+rm -f "/tmp/mycelora-hook-s-jeton-2-parasite-0001.json"
+if [ "$parasite_token" = "mk_sess_FIXTUREVRAI0001" ] && [ "$parasite_label" = "cowork-2026-09-12-2204-mycelora" ]; then
+  echo "PASS s-jeton-2-ligne-jeton-parasite-autre-outil-ignoree"
+else
+  echo "FAIL s-jeton-2-ligne-jeton-parasite-autre-outil-ignoree : token=$parasite_token label=$parasite_label"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# --- S-JETON-2, correlation ENTRE DEUX PASSES : l'entree assistant (appel
+# mnemos_session_start) est lue a une passe, le tool_result qui y repond a la
+# passe suivante (cas reel : un hook tourne entre les deux ecritures). L'id
+# d'appel doit survivre dans le cache (attenteJeton) entre les passes.
+# Mutation qui rougit : ne pas persister attenteJeton dans le cache (ou ne
+# pas le recharger) rend un token vide a la passe 2. ------------------------
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+deuxpasses_transcript="$(mktemp /tmp/mycelora-test-deuxpasses.XXXXXX)"
+rm -f "/tmp/mycelora-hook-s-jeton-2-deuxpasses-0001.json"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_deuxpasses","name":"mcp__Mycelora_OAuth__mnemos_session_start","input":{"sessionId":"sess-deuxpasses","spaceId":"space-deuxpasses"}}]}}\n' > "$deuxpasses_transcript"
+deuxpasses_pass1="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "s-jeton-2-deuxpasses-0001" "$deuxpasses_transcript"
+)"
+deuxpasses_pass1_token="$(printf '%s\n' "$deuxpasses_pass1" | sed -n '4p')"
+printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_deuxpasses","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_DEUXPASSES0001\\n═══ MNEMOS IN ═══\\nFil : cowork-2026-09-12-2300-deuxpasses\\n"}]}]}}\n' >> "$deuxpasses_transcript"
+deuxpasses_pass2="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "s-jeton-2-deuxpasses-0001" "$deuxpasses_transcript"
+)"
+deuxpasses_pass2_token="$(printf '%s\n' "$deuxpasses_pass2" | sed -n '4p')"
+deuxpasses_pass2_label="$(printf '%s\n' "$deuxpasses_pass2" | sed -n '2p')"
+deuxpasses_cache_attente="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1])).get("attenteJeton",[])))' "/tmp/mycelora-hook-s-jeton-2-deuxpasses-0001.json" 2>/dev/null)"
+rm -f "/tmp/mycelora-hook-s-jeton-2-deuxpasses-0001.json" "$deuxpasses_transcript"
+if [ -z "$deuxpasses_pass1_token" ] && [ "$deuxpasses_pass2_token" = "mk_sess_DEUXPASSES0001" ] && [ "$deuxpasses_pass2_label" = "cowork-2026-09-12-2300-deuxpasses" ] && [ "$deuxpasses_cache_attente" = "0" ]; then
+  echo "PASS s-jeton-2-correlation-appel-et-reponse-en-deux-passes"
+else
+  echo "FAIL s-jeton-2-correlation-appel-et-reponse-en-deux-passes : pass1='$deuxpasses_pass1_token' pass2='$deuxpasses_pass2_token' label='$deuxpasses_pass2_label' attente_restante='$deuxpasses_cache_attente'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# --- S-JETON-2, le cas vise : bloc d'ouverture persiste HORS transcript par
+# Cowork (au-dela de ~50 Ko), le tool_result ne porte plus qu'un apercu
+# <persisted-output> des 2 premiers Ko. Avec le jeton en PREMIERE ligne cote
+# serveur, jeton ET bandeau tiennent dans l'apercu : le hook doit les lire. --
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+PERSISTE_TRANSCRIPT="$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/transcript-s-jeton-2-persisted-output-apercu.jsonl"
+rm -f "/tmp/mycelora-hook-s-jeton-2-persiste-0001.json"
+persiste_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "s-jeton-2-persiste-0001" "$PERSISTE_TRANSCRIPT"
+)"
+persiste_label="$(printf '%s\n' "$persiste_out" | sed -n '2p')"
+persiste_token="$(printf '%s\n' "$persiste_out" | sed -n '4p')"
+rm -f "/tmp/mycelora-hook-s-jeton-2-persiste-0001.json"
+if [ "$persiste_token" = "mk_sess_FIXTURETETE0003" ] && [ "$persiste_label" = "cowork-2026-09-12-2204-mycelora" ]; then
+  echo "PASS s-jeton-2-jeton-en-tete-lu-dans-apercu-persisted-output"
+else
+  echo "FAIL s-jeton-2-jeton-en-tete-lu-dans-apercu-persisted-output : token=$persiste_token label=$persiste_label"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
 # --- mycelora_resolve_hook_token : les trois priorites du contrat figé, plus
 # le cas explicite du DoD (zip substitue ET jeton de session presents en
 # meme temps -> le substitue gagne). -----------------------------------------
@@ -2488,13 +2567,14 @@ rm -f "$zip_cache"
 
 # --- Offset : une ligne de transcript NON terminee par "\n" (ecriture en
 # cours) ne doit jamais etre consommee a moitie ; completee, elle est extraite
-# au passage suivant. Fixture construite par printf SANS retour final. ------
+# au passage suivant. Fixture construite par printf SANS retour final.
+# S-JETON-2 : le bloc porte le bandeau MNEMOS IN, exige par la garde du jeton. -
 offset_session="s-reflexes-6-offset-partiel"
 offset_cache="/tmp/mycelora-hook-${offset_session}.json"
 offset_transcript="$(mktemp /tmp/mycelora-test-offset-transcript.XXXXXX)"
 rm -f "$offset_cache"
 printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_offset","name":"mnemos_session_start","input":{"sessionId":"sess-offset","spaceId":"space-offset"}}]}}\n' > "$offset_transcript"
-printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_offset","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_OFFSETPARTIEL_0"}]}]}}' >> "$offset_transcript"
+printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_offset","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_OFFSETPARTIEL_0\\nMNEMOS IN"}]}]}}' >> "$offset_transcript"
 # PAS de "\n" final ici : simule une ligne en cours d'ecriture.
 
 TOTAL_TESTS=$((TOTAL_TESTS+1))
