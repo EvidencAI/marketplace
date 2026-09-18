@@ -60,7 +60,7 @@ CFGEOF
   echo "$http_code" "$curl_rc" "$resp_file"
 }
 
-# Cas 1: mnemos_recall
+# Cas 1: mycelora_recall
 test_recall() {
   local body_file resp_file http_code curl_rc
   body_file="$(mktemp /tmp/mycelora-integ-body.XXXXXX)"
@@ -106,7 +106,7 @@ PYEOF
   return 0
 }
 
-# Cas 2: mnemos_log_exchange
+# Cas 2: mycelora_log_exchange
 test_log_exchange() {
   local body_file resp_file http_code curl_rc session_id
   session_id="smoke-s3-$(python3 -c 'import time; print(int(time.time()))')"

@@ -141,7 +141,7 @@ assert() {
 EOF
   fi
 
-  # Ecrire le corps de reponse pour mnemos_log_exchange
+  # Ecrire le corps de reponse pour mycelora_log_exchange
   local log_exchange_response="$temp_dir/log_exchange_response.json"
   cat > "$log_exchange_response" <<'EOF'
 {"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\"success\": true, \"sessionId\": \"whatever\"}"}]},"id":1}
@@ -234,7 +234,7 @@ EOF
         ;;
     esac
 
-    # Vérifier les arguments pour mnemos_recall
+    # Vérifier les arguments pour mycelora_recall
     if [ "$tool_name" = "mycelora_recall" ]; then
       local user_id
       user_id="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('userId', ''))" < "$capture_body")"
@@ -243,7 +243,7 @@ EOF
         return 1
       fi
 
-      # Vérifier le query pour mnemos_recall
+      # Vérifier le query pour mycelora_recall
       local query
       query="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('query', ''))" < "$capture_body")"
       
@@ -261,7 +261,7 @@ EOF
         fi
       fi
 
-      # Vérifier le spaceId pour mnemos_recall
+      # Vérifier le spaceId pour mycelora_recall
       local space_id
       space_id="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('spaceId', ''))" < "$capture_body")"
       
@@ -279,7 +279,7 @@ EOF
         fi
       fi
     elif [ "$tool_name" = "mycelora_log_exchange" ]; then
-      # Vérifier les arguments pour mnemos_log_exchange
+      # Vérifier les arguments pour mycelora_log_exchange
       local user_message
       user_message="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('userMessage', ''))" < "$capture_body")"
       
@@ -810,7 +810,7 @@ reflexe_stdin() {
 PRETOOLUSE="$REPO_ROOT/plugins/mycelora/hooks/mycelora-pretooluse.sh"
 POSTTOOLUSE="$REPO_ROOT/plugins/mycelora/hooks/mycelora-posttooluse.sh"
 
-# Reponse canned mnemos_impact_lookup (contrat REEL de S-REFLEXES-1,
+# Reponse canned mycelora_impact_lookup (contrat REEL de S-REFLEXES-1,
 # ImpactLookupResult : objets est un TABLEAU {identifiant,inconnu,lignes},
 # pas un Record — verifie sur carte.ts/tools.ts le 02/09, distinct de la
 # forme simplifiee donnee en amorce de cette story). memory_atoms connu (une
@@ -2253,7 +2253,7 @@ rm -f "$c5_journal"
 # max(refus_entries, key=lambda e: e.get("t") or "") levait un TypeError
 # NON attrape (comparaison str/int) qui tuait le bloc python AVANT
 # json.dump(payload, ...), laissait BODY_FILE vide, et empechait la purge
-# a chaque Stop suivant (gel silencieux de tout mnemos_log_exchange du
+# a chaque Stop suivant (gel silencieux de tout mycelora_log_exchange du
 # fil). Le hook doit terminer proprement, envoyer TOUTES les lignes dans
 # "reflexes" (la ligne poison n'est PAS exclue du tableau, seulement de la
 # logique question_humain), et taguer le dernier refus VALIDE (t et evt
@@ -2485,7 +2485,7 @@ rm -f "/tmp/mycelora-hook-s-reflexes-6-jeton-string-0001.json"
 # COMPLET (bandeau MNEMOS IN, ligne Fil, jeton en tete) recopie dans le
 # resultat d'un AUTRE outil (cat d'un exemplaire du depot) ne remplace NI le
 # jeton NI le label du vrai brief, parce que ce tool_result ne repond pas a
-# un appel mnemos_session_start. Paye sur le fil 128 (tail d'un fichier de
+# un appel mycelora_session_start. Paye sur le fil 128 (tail d'un fichier de
 # test, watcher detourne en silence) ; la garde par co-presence du bandeau a
 # ete refutee le meme soir (l'exemplaire porte les deux).
 # Contre-epreuve par mutation : remplacer `est_brief = isinstance(tuid, str)
@@ -2509,7 +2509,7 @@ else
 fi
 
 # --- S-JETON-2, correlation ENTRE DEUX PASSES : l'entree assistant (appel
-# mnemos_session_start) est lue a une passe, le tool_result qui y repond a la
+# mycelora_session_start) est lue a une passe, le tool_result qui y repond a la
 # passe suivante (cas reel : un hook tourne entre les deux ecritures). L'id
 # d'appel doit survivre dans le cache (attenteJeton) entre les passes.
 # Mutation qui rougit : ne pas persister attenteJeton dans le cache (ou ne
@@ -2701,7 +2701,7 @@ else
 fi
 rm -f "$offset_cache" "$offset_transcript"
 
-# --- Chaque hook, cas sans-jeton : transcript sans mnemos_session_start ->
+# --- Chaque hook, cas sans-jeton : transcript sans mycelora_session_start ->
 # exit 0, AUCUN appel curl, log "auth"/"sans-jeton"/duree 0 litterale. Unset
 # LOCAL de CLAUDE_PLUGIN_OPTION_HOOK_KEY (sous-shell) : sinon la fausse valeur
 # globale (priorite 1, tests pre-existants) masquerait le cas reel. ---------
@@ -2818,7 +2818,7 @@ rm -rf "$ups_jeton_tmp"
 # Le transcript associe contient un vrai message user en tete
 # ("peux-tu demarrer la session mnemos...") et l'assistant final
 # correspondant a last_assistant_message : le hook trouve un echange non
-# vide et appelle reellement mnemos_log_exchange. -----------------------------
+# vide et appelle reellement mycelora_log_exchange. -----------------------------
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 stop_bearer_tmp="$(mktemp -d)"
 cat > "$stop_bearer_tmp/resp.json" <<'EOF'
@@ -2912,7 +2912,7 @@ rm -rf "$stop401_tmp"
 export MYCELORA_TEST_CURL_HTTP_CODE="200"
 
 # --- PreToolUse : jeton resolu (cache v3 reel) mais 401/jeton_session_expire
-# sur le LOOKUP (mnemos_impact_lookup) -> refuse quand meme (deny inchange,
+# sur le LOOKUP (mycelora_impact_lookup) -> refuse quand meme (deny inchange,
 # rapport vide assumé -- brief section 5, NE PAS toucher la logique de refus
 # elle-meme). -----------------------------------------------------------------
 rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"

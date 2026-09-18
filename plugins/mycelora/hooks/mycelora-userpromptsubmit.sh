@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hook UserPromptSubmit : filtre les prompts, resout le spaceId, appelle
-# mnemos_recall sur l'edge, recopie le bloc FACE-A tel quel sur stdout.
+# mycelora_recall sur l'edge, recopie le bloc FACE-A tel quel sur stdout.
 # Sortie stdout = texte brut uniquement, jamais de JSON. exit 0 dans tous
 # les cas (succes, filtre, erreur reseau, JSON invalide, exception python).
 

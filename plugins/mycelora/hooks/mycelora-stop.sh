@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hook Stop : retrouve le dernier message utilisateur reel dans le
-# transcript, filtre les notifications systeme, appelle mnemos_log_exchange
+# transcript, filtre les notifications systeme, appelle mycelora_log_exchange
 # sur l'edge en fire-and-forget. AUCUNE sortie stdout, jamais. exit 0 dans
 # tous les cas.
 
@@ -348,7 +348,7 @@ if reflexes_path:
         #    BODY_FILE restait vide, curl envoyait un corps vide, la reponse
         #    non-2xx empechait la purge, et CHAQUE Stop suivant recrashait a
         #    l'identique sur la meme ligne empoisonnee (gel silencieux de
-        #    tout mnemos_log_exchange du fil, pas seulement reflexes). Les
+        #    tout mycelora_log_exchange du fil, pas seulement reflexes). Les
         #    entrees dont "evt" ou "t" ne sont pas des chaines sont
         #    desormais exclues de CETTE logique (pas du tableau "reflexes"
         #    envoye, qui les garde toutes) avant tout calcul.

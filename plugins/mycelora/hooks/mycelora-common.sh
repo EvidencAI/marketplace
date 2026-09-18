@@ -57,7 +57,7 @@ mycelora_log() {
 # interne du fil (recu sur stdin) et ses etiquettes lisibles (dans le
 # transcript). Il en resout TROIS en une seule passe :
 #
-#   spaceId      : input.spaceId du dernier tool_use mnemos_session_start.
+#   spaceId      : input.spaceId du dernier tool_use mycelora_session_start.
 #   sessionLabel : input.sessionId du MEME appel. C'est le nom technique qui
 #                  se retrouvera dans handovers.session_id a la cloture ;
 #                  il rend exact l'appariement lots / compte rendu, aujourd'hui
@@ -106,7 +106,7 @@ import json, os, re, sys
 cache_path, transcript_path = sys.argv[1], sys.argv[2]
 
 # S-JETON-2 (12/09/2026) : attenteJeton = identifiants (tool_use id) des
-# appels mnemos_session_start deja vus dont la reponse n'est pas encore
+# appels mycelora_session_start deja vus dont la reponse n'est pas encore
 # passee. Le jeton et la ligne « Fil : » ne sont acceptes QUE dans un
 # tool_result qui repond a l'un d'eux. Un cache v3 anterieur sans ce champ
 # reste valide (liste vide au chargement).
@@ -139,7 +139,7 @@ def propre(valeur):
 
 
 # S-REFLEXES-6 : le jeton de session hook voyage dans le TEXTE du brief rendu
-# par mnemos_session_start (le tool_result), sur une ligne dediee. Fonction
+# par mycelora_session_start (le tool_result), sur une ligne dediee. Fonction
 # PURE, testee isolement et par mutation (regle 8bis).
 _RE_JETON = re.compile(r"^\[jeton-hook-session[^\]]*\][ \t]+(mk_sess_[A-Za-z0-9_-]+)[ \t]*$", re.MULTILINE)
 
@@ -155,7 +155,7 @@ def extraire_jeton(texte):
 
 # Correctif du 02/09/2026 soir (fil cowork-2026-09-02-2147-mycelora) : depuis
 # le fil 86 (26/08), le serveur HORODATE lui-meme le sessionId envoye a
-# mnemos_session_start et annonce l'identifiant DEFINITIF sur la ligne
+# mycelora_session_start et annonce l'identifiant DEFINITIF sur la ligne
 # « Fil : ... » du brief (tool_result). C'est cet identifiant-la, pas celui
 # de l'appel, qui signe le handover a la cloture. sessionLabel etait lu dans
 # input.sessionId de l'appel : l'alias (session_aliases.session_label)
@@ -219,7 +219,7 @@ if transcript_path and os.path.exists(transcript_path):
                     continue
 
                 # Resultat d'outil : c'est ICI, dans le texte du tool_result
-                # de mnemos_session_start, que voyage le jeton hook (pas dans
+                # de mycelora_session_start, que voyage le jeton hook (pas dans
                 # l'appel type=assistant ci-dessous). PAS de correlation par
                 # tool_use_id (contrat figé S-REFLEXES-6) : on regarde juste
                 # si un bloc tool_result de cette entree porte la ligne
@@ -247,7 +247,7 @@ if transcript_path and os.path.exists(transcript_path):
                             # S-JETON-2 (12/09/2026) : GARDE PAR CORRELATION.
                             # Un jeton (et la ligne « Fil : ») n'est retenu
                             # que dans le tool_result qui REPOND a un appel
-                            # mnemos_session_start deja vu (tool_use_id dans
+                            # mycelora_session_start deja vu (tool_use_id dans
                             # attenteJeton, rempli plus bas sur l'entree
                             # assistant, toujours ecrite AVANT sa reponse).
                             # Paye le 12/09 sur le fil 128 : un tail sur un
@@ -399,9 +399,9 @@ mycelora_resolve_hook_token() {
 # (code de retour de curl).
 # timeout_secondes (S-REFLEXES-2, 02/09/2026) : optionnel, defaut 5 (contrat
 # historique inchange pour les appelants existants qui ne le passent pas).
-# mnemos_impact_lookup se donne un budget de 4 s (mesure du 29/08 : 3,2-3,65 s
-# par appel depuis un conteneur Cowork), distinct des 5 s de mnemos_recall/
-# mnemos_log_exchange.
+# mycelora_impact_lookup se donne un budget de 4 s (mesure du 29/08 : 3,2-3,65 s
+# par appel depuis un conteneur Cowork), distinct des 5 s de mycelora_recall/
+# mycelora_log_exchange.
 # Securite obligatoire : le jeton ne doit JAMAIS apparaitre en argument sur
 # la ligne de commande curl (visible dans `ps aux`). Utiliser un fichier de
 # config curl temporaire (-K), cree via heredoc bash (jamais via echo/printf
@@ -1145,7 +1145,7 @@ PYEOF
 }
 
 # mycelora_reflexe_lookup_serveur <space_id> <objets_json> <out_resp_path> <cfgfile> <curl_resp_file>
-# Construit le corps JSON-RPC mnemos_impact_lookup, appelle mycelora_curl_post
+# Construit le corps JSON-RPC mycelora_impact_lookup, appelle mycelora_curl_post
 # avec un budget de 4 s, ecrit la reponse brute (ou {} en echec) dans
 # out_resp_path. Definit MYCELORA_REFLEXE_LOOKUP_EVT ("" si ok,
 # "lookup_timeout" ou "lookup_erreur" sinon) — fail-open : jamais bloquant,
@@ -1203,7 +1203,7 @@ PYEOF
 }
 
 # mycelora_reflexe_construire_rapport <objets_json> <geste> <sous_type> <uid_valeur> <fichier_lu> <lookup_evt> <local_json_path> <server_json_path> <out_report_path> <out_meta_path>
-# Combine grep local + reponse serveur (mnemos_impact_lookup) en un rapport
+# Combine grep local + reponse serveur (mycelora_impact_lookup) en un rapport
 # texte (contrat FIGÉ, brief section 4.2) et un meta {"rapport_vide":bool,
 # "lookup_evt":str}.
 mycelora_reflexe_construire_rapport() {
