@@ -49,6 +49,32 @@ if [ -n "$CFG_FILE" ] && [ -n "${MYCELORA_TEST_CAPTURE_CFG:-}" ]; then
   cp "$CFG_FILE" "$MYCELORA_TEST_CAPTURE_CFG" 2>/dev/null || true
 fi
 
+# T1 (C2, S-PROPRE-1-L3-PLG) : journal GLOBAL des noms d'outils
+# (params.name) envoyes au serveur par les hooks, INDEPENDANT de
+# MYCELORA_TEST_CAPTURE_BODY et de toute variable d'env par test. Chemin
+# derive de l'emplacement du script lui-meme (le faux curl vit dans
+# $FAKE_BIN_DIR) pour ne dependre d'aucune variable qu'un test pourrait
+# unset. Place AVANT les sorties anticipees (SHOULD_FAIL) pour ne rien
+# perdre ; ne fait jamais echouer le faux curl (|| true).
+NAMES_LOG="$(dirname "$0")/noms-outils.log"
+if [ -n "$BODY_SRC" ]; then
+  case "$BODY_SRC" in
+    @*)
+      _nom_outil="$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    print(d.get("params", {}).get("name", "ILLISIBLE"))
+except Exception:
+    print("ILLISIBLE")
+' "${BODY_SRC#@}" 2>/dev/null)"
+      [ -n "$_nom_outil" ] || _nom_outil="ILLISIBLE"
+      echo "$_nom_outil" >> "$NAMES_LOG" 2>/dev/null || true
+      ;;
+  esac
+fi
+
 if [ "$SHOULD_FAIL" = "1" ]; then
   exit 7
 fi
@@ -65,6 +91,10 @@ printf '%s' "$HTTP_CODE"
 exit 0
 EOF
 chmod +x "$FAKE_CURL_SCRIPT"
+
+# T1 : journal global des noms d'outils, initialise/vide juste apres la
+# creation du premier faux curl.
+: > "$FAKE_BIN_DIR/noms-outils.log"
 
 # S-REFLEXES-6 (02/09/2026) : jeton de session hook. Les 93 tests ECRITS
 # AVANT cette story ne connaissent pas le jeton et doivent continuer d'agir
@@ -1349,6 +1379,24 @@ fi
 if [ -n "$CFG_FILE" ] && [ -n "${MYCELORA_TEST_CAPTURE_CFG:-}" ]; then
   cp "$CFG_FILE" "$MYCELORA_TEST_CAPTURE_CFG" 2>/dev/null || true
 fi
+NAMES_LOG="$(dirname "$0")/noms-outils.log"
+if [ -n "$BODY_SRC" ]; then
+  case "$BODY_SRC" in
+    @*)
+      _nom_outil="$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    print(d.get("params", {}).get("name", "ILLISIBLE"))
+except Exception:
+    print("ILLISIBLE")
+' "${BODY_SRC#@}" 2>/dev/null)"
+      [ -n "$_nom_outil" ] || _nom_outil="ILLISIBLE"
+      echo "$_nom_outil" >> "$NAMES_LOG" 2>/dev/null || true
+      ;;
+  esac
+fi
 if [ "$SHOULD_FAIL" = "1" ]; then
   exit 7
 fi
@@ -1363,6 +1411,10 @@ printf '%s' "$HTTP_CODE"
 exit 0
 EOF
 chmod +x "$FAKE_BIN_DIR/curl"
+# T1 : marqueur de restauration, pour prouver qu'au moins un nom journalise
+# est POSTERIEUR a ce point (sinon T1 resterait vert sur la seule premiere
+# partie de la suite).
+echo "--- RESTAURATION FAUX CURL ---" >> "$FAKE_BIN_DIR/noms-outils.log"
 if [ "$verdict_timeout" = "OK" ] && [ "$journal_a_lookup_timeout" = "1" ]; then
   echo "PASS reflexe-pre-fail-open-serveur-muet"
 else
@@ -2508,6 +2560,49 @@ else
   FAILED_TESTS=$((FAILED_TESTS+1))
 fi
 
+# --- T2 (C2, S-PROPRE-1-L3-PLG) : capture du jeton, RUPTURE FRANCHE. Meme
+# brief (jeton en premiere ligne du tool_result, ligne "Fil : ..."), deux
+# transcripts qui ne different QUE par le nom d'outil de l'appel d'ouverture :
+# mcp__Mycelora_OAuth__mycelora_session_start (nom nouveau, temoin positif)
+# puis mcp__Mycelora_OAuth__mnemos_session_start (ancien nom, doit rendre
+# jeton ET label vides). Les DEUX volets dans le MEME test : le temoin
+# positif prouve que le vide du volet ancien-nom n'est pas un transcript
+# illisible. Choix : input SANS sessionId ni spaceId dans les deux
+# transcripts, pour que le label ne puisse venir QUE de la ligne
+# "Fil : ..." (jamais de input.sessionId), afin que le volet ancien-nom soit
+# net (sinon son label vide viendrait aussi de l'absence de sessionId, pas
+# seulement du nom refuse). Mutation qui doit rougir : common.sh
+# endswith("mnemos_session_start") (M4, volet nouveau-nom) ou
+# endswith(("mycelora_session_start", "mnemos_session_start")) (M5, volet
+# ancien-nom : l'alias serait detecte).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+t2_nouveau_transcript="$(mktemp /tmp/mycelora-test-t2-nouveau.XXXXXX)"
+t2_ancien_transcript="$(mktemp /tmp/mycelora-test-t2-ancien.XXXXXX)"
+rm -f "/tmp/mycelora-hook-t2-rupture-nouveau-0001.json" "/tmp/mycelora-hook-t2-rupture-ancien-0001.json"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_t2_nouveau","name":"mcp__Mycelora_OAuth__mycelora_session_start","input":{}}]}}\n' > "$t2_nouveau_transcript"
+printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_t2_nouveau","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_T2RUPTUREFRANCHE01\\nFil : cowork-2026-09-18-t2-rupture-franche\\n"}]}]}}\n' >> "$t2_nouveau_transcript"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_t2_ancien","name":"mcp__Mycelora_OAuth__mnemos_session_start","input":{}}]}}\n' > "$t2_ancien_transcript"
+printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_t2_ancien","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_T2RUPTUREFRANCHE01\\nFil : cowork-2026-09-18-t2-rupture-franche\\n"}]}]}}\n' >> "$t2_ancien_transcript"
+t2_nouveau_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "t2-rupture-nouveau-0001" "$t2_nouveau_transcript"
+)"
+t2_nouveau_label="$(printf '%s\n' "$t2_nouveau_out" | sed -n '2p')"
+t2_nouveau_token="$(printf '%s\n' "$t2_nouveau_out" | sed -n '4p')"
+t2_ancien_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "t2-rupture-ancien-0001" "$t2_ancien_transcript"
+)"
+t2_ancien_label="$(printf '%s\n' "$t2_ancien_out" | sed -n '2p')"
+t2_ancien_token="$(printf '%s\n' "$t2_ancien_out" | sed -n '4p')"
+rm -f "/tmp/mycelora-hook-t2-rupture-nouveau-0001.json" "/tmp/mycelora-hook-t2-rupture-ancien-0001.json" "$t2_nouveau_transcript" "$t2_ancien_transcript"
+if [ "$t2_nouveau_token" = "mk_sess_T2RUPTUREFRANCHE01" ] && [ "$t2_nouveau_label" = "cowork-2026-09-18-t2-rupture-franche" ] && [ "$t2_ancien_token" = "" ] && [ "$t2_ancien_label" = "" ]; then
+  echo "PASS capture-jeton-rupture-franche-ancien-nom-refuse"
+else
+  echo "FAIL capture-jeton-rupture-franche-ancien-nom-refuse : nouveau_token='$t2_nouveau_token' nouveau_label='$t2_nouveau_label' ancien_token='$t2_ancien_token' ancien_label='$t2_ancien_label'"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
 # --- mycelora_resolve_hook_token : les trois priorites du contrat figé, plus
 # le cas explicite du DoD (zip substitue ET jeton de session presents en
 # meme temps -> le substitue gagne). -----------------------------------------
@@ -2961,6 +3056,57 @@ rm -f /tmp/mycelora-hook-s-reflexes-6-*.json
 rm -f /tmp/mycelora-reflexes-*.jsonl /tmp/mycelora-impact-* "$REFLEXE_IMPACT_RESPONSE" "$REPO_ROOT/.carte-perimee" "$REPO_ROOT/.mycelora-reflexes-off"
 unset MYCELORA_TEST_CAPTURE_BODY
 export MYCELORA_TEST_CURL_HTTP_CODE="200"
+
+# --- T1 (C2, S-PROPRE-1-L3-PLG) : noms d'outils REELLEMENT envoyes au
+# serveur, sur TOUTE la suite (journal global ecrit par les DEUX generateurs
+# du faux curl, independant de MYCELORA_TEST_CAPTURE_BODY). Assertion sur
+# valeur EXACTE (regle 8bis, jamais une simple recherche d'absence) :
+# l'ensemble trie-dedoublonne des noms journalises (hors marqueur de
+# restauration) doit etre EXACTEMENT {mycelora_impact_lookup,
+# mycelora_log_exchange, mycelora_recall}, le marqueur de restauration du
+# faux curl doit apparaitre UNE SEULE fois, et au moins un nom journalise
+# doit lui etre POSTERIEUR (sinon ce test resterait vert sur la seule
+# premiere partie de la suite, avant la restauration qui suit le cas
+# "fail-open sur serveur muet"). $FAKE_BIN_DIR n'est jamais supprime par le
+# reste du script : le journal est lisible ici.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+NAMES_LOG_FILE="$FAKE_BIN_DIR/noms-outils.log"
+noms_verdict="$(python3 - "$NAMES_LOG_FILE" <<'PYEOF'
+import sys
+
+chemin = sys.argv[1]
+MARQUEUR = "--- RESTAURATION FAUX CURL ---"
+try:
+    with open(chemin, encoding="utf-8") as f:
+        lignes = [l.rstrip("\n") for l in f if l.strip()]
+except Exception as e:
+    print("FAIL:lecture impossible: %s" % e)
+    sys.exit(0)
+
+marqueur_positions = [i for i, l in enumerate(lignes) if l == MARQUEUR]
+noms = [l for l in lignes if l != MARQUEUR]
+ensemble = sorted(set(noms))
+attendu = ["mycelora_impact_lookup", "mycelora_log_exchange", "mycelora_recall"]
+
+apres_marqueur = False
+if len(marqueur_positions) == 1:
+    pos = marqueur_positions[0]
+    apres_marqueur = any(i > pos and l != MARQUEUR for i, l in enumerate(lignes))
+
+ok = (ensemble == attendu) and (len(marqueur_positions) == 1) and apres_marqueur
+if ok:
+    print("OK")
+else:
+    print("FAIL:ensemble=%r marqueurs=%d apres_marqueur=%s total_lignes=%d" % (
+        ensemble, len(marqueur_positions), apres_marqueur, len(lignes)))
+PYEOF
+)"
+if [ "$noms_verdict" = "OK" ]; then
+  echo "PASS noms-outils-envoyes-au-serveur-exactement-mycelora"
+else
+  echo "FAIL noms-outils-envoyes-au-serveur-exactement-mycelora : $noms_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
 
 # Compter les tests passés a partir des compteurs reels (pas un grep sur le
 # code source du script).
