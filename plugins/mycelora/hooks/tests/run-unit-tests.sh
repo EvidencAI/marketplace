@@ -191,21 +191,21 @@ EOF
     
     case "$test_name" in
       mycelora-stop-*)
-        if [ "$tool_name" != "mnemos_log_exchange" ]; then
-          echo "FAIL $test_name : expected tool name 'mnemos_log_exchange', got '$tool_name'"
+        if [ "$tool_name" != "mycelora_log_exchange" ]; then
+          echo "FAIL $test_name : expected tool name 'mycelora_log_exchange', got '$tool_name'"
           return 1
         fi
         ;;
       *)
-        if [ "$tool_name" != "mnemos_recall" ]; then
-          echo "FAIL $test_name : expected tool name 'mnemos_recall', got '$tool_name'"
+        if [ "$tool_name" != "mycelora_recall" ]; then
+          echo "FAIL $test_name : expected tool name 'mycelora_recall', got '$tool_name'"
           return 1
         fi
         ;;
     esac
 
     # Vérifier les arguments pour mnemos_recall
-    if [ "$tool_name" = "mnemos_recall" ]; then
+    if [ "$tool_name" = "mycelora_recall" ]; then
       local user_id
       user_id="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('userId', ''))" < "$capture_body")"
       if [ "$user_id" != "stephane" ]; then
@@ -248,7 +248,7 @@ EOF
           return 1
         fi
       fi
-    elif [ "$tool_name" = "mnemos_log_exchange" ]; then
+    elif [ "$tool_name" = "mycelora_log_exchange" ]; then
       # Vérifier les arguments pour mnemos_log_exchange
       local user_message
       user_message="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('userMessage', ''))" < "$capture_body")"
@@ -540,7 +540,7 @@ rm -f "$temp_synthetic_transcript" "$temp_synthetic_stop_stdin"
 # d'erreur ne doit JAMAIS etre injecte sur stdout (Q10, fail silencieux).
 tool_error_response="$(mktemp)"
 cat > "$tool_error_response" <<'EOF'
-{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\"error\":\"Unknown error\",\"tool\":\"mnemos_recall\"}"}],"isError":true},"id":1}
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\"error\":\"Unknown error\",\"tool\":\"mycelora_recall\"}"}],"isError":true},"id":1}
 EOF
 
 TOTAL_TESTS=$((TOTAL_TESTS+1))
@@ -2465,7 +2465,7 @@ fi
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 deuxpasses_transcript="$(mktemp /tmp/mycelora-test-deuxpasses.XXXXXX)"
 rm -f "/tmp/mycelora-hook-s-jeton-2-deuxpasses-0001.json"
-printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_deuxpasses","name":"mcp__Mycelora_OAuth__mnemos_session_start","input":{"sessionId":"sess-deuxpasses","spaceId":"space-deuxpasses"}}]}}\n' > "$deuxpasses_transcript"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_deuxpasses","name":"mcp__Mycelora_OAuth__mycelora_session_start","input":{"sessionId":"sess-deuxpasses","spaceId":"space-deuxpasses"}}]}}\n' > "$deuxpasses_transcript"
 deuxpasses_pass1="$(
   source "$COMMON_SH"
   _mycelora_charger_fil "s-jeton-2-deuxpasses-0001" "$deuxpasses_transcript"
@@ -2573,7 +2573,7 @@ offset_session="s-reflexes-6-offset-partiel"
 offset_cache="/tmp/mycelora-hook-${offset_session}.json"
 offset_transcript="$(mktemp /tmp/mycelora-test-offset-transcript.XXXXXX)"
 rm -f "$offset_cache"
-printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_offset","name":"mnemos_session_start","input":{"sessionId":"sess-offset","spaceId":"space-offset"}}]}}\n' > "$offset_transcript"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_offset","name":"mycelora_session_start","input":{"sessionId":"sess-offset","spaceId":"space-offset"}}]}}\n' > "$offset_transcript"
 printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_offset","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_OFFSETPARTIEL_0\\nMNEMOS IN"}]}]}}' >> "$offset_transcript"
 # PAS de "\n" final ici : simule une ligne en cours d'ecriture.
 
@@ -2762,7 +2762,7 @@ ups401_out="$(
   export PATH="$FAKE_BIN_DIR:$PATH"
   cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-ups-normal.json" | "$REPO_ROOT/plugins/mycelora/hooks/mycelora-userpromptsubmit.sh"
 )"
-ups401_expected="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mnemos_session_start) pour rétablir la mémoire."
+ups401_expected="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mycelora_session_start) pour rétablir la mémoire."
 if [ "$ups401_out" = "$ups401_expected" ]; then
   echo "PASS ups-401-type-ligne-de-relance-exacte"
 else

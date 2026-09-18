@@ -376,7 +376,7 @@ if reflexes_path:
 payload = {
     "jsonrpc": "2.0",
     "method": "tools/call",
-    "params": {"name": "mnemos_log_exchange", "arguments": arguments},
+    "params": {"name": "mycelora_log_exchange", "arguments": arguments},
     "id": 1,
 }
 

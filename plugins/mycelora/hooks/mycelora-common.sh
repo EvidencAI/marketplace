@@ -301,7 +301,7 @@ if transcript_path and os.path.exists(transcript_path):
                     if not isinstance(block, dict) or block.get("type") != "tool_use":
                         continue
                     name = block.get("name", "")
-                    if not (isinstance(name, str) and name.endswith("mnemos_session_start")):
+                    if not (isinstance(name, str) and name.endswith("mycelora_session_start")):
                         continue
                     # S-JETON-2 : l'id de cet appel autorise le PROCHAIN
                     # tool_result qui le porte a livrer jeton et ligne Fil.
@@ -1166,7 +1166,7 @@ except Exception:
 payload = {
     "jsonrpc": "2.0",
     "method": "tools/call",
-    "params": {"name": "mnemos_impact_lookup", "arguments": {"spaceId": space_id, "identifiants": objets}},
+    "params": {"name": "mycelora_impact_lookup", "arguments": {"spaceId": space_id, "identifiants": objets}},
     "id": 1,
 }
 with open(out_path, "w", encoding="utf-8") as f:

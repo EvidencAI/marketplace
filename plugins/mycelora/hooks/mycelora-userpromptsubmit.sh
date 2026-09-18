@@ -199,7 +199,7 @@ if session_id:
 payload = {
     "jsonrpc": "2.0",
     "method": "tools/call",
-    "params": {"name": "mnemos_recall", "arguments": arguments},
+    "params": {"name": "mycelora_recall", "arguments": arguments},
     "id": 1,
 }
 
@@ -233,7 +233,7 @@ case "$HTTP_CODE" in
     # Un 401 générique (clé inconnue) reste dans le comportement de "*)".
     if grep -q '"jeton_session_expire"' "$RESP_FILE" 2>/dev/null; then
       mycelora_log "userpromptsubmit" "auth" "$DURATION_MS" "jeton-expire" "$RESP_SIZE"
-      printf '%s' "Mycelora : jeton de session expiré, relancez l'ouverture du fil (mnemos_session_start) pour rétablir la mémoire."
+      printf '%s' "Mycelora : jeton de session expiré, relancez l'ouverture du fil (mycelora_session_start) pour rétablir la mémoire."
       exit 0
     fi
     mycelora_log "userpromptsubmit" "recall" "$DURATION_MS" "error-http-$HTTP_CODE" "$RESP_SIZE"

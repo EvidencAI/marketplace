@@ -331,7 +331,7 @@ echo "Stdout du hook (ligne de relance imprimee en clair, injectee dans le"
 echo "contexte du modele) :"
 echo "  $UPS401_OUT"
 echo
-UPS401_ATTENDU="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mnemos_session_start) pour rétablir la mémoire."
+UPS401_ATTENDU="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mycelora_session_start) pour rétablir la mémoire."
 if [ "$UPS401_OUT" = "$UPS401_ATTENDU" ]; then
   echo "-> CONFORME : ligne de relance exacte."
 else
