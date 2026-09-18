@@ -60,12 +60,12 @@ CFGEOF
   echo "$http_code" "$curl_rc" "$resp_file"
 }
 
-# Cas 1: mnemos_recall
+# Cas 1: mycelora_recall
 test_recall() {
   local body_file resp_file http_code curl_rc
   body_file="$(mktemp /tmp/mycelora-integ-body.XXXXXX)"
   cat > "$body_file" <<'BODYEOF'
-{"jsonrpc":"2.0","method":"tools/call","params":{"name":"mnemos_recall","arguments":{"userId":"stephane","query":"test integration story S3"}},"id":1}
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"mycelora_recall","arguments":{"userId":"stephane","query":"test integration story S3"}},"id":1}
 BODYEOF
 
   read -r http_code curl_rc resp_file < <(mycelora_secure_curl "$body_file")
@@ -106,14 +106,14 @@ PYEOF
   return 0
 }
 
-# Cas 2: mnemos_log_exchange
+# Cas 2: mycelora_log_exchange
 test_log_exchange() {
   local body_file resp_file http_code curl_rc session_id
   session_id="smoke-s3-$(python3 -c 'import time; print(int(time.time()))')"
 
   body_file="$(mktemp /tmp/mycelora-integ-body.XXXXXX)"
   cat > "$body_file" <<BODYEOF
-{"jsonrpc":"2.0","method":"tools/call","params":{"name":"mnemos_log_exchange","arguments":{"userId":"stephane","sessionId":"${session_id}","userMessage":"message de test integration story S3","assistantResponse":"reponse de test integration story S3"}},"id":1}
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"mycelora_log_exchange","arguments":{"userId":"stephane","sessionId":"${session_id}","userMessage":"message de test integration story S3","assistantResponse":"reponse de test integration story S3"}},"id":1}
 BODYEOF
 
   read -r http_code curl_rc resp_file < <(mycelora_secure_curl "$body_file")
@@ -163,7 +163,7 @@ test_forbidden_tool() {
   local body_file resp_file http_code curl_rc
   body_file="$(mktemp /tmp/mycelora-integ-body.XXXXXX)"
   cat > "$body_file" <<'BODYEOF'
-{"jsonrpc":"2.0","method":"tools/call","params":{"name":"mnemos_update_profile","arguments":{"userId":"stephane"}},"id":1}
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"mycelora_update_profile","arguments":{"userId":"stephane"}},"id":1}
 BODYEOF
 
   read -r http_code curl_rc resp_file < <(mycelora_secure_curl "$body_file")

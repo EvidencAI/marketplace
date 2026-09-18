@@ -14,12 +14,9 @@ FAKE_CURL_SCRIPT="$FAKE_BIN_DIR/curl"
 cat > "$FAKE_CURL_SCRIPT" <<'EOF'
 #!/usr/bin/env bash
 # Faux curl pour les tests unitaires. Ne fait aucun appel reseau.
-CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
 RESP_BODY_FILE="${MYCELORA_TEST_CURL_RESPONSE:-}"
 HTTP_CODE="${MYCELORA_TEST_CURL_HTTP_CODE:-200}"
 SHOULD_FAIL="${MYCELORA_TEST_CURL_FAIL:-0}"
-
-echo "CALLED" >> "$CALL_LOG"
 
 OUT_FILE=""
 BODY_SRC=""
@@ -49,6 +46,38 @@ if [ -n "$CFG_FILE" ] && [ -n "${MYCELORA_TEST_CAPTURE_CFG:-}" ]; then
   cp "$CFG_FILE" "$MYCELORA_TEST_CAPTURE_CFG" 2>/dev/null || true
 fi
 
+# T1 (C2, S-PROPRE-1-L3-PLG) : journal GLOBAL des noms d'outils
+# (params.name) envoyes au serveur par les hooks, INDEPENDANT de
+# MYCELORA_TEST_CAPTURE_BODY et de toute variable d'env par test. Chemin
+# derive de l'emplacement du script lui-meme (le faux curl vit dans
+# $FAKE_BIN_DIR) pour ne dependre d'aucune variable qu'un test pourrait
+# unset. Place AVANT les sorties anticipees (SHOULD_FAIL) pour ne rien
+# perdre. Place AVANT CALL_LOG (correctif revue m-2, S-PROPRE-1-L3-PLG) :
+# CALL_LOG:? interrompt le script si MYCELORA_TEST_CURL_LOG manque, et ce
+# journal ne doit pas en dependre ; ne fait jamais echouer le faux curl
+# (|| true).
+NAMES_LOG="$(dirname "$0")/noms-outils.log"
+if [ -n "$BODY_SRC" ]; then
+  case "$BODY_SRC" in
+    @*)
+      _nom_outil="$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    print(d.get("params", {}).get("name", "ILLISIBLE"))
+except Exception:
+    print("ILLISIBLE")
+' "${BODY_SRC#@}" 2>/dev/null)"
+      [ -n "$_nom_outil" ] || _nom_outil="ILLISIBLE"
+      echo "$_nom_outil" >> "$NAMES_LOG" 2>/dev/null || true
+      ;;
+  esac
+fi
+
+CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
+echo "CALLED" >> "$CALL_LOG"
+
 if [ "$SHOULD_FAIL" = "1" ]; then
   exit 7
 fi
@@ -65,6 +94,10 @@ printf '%s' "$HTTP_CODE"
 exit 0
 EOF
 chmod +x "$FAKE_CURL_SCRIPT"
+
+# T1 : journal global des noms d'outils, initialise/vide juste apres la
+# creation du premier faux curl.
+: > "$FAKE_BIN_DIR/noms-outils.log"
 
 # S-REFLEXES-6 (02/09/2026) : jeton de session hook. Les 93 tests ECRITS
 # AVANT cette story ne connaissent pas le jeton et doivent continuer d'agir
@@ -111,7 +144,7 @@ assert() {
 EOF
   fi
 
-  # Ecrire le corps de reponse pour mnemos_log_exchange
+  # Ecrire le corps de reponse pour mycelora_log_exchange
   local log_exchange_response="$temp_dir/log_exchange_response.json"
   cat > "$log_exchange_response" <<'EOF'
 {"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\"success\": true, \"sessionId\": \"whatever\"}"}]},"id":1}
@@ -191,21 +224,21 @@ EOF
     
     case "$test_name" in
       mycelora-stop-*)
-        if [ "$tool_name" != "mnemos_log_exchange" ]; then
-          echo "FAIL $test_name : expected tool name 'mnemos_log_exchange', got '$tool_name'"
+        if [ "$tool_name" != "mycelora_log_exchange" ]; then
+          echo "FAIL $test_name : expected tool name 'mycelora_log_exchange', got '$tool_name'"
           return 1
         fi
         ;;
       *)
-        if [ "$tool_name" != "mnemos_recall" ]; then
-          echo "FAIL $test_name : expected tool name 'mnemos_recall', got '$tool_name'"
+        if [ "$tool_name" != "mycelora_recall" ]; then
+          echo "FAIL $test_name : expected tool name 'mycelora_recall', got '$tool_name'"
           return 1
         fi
         ;;
     esac
 
-    # Vérifier les arguments pour mnemos_recall
-    if [ "$tool_name" = "mnemos_recall" ]; then
+    # Vérifier les arguments pour mycelora_recall
+    if [ "$tool_name" = "mycelora_recall" ]; then
       local user_id
       user_id="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('userId', ''))" < "$capture_body")"
       if [ "$user_id" != "stephane" ]; then
@@ -213,7 +246,7 @@ EOF
         return 1
       fi
 
-      # Vérifier le query pour mnemos_recall
+      # Vérifier le query pour mycelora_recall
       local query
       query="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('query', ''))" < "$capture_body")"
       
@@ -231,14 +264,14 @@ EOF
         fi
       fi
 
-      # Vérifier le spaceId pour mnemos_recall
+      # Vérifier le spaceId pour mycelora_recall
       local space_id
       space_id="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('spaceId', ''))" < "$capture_body")"
       
       if [ "$test_name" = "mycelora-userpromptsubmit-2" ]; then
         # Pour ce test, vérifier le spaceId
-        if [ "$space_id" != "Développement Mnemos" ]; then
-          echo "FAIL $test_name : expected spaceId 'Développement Mnemos', got '$space_id'"
+        if [ "$space_id" != "Développement Mycelora" ]; then
+          echo "FAIL $test_name : expected spaceId 'Développement Mycelora', got '$space_id'"
           return 1
         fi
       elif [ "$test_name" = "mycelora-userpromptsubmit-9" ]; then
@@ -248,8 +281,8 @@ EOF
           return 1
         fi
       fi
-    elif [ "$tool_name" = "mnemos_log_exchange" ]; then
-      # Vérifier les arguments pour mnemos_log_exchange
+    elif [ "$tool_name" = "mycelora_log_exchange" ]; then
+      # Vérifier les arguments pour mycelora_log_exchange
       local user_message
       user_message="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('userMessage', ''))" < "$capture_body")"
       
@@ -540,7 +573,7 @@ rm -f "$temp_synthetic_transcript" "$temp_synthetic_stop_stdin"
 # d'erreur ne doit JAMAIS etre injecte sur stdout (Q10, fail silencieux).
 tool_error_response="$(mktemp)"
 cat > "$tool_error_response" <<'EOF'
-{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\"error\":\"Unknown error\",\"tool\":\"mnemos_recall\"}"}],"isError":true},"id":1}
+{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\"error\":\"Unknown error\",\"tool\":\"mycelora_recall\"}"}],"isError":true},"id":1}
 EOF
 
 TOTAL_TESTS=$((TOTAL_TESTS+1))
@@ -681,7 +714,7 @@ assert_arguments "alias-sans-titre-humain-la-cle-est-absente" "stdin-stop-alias-
 # Contrat historique preserve : la resolution d'espace continue de marcher,
 # elle passe desormais par la meme passe de lecture.
 assert_arguments "alias-le-spaceId-est-toujours-resolu" "stdin-stop-alias.json" \
-  "arguments.get('spaceId') == 'Développement Mnemos'"
+  "arguments.get('spaceId') == 'Développement Mycelora'"
 
 # ============ S-ACK-1 (29/08/2026) : accuse de reception des injections ====
 # Le session_id des fixtures normales est 726ec160-e1f5-5bd0-b3e7-3de9785ea2be,
@@ -780,7 +813,7 @@ reflexe_stdin() {
 PRETOOLUSE="$REPO_ROOT/plugins/mycelora/hooks/mycelora-pretooluse.sh"
 POSTTOOLUSE="$REPO_ROOT/plugins/mycelora/hooks/mycelora-posttooluse.sh"
 
-# Reponse canned mnemos_impact_lookup (contrat REEL de S-REFLEXES-1,
+# Reponse canned mycelora_impact_lookup (contrat REEL de S-REFLEXES-1,
 # ImpactLookupResult : objets est un TABLEAU {identifiant,inconnu,lignes},
 # pas un Record — verifie sur carte.ts/tools.ts le 02/09, distinct de la
 # forme simplifiee donnee en amorce de cette story). memory_atoms connu (une
@@ -1323,11 +1356,9 @@ grep -q '"evt": "lookup_timeout"' /tmp/mycelora-reflexes-reflexe-ddl-alter.jsonl
 # identiques).
 cat > "$FAKE_BIN_DIR/curl" <<'EOF'
 #!/usr/bin/env bash
-CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
 RESP_BODY_FILE="${MYCELORA_TEST_CURL_RESPONSE:-}"
 HTTP_CODE="${MYCELORA_TEST_CURL_HTTP_CODE:-200}"
 SHOULD_FAIL="${MYCELORA_TEST_CURL_FAIL:-0}"
-echo "CALLED" >> "$CALL_LOG"
 OUT_FILE=""
 BODY_SRC=""
 CFG_FILE=""
@@ -1349,6 +1380,26 @@ fi
 if [ -n "$CFG_FILE" ] && [ -n "${MYCELORA_TEST_CAPTURE_CFG:-}" ]; then
   cp "$CFG_FILE" "$MYCELORA_TEST_CAPTURE_CFG" 2>/dev/null || true
 fi
+NAMES_LOG="$(dirname "$0")/noms-outils.log"
+if [ -n "$BODY_SRC" ]; then
+  case "$BODY_SRC" in
+    @*)
+      _nom_outil="$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    print(d.get("params", {}).get("name", "ILLISIBLE"))
+except Exception:
+    print("ILLISIBLE")
+' "${BODY_SRC#@}" 2>/dev/null)"
+      [ -n "$_nom_outil" ] || _nom_outil="ILLISIBLE"
+      echo "$_nom_outil" >> "$NAMES_LOG" 2>/dev/null || true
+      ;;
+  esac
+fi
+CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
+echo "CALLED" >> "$CALL_LOG"
 if [ "$SHOULD_FAIL" = "1" ]; then
   exit 7
 fi
@@ -1363,6 +1414,10 @@ printf '%s' "$HTTP_CODE"
 exit 0
 EOF
 chmod +x "$FAKE_BIN_DIR/curl"
+# T1 : marqueur de restauration, pour prouver qu'au moins un nom journalise
+# est POSTERIEUR a ce point (sinon T1 resterait vert sur la seule premiere
+# partie de la suite).
+echo "--- RESTAURATION FAUX CURL ---" >> "$FAKE_BIN_DIR/noms-outils.log"
 if [ "$verdict_timeout" = "OK" ] && [ "$journal_a_lookup_timeout" = "1" ]; then
   echo "PASS reflexe-pre-fail-open-serveur-muet"
 else
@@ -2201,7 +2256,7 @@ rm -f "$c5_journal"
 # max(refus_entries, key=lambda e: e.get("t") or "") levait un TypeError
 # NON attrape (comparaison str/int) qui tuait le bloc python AVANT
 # json.dump(payload, ...), laissait BODY_FILE vide, et empechait la purge
-# a chaque Stop suivant (gel silencieux de tout mnemos_log_exchange du
+# a chaque Stop suivant (gel silencieux de tout mycelora_log_exchange du
 # fil). Le hook doit terminer proprement, envoyer TOUTES les lignes dans
 # "reflexes" (la ligne poison n'est PAS exclue du tableau, seulement de la
 # logique question_humain), et taguer le dernier refus VALIDE (t et evt
@@ -2433,7 +2488,7 @@ rm -f "/tmp/mycelora-hook-s-reflexes-6-jeton-string-0001.json"
 # COMPLET (bandeau MNEMOS IN, ligne Fil, jeton en tete) recopie dans le
 # resultat d'un AUTRE outil (cat d'un exemplaire du depot) ne remplace NI le
 # jeton NI le label du vrai brief, parce que ce tool_result ne repond pas a
-# un appel mnemos_session_start. Paye sur le fil 128 (tail d'un fichier de
+# un appel mycelora_session_start. Paye sur le fil 128 (tail d'un fichier de
 # test, watcher detourne en silence) ; la garde par co-presence du bandeau a
 # ete refutee le meme soir (l'exemplaire porte les deux).
 # Contre-epreuve par mutation : remplacer `est_brief = isinstance(tuid, str)
@@ -2457,7 +2512,7 @@ else
 fi
 
 # --- S-JETON-2, correlation ENTRE DEUX PASSES : l'entree assistant (appel
-# mnemos_session_start) est lue a une passe, le tool_result qui y repond a la
+# mycelora_session_start) est lue a une passe, le tool_result qui y repond a la
 # passe suivante (cas reel : un hook tourne entre les deux ecritures). L'id
 # d'appel doit survivre dans le cache (attenteJeton) entre les passes.
 # Mutation qui rougit : ne pas persister attenteJeton dans le cache (ou ne
@@ -2465,7 +2520,7 @@ fi
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 deuxpasses_transcript="$(mktemp /tmp/mycelora-test-deuxpasses.XXXXXX)"
 rm -f "/tmp/mycelora-hook-s-jeton-2-deuxpasses-0001.json"
-printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_deuxpasses","name":"mcp__Mycelora_OAuth__mnemos_session_start","input":{"sessionId":"sess-deuxpasses","spaceId":"space-deuxpasses"}}]}}\n' > "$deuxpasses_transcript"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_deuxpasses","name":"mcp__Mycelora_OAuth__mycelora_session_start","input":{"sessionId":"sess-deuxpasses","spaceId":"space-deuxpasses"}}]}}\n' > "$deuxpasses_transcript"
 deuxpasses_pass1="$(
   source "$COMMON_SH"
   _mycelora_charger_fil "s-jeton-2-deuxpasses-0001" "$deuxpasses_transcript"
@@ -2505,6 +2560,49 @@ if [ "$persiste_token" = "mk_sess_FIXTURETETE0003" ] && [ "$persiste_label" = "c
   echo "PASS s-jeton-2-jeton-en-tete-lu-dans-apercu-persisted-output"
 else
   echo "FAIL s-jeton-2-jeton-en-tete-lu-dans-apercu-persisted-output : token=$persiste_token label=$persiste_label"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# --- T2 (C2, S-PROPRE-1-L3-PLG) : capture du jeton, RUPTURE FRANCHE. Meme
+# brief (jeton en premiere ligne du tool_result, ligne "Fil : ..."), deux
+# transcripts qui ne different QUE par le nom d'outil de l'appel d'ouverture :
+# mcp__Mycelora_OAuth__mycelora_session_start (nom nouveau, temoin positif)
+# puis le meme outil sous l'ANCIEN prefixe (ancien nom, doit rendre jeton ET
+# label vides). Les DEUX volets dans le MEME test : le temoin positif prouve
+# que le vide du volet ancien-nom n'est pas un transcript illisible. Choix :
+# input SANS sessionId ni spaceId dans les deux transcripts, pour que le
+# label ne puisse venir QUE de la ligne "Fil : ..." (jamais de
+# input.sessionId), afin que le volet ancien-nom soit net (sinon son label
+# vide viendrait aussi de l'absence de sessionId, pas seulement du nom
+# refuse). Mutations M4 et M5 de la decision S-PROPRE-1-L3-PLG qui doivent
+# rougir dans common.sh : garde passee a l'ancien nom seul (M4, volet
+# nouveau-nom), puis tuple nouveau + ancien (M5, volet ancien-nom : l'alias
+# serait detecte).
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+t2_nouveau_transcript="$(mktemp /tmp/mycelora-test-t2-nouveau.XXXXXX)"
+t2_ancien_transcript="$(mktemp /tmp/mycelora-test-t2-ancien.XXXXXX)"
+rm -f "/tmp/mycelora-hook-t2-rupture-nouveau-0001.json" "/tmp/mycelora-hook-t2-rupture-ancien-0001.json"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_t2_nouveau","name":"mcp__Mycelora_OAuth__mycelora_session_start","input":{}}]}}\n' > "$t2_nouveau_transcript"
+printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_t2_nouveau","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_T2RUPTUREFRANCHE01\\nFil : cowork-2026-09-18-t2-rupture-franche\\n"}]}]}}\n' >> "$t2_nouveau_transcript"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_t2_ancien","name":"mcp__Mycelora_OAuth__mnemos_session_start","input":{}}]}}\n' > "$t2_ancien_transcript"
+printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_t2_ancien","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_T2RUPTUREFRANCHE01\\nFil : cowork-2026-09-18-t2-rupture-franche\\n"}]}]}}\n' >> "$t2_ancien_transcript"
+t2_nouveau_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "t2-rupture-nouveau-0001" "$t2_nouveau_transcript"
+)"
+t2_nouveau_label="$(printf '%s\n' "$t2_nouveau_out" | sed -n '2p')"
+t2_nouveau_token="$(printf '%s\n' "$t2_nouveau_out" | sed -n '4p')"
+t2_ancien_out="$(
+  source "$COMMON_SH"
+  _mycelora_charger_fil "t2-rupture-ancien-0001" "$t2_ancien_transcript"
+)"
+t2_ancien_label="$(printf '%s\n' "$t2_ancien_out" | sed -n '2p')"
+t2_ancien_token="$(printf '%s\n' "$t2_ancien_out" | sed -n '4p')"
+rm -f "/tmp/mycelora-hook-t2-rupture-nouveau-0001.json" "/tmp/mycelora-hook-t2-rupture-ancien-0001.json" "$t2_nouveau_transcript" "$t2_ancien_transcript"
+if [ "$t2_nouveau_token" = "mk_sess_T2RUPTUREFRANCHE01" ] && [ "$t2_nouveau_label" = "cowork-2026-09-18-t2-rupture-franche" ] && [ "$t2_ancien_token" = "" ] && [ "$t2_ancien_label" = "" ]; then
+  echo "PASS capture-jeton-rupture-franche-ancien-nom-refuse"
+else
+  echo "FAIL capture-jeton-rupture-franche-ancien-nom-refuse : nouveau_token='$t2_nouveau_token' nouveau_label='$t2_nouveau_label' ancien_token='$t2_ancien_token' ancien_label='$t2_ancien_label'"
   FAILED_TESTS=$((FAILED_TESTS+1))
 fi
 
@@ -2573,7 +2671,7 @@ offset_session="s-reflexes-6-offset-partiel"
 offset_cache="/tmp/mycelora-hook-${offset_session}.json"
 offset_transcript="$(mktemp /tmp/mycelora-test-offset-transcript.XXXXXX)"
 rm -f "$offset_cache"
-printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_offset","name":"mnemos_session_start","input":{"sessionId":"sess-offset","spaceId":"space-offset"}}]}}\n' > "$offset_transcript"
+printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_offset","name":"mycelora_session_start","input":{"sessionId":"sess-offset","spaceId":"space-offset"}}]}}\n' > "$offset_transcript"
 printf '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_offset","content":[{"type":"text","text":"[jeton-hook-session x] mk_sess_OFFSETPARTIEL_0\\nMNEMOS IN"}]}]}}' >> "$offset_transcript"
 # PAS de "\n" final ici : simule une ligne en cours d'ecriture.
 
@@ -2606,7 +2704,7 @@ else
 fi
 rm -f "$offset_cache" "$offset_transcript"
 
-# --- Chaque hook, cas sans-jeton : transcript sans mnemos_session_start ->
+# --- Chaque hook, cas sans-jeton : transcript sans mycelora_session_start ->
 # exit 0, AUCUN appel curl, log "auth"/"sans-jeton"/duree 0 litterale. Unset
 # LOCAL de CLAUDE_PLUGIN_OPTION_HOOK_KEY (sous-shell) : sinon la fausse valeur
 # globale (priorite 1, tests pre-existants) masquerait le cas reel. ---------
@@ -2721,9 +2819,9 @@ rm -rf "$ups_jeton_tmp"
 # avec la fixture stdin-stop-jeton.json (creee des l'origine mais jusqu'ici
 # jamais utilisee par aucun test -- F2, trou comble en meme temps que F1).
 # Le transcript associe contient un vrai message user en tete
-# ("peux-tu demarrer la session mnemos...") et l'assistant final
+# ("peux-tu demarrer la session mycelora...") et l'assistant final
 # correspondant a last_assistant_message : le hook trouve un echange non
-# vide et appelle reellement mnemos_log_exchange. -----------------------------
+# vide et appelle reellement mycelora_log_exchange. -----------------------------
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 stop_bearer_tmp="$(mktemp -d)"
 cat > "$stop_bearer_tmp/resp.json" <<'EOF'
@@ -2762,7 +2860,7 @@ ups401_out="$(
   export PATH="$FAKE_BIN_DIR:$PATH"
   cat "$REPO_ROOT/plugins/mycelora/hooks/tests/fixtures/stdin-ups-normal.json" | "$REPO_ROOT/plugins/mycelora/hooks/mycelora-userpromptsubmit.sh"
 )"
-ups401_expected="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mnemos_session_start) pour rétablir la mémoire."
+ups401_expected="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mycelora_session_start) pour rétablir la mémoire."
 if [ "$ups401_out" = "$ups401_expected" ]; then
   echo "PASS ups-401-type-ligne-de-relance-exacte"
 else
@@ -2817,7 +2915,7 @@ rm -rf "$stop401_tmp"
 export MYCELORA_TEST_CURL_HTTP_CODE="200"
 
 # --- PreToolUse : jeton resolu (cache v3 reel) mais 401/jeton_session_expire
-# sur le LOOKUP (mnemos_impact_lookup) -> refuse quand meme (deny inchange,
+# sur le LOOKUP (mycelora_impact_lookup) -> refuse quand meme (deny inchange,
 # rapport vide assumé -- brief section 5, NE PAS toucher la logique de refus
 # elle-meme). -----------------------------------------------------------------
 rm -f "/tmp/mycelora-impact-s-reflexes-6-jeton-0001" "/tmp/mycelora-reflexes-s-reflexes-6-jeton-0001.jsonl"
@@ -2961,6 +3059,57 @@ rm -f /tmp/mycelora-hook-s-reflexes-6-*.json
 rm -f /tmp/mycelora-reflexes-*.jsonl /tmp/mycelora-impact-* "$REFLEXE_IMPACT_RESPONSE" "$REPO_ROOT/.carte-perimee" "$REPO_ROOT/.mycelora-reflexes-off"
 unset MYCELORA_TEST_CAPTURE_BODY
 export MYCELORA_TEST_CURL_HTTP_CODE="200"
+
+# --- T1 (C2, S-PROPRE-1-L3-PLG) : noms d'outils REELLEMENT envoyes au
+# serveur, sur TOUTE la suite (journal global ecrit par les DEUX generateurs
+# du faux curl, independant de MYCELORA_TEST_CAPTURE_BODY). Assertion sur
+# valeur EXACTE (regle 8bis, jamais une simple recherche d'absence) :
+# l'ensemble trie-dedoublonne des noms journalises (hors marqueur de
+# restauration) doit etre EXACTEMENT {mycelora_impact_lookup,
+# mycelora_log_exchange, mycelora_recall}, le marqueur de restauration du
+# faux curl doit apparaitre UNE SEULE fois, et au moins un nom journalise
+# doit lui etre POSTERIEUR (sinon ce test resterait vert sur la seule
+# premiere partie de la suite, avant la restauration qui suit le cas
+# "fail-open sur serveur muet"). $FAKE_BIN_DIR n'est jamais supprime par le
+# reste du script : le journal est lisible ici.
+TOTAL_TESTS=$((TOTAL_TESTS+1))
+NAMES_LOG_FILE="$FAKE_BIN_DIR/noms-outils.log"
+noms_verdict="$(python3 - "$NAMES_LOG_FILE" <<'PYEOF'
+import sys
+
+chemin = sys.argv[1]
+MARQUEUR = "--- RESTAURATION FAUX CURL ---"
+try:
+    with open(chemin, encoding="utf-8") as f:
+        lignes = [l.rstrip("\n") for l in f if l.strip()]
+except Exception as e:
+    print("FAIL:lecture impossible: %s" % e)
+    sys.exit(0)
+
+marqueur_positions = [i for i, l in enumerate(lignes) if l == MARQUEUR]
+noms = [l for l in lignes if l != MARQUEUR]
+ensemble = sorted(set(noms))
+attendu = ["mycelora_impact_lookup", "mycelora_log_exchange", "mycelora_recall"]
+
+apres_marqueur = False
+if len(marqueur_positions) == 1:
+    pos = marqueur_positions[0]
+    apres_marqueur = any(i > pos and l != MARQUEUR for i, l in enumerate(lignes))
+
+ok = (ensemble == attendu) and (len(marqueur_positions) == 1) and apres_marqueur
+if ok:
+    print("OK")
+else:
+    print("FAIL:ensemble=%r marqueurs=%d apres_marqueur=%s total_lignes=%d" % (
+        ensemble, len(marqueur_positions), apres_marqueur, len(lignes)))
+PYEOF
+)"
+if [ "$noms_verdict" = "OK" ]; then
+  echo "PASS noms-outils-envoyes-au-serveur-exactement-mycelora"
+else
+  echo "FAIL noms-outils-envoyes-au-serveur-exactement-mycelora : $noms_verdict"
+  FAILED_TESTS=$((FAILED_TESTS+1))
+fi
 
 # Compter les tests passés a partir des compteurs reels (pas un grep sur le
 # code source du script).

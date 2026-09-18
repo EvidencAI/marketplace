@@ -64,7 +64,7 @@ echo "  $FIXTURE_TRANSCRIPT"
 TRANSCRIPT="$WORKDIR/transcript.jsonl"
 cp "$FIXTURE_TRANSCRIPT" "$TRANSCRIPT"
 echo "Contenu (4 entrees JSONL ; la 3e porte le jeton dans le tool_result de"
-echo "mnemos_session_start) :"
+echo "mycelora_session_start) :"
 python3 -c "
 import json
 with open('$TRANSCRIPT', encoding='utf-8') as f:
@@ -183,7 +183,7 @@ UPS_OUT="$(
 echo "Stdout du hook (ce qui serait injecte dans le contexte du modele) :"
 echo "  $UPS_OUT"
 echo
-check_bearer "UserPromptSubmit (appel mnemos_recall)" "$UPS_CFG"
+check_bearer "UserPromptSubmit (appel mycelora_recall)" "$UPS_CFG"
 
 # --- Stop --------------------------------------------------------------
 echo "--- mycelora-stop.sh ---------------------------------------------------"
@@ -200,14 +200,14 @@ cat > "$STOP_STDIN" <<EOF
   "prompt_id": "preuve-reelle-stop-sans-correspondance",
   "hook_event_name": "Stop",
   "stop_hook_active": false,
-  "last_assistant_message": "Session Mnemos demarree sur le developpement Mycelora.",
+  "last_assistant_message": "Session Mycelora demarree sur le developpement Mycelora.",
   "background_tasks": [],
   "session_crons": []
 }
 EOF
 STOP_CFG="$WORKDIR/stop-cfg.txt"
 STOP_CALLLOG="$WORKDIR/stop-call.log"
-echo "Dernier message assistant du tour : \"Session Mnemos demarree sur le developpement Mycelora.\""
+echo "Dernier message assistant du tour : \"Session Mycelora demarree sur le developpement Mycelora.\""
 echo "(retrouve dans le transcript comme le message utilisateur d'ouverture)"
 echo "Lance : mycelora-stop.sh (stdin ci-dessus sur son entree standard)"
 STOP_OUT="$(
@@ -219,7 +219,7 @@ STOP_OUT="$(
 )"
 echo "Stdout du hook (doit rester vide -- contrat Stop, aucune sortie jamais) : '$STOP_OUT'"
 echo
-check_bearer "Stop (appel mnemos_log_exchange)" "$STOP_CFG"
+check_bearer "Stop (appel mycelora_log_exchange)" "$STOP_CFG"
 
 # --- PreToolUse ----------------------------------------------------------
 echo "--- mycelora-pretooluse.sh (reflexe d'impact) --------------------------"
@@ -256,7 +256,7 @@ PRE_OUT="$(
 echo "Stdout du hook (decision de refus, RÉFLEXE D'IMPACT) :"
 echo "$PRE_OUT" | python3 -m json.tool 2>/dev/null || echo "  $PRE_OUT"
 echo
-check_bearer "PreToolUse (appel mnemos_impact_lookup)" "$PRE_CFG"
+check_bearer "PreToolUse (appel mycelora_impact_lookup)" "$PRE_CFG"
 rm -f "/tmp/mycelora-impact-${SESSION_ID}" "/tmp/mycelora-reflexes-${SESSION_ID}.jsonl"
 
 # --- PostToolUse ---------------------------------------------------------
@@ -293,7 +293,7 @@ POST_OUT="$(
 echo "Stdout du hook (JALON D'IMPACT) :"
 echo "$POST_OUT" | python3 -m json.tool 2>/dev/null || echo "  $POST_OUT"
 echo
-check_bearer "PostToolUse (appel mnemos_impact_lookup)" "$POST_CFG"
+check_bearer "PostToolUse (appel mycelora_impact_lookup)" "$POST_CFG"
 rm -f "/tmp/mycelora-impact-${SESSION_ID}" "/tmp/mycelora-reflexes-${SESSION_ID}.jsonl"
 
 echo "======================================================================"
@@ -302,7 +302,7 @@ echo "======================================================================"
 echo
 echo "Simule une reponse HTTP 401 dont le corps porte"
 echo "error.data.code == \"jeton_session_expire\" sur le PROCHAIN appel"
-echo "mnemos_recall, puis relance mycelora-userpromptsubmit.sh avec un"
+echo "mycelora_recall, puis relance mycelora-userpromptsubmit.sh avec un"
 echo "NOUVEAU prompt sur le meme fil (meme session_id, meme transcript)."
 echo
 UPS401_RESP="$WORKDIR/ups401-resp.json"
@@ -331,7 +331,7 @@ echo "Stdout du hook (ligne de relance imprimee en clair, injectee dans le"
 echo "contexte du modele) :"
 echo "  $UPS401_OUT"
 echo
-UPS401_ATTENDU="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mnemos_session_start) pour rétablir la mémoire."
+UPS401_ATTENDU="Mycelora : jeton de session expiré, relancez l'ouverture du fil (mycelora_session_start) pour rétablir la mémoire."
 if [ "$UPS401_OUT" = "$UPS401_ATTENDU" ]; then
   echo "-> CONFORME : ligne de relance exacte."
 else

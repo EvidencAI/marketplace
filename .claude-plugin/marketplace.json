@@ -11,8 +11,8 @@
     {
       "name": "mycelora",
       "source": "./plugins/mycelora",
-      "description": "Mémoire persistante intelligente. 48 outils MCP : sessions, atomes, espaces, profils, documents, auth, déduplication + supersession temporelle, GC v3 Haiku.",
-      "version": "0.11.5"
+      "description": "Mémoire persistante de Claude. Le plugin apporte skills, commandes et hooks ; les 51 outils MCP viennent du connecteur Mycelora : sessions, atomes, espaces, profil, contacts, collecte mail et agenda, cross-insights.",
+      "version": "0.13.0"
     },
     {
       "name": "mon-greffier",

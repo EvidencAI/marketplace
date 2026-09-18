@@ -132,8 +132,8 @@ return "OK - " & evtCount & " events"
 
 Puis lire /tmp/mycelora_calendar.tsv via mcp__Desktop_Commander__start_process + cat.
 
-## Étape 3 : Injecter dans Mycelora via mnemos_ingest_events
-Appeler mcp__mnemos__mnemos_ingest_events UNE SEULE FOIS avec :
+## Étape 3 : Injecter dans Mycelora via mycelora_ingest_events
+Appeler mycelora_ingest_events UNE SEULE FOIS avec :
 - userId : "{{USER_UUID}}"
 - events : tableau de TOUS les événements (mails + RDV), max 30
 
@@ -142,8 +142,8 @@ Pour les RDV : source "google_calendar", event_type "meeting_created", event_id 
 
 La dedup est automatique (contrainte UNIQUE sur user_id + source + event_id). Les doublons sont ignorés sans erreur.
 
-## Étape 4 : Traiter avec Haiku via mnemos_process_events
-Appeler mcp__mnemos__mnemos_process_events UNE SEULE FOIS avec :
+## Étape 4 : Traiter avec Haiku via mycelora_process_events
+Appeler mycelora_process_events UNE SEULE FOIS avec :
 - userId : "{{USER_UUID}}"
 - limit : 20
 
@@ -151,7 +151,7 @@ Haiku évalue la pertinence de chaque événement, crée des atomes pour les imp
 
 ## Étape 5 : Enrichir les contacts
 Pour les 10 premiers mails dont l'expéditeur n'est PAS {{USER_EMAIL}} et n'est PAS noreply/newsletter/notification/invoice/substack/surveycircle/hubspotemail/scaleway :
-Appeler mcp__mnemos__mnemos_upsert_contact avec name (extrait du sender avant le <email>), email, notes "Dernier mail : [subject] ([date])".
+Appeler mycelora_upsert_contact avec name (extrait du sender avant le <email>), email, notes "Dernier mail : [subject] ([date])".
 Maximum 10 appels upsert_contact.
 
 ## Étape 6 : Trier les atomes orphelins via mnemos_admin
@@ -164,7 +164,7 @@ Appeler mcp__mnemos__mnemos_admin UNE SEULE FOIS avec :
 ## Étape 7 : Connexions sémantiques (SIMPLIFIÉ)
 Sélectionner les 5 sujets les plus distincts parmi les mails traités à l'étape 4.
 Si process_events a retourné processed=0 ou atoms_created=0, SAUTER cette étape.
-Pour chaque sujet : UN appel mcp__mnemos__mnemos_search_atoms (limit 3).
+Pour chaque sujet : UN appel mycelora_search_atoms (limit 3).
 Si >= 2 résultats avec similarity > 0.65 et de sources différentes (email ↔ calendar, ou received ↔ sent) : créer UNE connexion (type "concerne" par défaut, "confirme" si même fil received↔sent).
 Maximum 5 connexions par run.
 
