@@ -267,8 +267,8 @@ EOF
       
       if [ "$test_name" = "mycelora-userpromptsubmit-2" ]; then
         # Pour ce test, vérifier le spaceId
-        if [ "$space_id" != "Développement Mnemos" ]; then
-          echo "FAIL $test_name : expected spaceId 'Développement Mnemos', got '$space_id'"
+        if [ "$space_id" != "Développement Mycelora" ]; then
+          echo "FAIL $test_name : expected spaceId 'Développement Mycelora', got '$space_id'"
           return 1
         fi
       elif [ "$test_name" = "mycelora-userpromptsubmit-9" ]; then
@@ -711,7 +711,7 @@ assert_arguments "alias-sans-titre-humain-la-cle-est-absente" "stdin-stop-alias-
 # Contrat historique preserve : la resolution d'espace continue de marcher,
 # elle passe desormais par la meme passe de lecture.
 assert_arguments "alias-le-spaceId-est-toujours-resolu" "stdin-stop-alias.json" \
-  "arguments.get('spaceId') == 'Développement Mnemos'"
+  "arguments.get('spaceId') == 'Développement Mycelora'"
 
 # ============ S-ACK-1 (29/08/2026) : accuse de reception des injections ====
 # Le session_id des fixtures normales est 726ec160-e1f5-5bd0-b3e7-3de9785ea2be,
@@ -2816,7 +2816,7 @@ rm -rf "$ups_jeton_tmp"
 # avec la fixture stdin-stop-jeton.json (creee des l'origine mais jusqu'ici
 # jamais utilisee par aucun test -- F2, trou comble en meme temps que F1).
 # Le transcript associe contient un vrai message user en tete
-# ("peux-tu demarrer la session mnemos...") et l'assistant final
+# ("peux-tu demarrer la session mycelora...") et l'assistant final
 # correspondant a last_assistant_message : le hook trouve un echange non
 # vide et appelle reellement mycelora_log_exchange. -----------------------------
 TOTAL_TESTS=$((TOTAL_TESTS+1))

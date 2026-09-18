@@ -200,14 +200,14 @@ cat > "$STOP_STDIN" <<EOF
   "prompt_id": "preuve-reelle-stop-sans-correspondance",
   "hook_event_name": "Stop",
   "stop_hook_active": false,
-  "last_assistant_message": "Session Mnemos demarree sur le developpement Mycelora.",
+  "last_assistant_message": "Session Mycelora demarree sur le developpement Mycelora.",
   "background_tasks": [],
   "session_crons": []
 }
 EOF
 STOP_CFG="$WORKDIR/stop-cfg.txt"
 STOP_CALLLOG="$WORKDIR/stop-call.log"
-echo "Dernier message assistant du tour : \"Session Mnemos demarree sur le developpement Mycelora.\""
+echo "Dernier message assistant du tour : \"Session Mycelora demarree sur le developpement Mycelora.\""
 echo "(retrouve dans le transcript comme le message utilisateur d'ouverture)"
 echo "Lance : mycelora-stop.sh (stdin ci-dessus sur son entree standard)"
 STOP_OUT="$(
