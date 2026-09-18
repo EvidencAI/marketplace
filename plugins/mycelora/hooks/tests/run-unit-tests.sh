@@ -14,12 +14,9 @@ FAKE_CURL_SCRIPT="$FAKE_BIN_DIR/curl"
 cat > "$FAKE_CURL_SCRIPT" <<'EOF'
 #!/usr/bin/env bash
 # Faux curl pour les tests unitaires. Ne fait aucun appel reseau.
-CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
 RESP_BODY_FILE="${MYCELORA_TEST_CURL_RESPONSE:-}"
 HTTP_CODE="${MYCELORA_TEST_CURL_HTTP_CODE:-200}"
 SHOULD_FAIL="${MYCELORA_TEST_CURL_FAIL:-0}"
-
-echo "CALLED" >> "$CALL_LOG"
 
 OUT_FILE=""
 BODY_SRC=""
@@ -55,7 +52,10 @@ fi
 # derive de l'emplacement du script lui-meme (le faux curl vit dans
 # $FAKE_BIN_DIR) pour ne dependre d'aucune variable qu'un test pourrait
 # unset. Place AVANT les sorties anticipees (SHOULD_FAIL) pour ne rien
-# perdre ; ne fait jamais echouer le faux curl (|| true).
+# perdre. Place AVANT CALL_LOG (correctif revue m-2, S-PROPRE-1-L3-PLG) :
+# CALL_LOG:? interrompt le script si MYCELORA_TEST_CURL_LOG manque, et ce
+# journal ne doit pas en dependre ; ne fait jamais echouer le faux curl
+# (|| true).
 NAMES_LOG="$(dirname "$0")/noms-outils.log"
 if [ -n "$BODY_SRC" ]; then
   case "$BODY_SRC" in
@@ -74,6 +74,9 @@ except Exception:
       ;;
   esac
 fi
+
+CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
+echo "CALLED" >> "$CALL_LOG"
 
 if [ "$SHOULD_FAIL" = "1" ]; then
   exit 7
@@ -1353,11 +1356,9 @@ grep -q '"evt": "lookup_timeout"' /tmp/mycelora-reflexes-reflexe-ddl-alter.jsonl
 # identiques).
 cat > "$FAKE_BIN_DIR/curl" <<'EOF'
 #!/usr/bin/env bash
-CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
 RESP_BODY_FILE="${MYCELORA_TEST_CURL_RESPONSE:-}"
 HTTP_CODE="${MYCELORA_TEST_CURL_HTTP_CODE:-200}"
 SHOULD_FAIL="${MYCELORA_TEST_CURL_FAIL:-0}"
-echo "CALLED" >> "$CALL_LOG"
 OUT_FILE=""
 BODY_SRC=""
 CFG_FILE=""
@@ -1397,6 +1398,8 @@ except Exception:
       ;;
   esac
 fi
+CALL_LOG="${MYCELORA_TEST_CURL_LOG:?MYCELORA_TEST_CURL_LOG non defini}"
+echo "CALLED" >> "$CALL_LOG"
 if [ "$SHOULD_FAIL" = "1" ]; then
   exit 7
 fi
@@ -2564,17 +2567,17 @@ fi
 # brief (jeton en premiere ligne du tool_result, ligne "Fil : ..."), deux
 # transcripts qui ne different QUE par le nom d'outil de l'appel d'ouverture :
 # mcp__Mycelora_OAuth__mycelora_session_start (nom nouveau, temoin positif)
-# puis mcp__Mycelora_OAuth__mnemos_session_start (ancien nom, doit rendre
-# jeton ET label vides). Les DEUX volets dans le MEME test : le temoin
-# positif prouve que le vide du volet ancien-nom n'est pas un transcript
-# illisible. Choix : input SANS sessionId ni spaceId dans les deux
-# transcripts, pour que le label ne puisse venir QUE de la ligne
-# "Fil : ..." (jamais de input.sessionId), afin que le volet ancien-nom soit
-# net (sinon son label vide viendrait aussi de l'absence de sessionId, pas
-# seulement du nom refuse). Mutation qui doit rougir : common.sh
-# endswith("mnemos_session_start") (M4, volet nouveau-nom) ou
-# endswith(("mycelora_session_start", "mnemos_session_start")) (M5, volet
-# ancien-nom : l'alias serait detecte).
+# puis le meme outil sous l'ANCIEN prefixe (ancien nom, doit rendre jeton ET
+# label vides). Les DEUX volets dans le MEME test : le temoin positif prouve
+# que le vide du volet ancien-nom n'est pas un transcript illisible. Choix :
+# input SANS sessionId ni spaceId dans les deux transcripts, pour que le
+# label ne puisse venir QUE de la ligne "Fil : ..." (jamais de
+# input.sessionId), afin que le volet ancien-nom soit net (sinon son label
+# vide viendrait aussi de l'absence de sessionId, pas seulement du nom
+# refuse). Mutations M4 et M5 de la decision S-PROPRE-1-L3-PLG qui doivent
+# rougir dans common.sh : garde passee a l'ancien nom seul (M4, volet
+# nouveau-nom), puis tuple nouveau + ancien (M5, volet ancien-nom : l'alias
+# serait detecte).
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 t2_nouveau_transcript="$(mktemp /tmp/mycelora-test-t2-nouveau.XXXXXX)"
 t2_ancien_transcript="$(mktemp /tmp/mycelora-test-t2-ancien.XXXXXX)"
