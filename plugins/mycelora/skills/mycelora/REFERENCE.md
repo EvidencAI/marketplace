@@ -20,7 +20,7 @@ Un utilisateur du plugin n'a jamais besoin d'une clé service_role Supabase : ce
 | USER_ALIAS | Identifiant court historique. `userId` est IGNORÉ par le serveur depuis S-USERID-1 (25/08/2026) : ne plus le passer, sauf chemin clé de service (UUID cible) | "stephane" |
 | SUPABASE_PROJECT_REF | Référence projet Supabase | hpbsowihyydzdnxuzoxs |
 
-- `mnemos_get_profile()` → principes, portrait, instructions
+- `mycelora_get_profile()` → principes, portrait, instructions
 
 Premier setup : voir ONBOARDING.md.
 
@@ -84,7 +84,7 @@ nouveau ne doit être créé avec.
 **Compte** (1) : delete_account
 
 Note : log_exchange et extract_atoms sont appelés automatiquement par les hooks du watcher v3 (UserPromptSubmit/Stop). Le LLM n'a pas besoin de les appeler en routine, mais ils sont disponibles si nécessaire (debug, extraction manuelle).
-Note : get_stats, health_check, triage_atoms, garbage_collect sont des outils standalone (`mnemos_get_stats`, `mnemos_health_check`, `mnemos_triage_atoms`, `mnemos_garbage_collect`). Il n'existe plus de dispatcher `mnemos_admin`.
+Note : get_stats, health_check, triage_atoms, garbage_collect sont des outils standalone (`mycelora_get_stats`, `mycelora_health_check`, `mycelora_triage_atoms`, `mycelora_garbage_collect`). Il n'existe plus de dispatcher `mnemos_admin`.
 
 Note spaceId : les outils MCP acceptent le **nom** de l'espace (résolution insensible à la casse) aussi bien que l'**UUID**.
 Note read_memory/write_memory : acceptent désormais le **nom** d'espace (comme les autres outils avec résolution de nom), en plus de l'UUID.
@@ -141,7 +141,7 @@ sans aucun prérequis Mac ni Cowork ouvert. Deux connecteurs actifs :
 Les deux comptes sont représentés dans une table `sources` (multi-compte,
 observable : `last_sync_at`, `last_sync_status`, `consecutive_errors` par
 source). Un seul job pg_cron (`mnemos-collect-google`, toutes les 2h,
-appelle l'outil `mnemos_collect_events`) traite en réalité **toutes** les
+appelle l'outil `mycelora_collect_events`) traite en réalité **toutes** les
 sources actives, malgré son nom historique — il ne se limite pas à Google.
 
 Aucun secret Google/OVH n'est stocké en clair : uniquement dans Supabase
@@ -178,7 +178,7 @@ ou dans le dashboard, onglet Réflexes, bloc **Alertes**.
 **Acquitter une alerte** — deux chemins, au choix, avec exactement le même
 effet côté serveur :
 - Depuis claude.ai ou Claude Desktop (connecteur Mycelora) : demander à
-  Claude d'acquitter l'alerte ; il utilise l'outil `mnemos_ack_alerte` avec
+  Claude d'acquitter l'alerte ; il utilise l'outil `mycelora_ack_alerte` avec
   le petit identifiant donné dans le texte de l'alerte, et un verdict,
   utile ou bruit.
 - Depuis le dashboard : onglet Réflexes, bloc Alertes, deux boutons
@@ -215,13 +215,13 @@ Note : le cosine est inadapté pour détecter la supersession (vocabulaire oppos
 GC v2 pgvector : calculs de similarité côté PostgreSQL. 3 étapes : lifecycle insights, archivage obsolètes, déduplication (>=0.95 fusion auto, 0.85-0.95 rapport). Consolidation orphelins par espace. Fonctions SQL : `find_duplicate_atoms`, `find_orphan_atoms`, `find_orphan_pairs_by_space`.
 
 ### health_check (pg_cron quotidien 5h UTC)
-Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, purge connexions obsolètes. Aussi appelable manuellement : `mnemos_health_check(repair:true)`.
+Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, purge connexions obsolètes. Aussi appelable manuellement : `mycelora_health_check(repair:true)`.
 
 ---
 
 ## Gestion des erreurs
 
-1. Un appel MCP `mnemos_*` échoue → retenter une fois. Échec persistant → vérifier que le canal (plugin Cowork ou connecteur Mycelora, voir install.md) est bien actif et authentifié.
+1. Un appel MCP `mycelora_*` échoue → retenter une fois. Échec persistant → vérifier que le canal (plugin Cowork ou connecteur Mycelora, voir install.md) est bien actif et authentifié.
 2. Toujours indisponible → "L'accès mémoire est indisponible. Je continue sans, session non sauvegardée."
 3. Ne JAMAIS ignorer un échec d'écriture (handover, mémoire, atome). Toujours prévenir l'utilisateur.
 4. Clôture échouée → copier handover/mémoire dans le chat pour sauvegarde manuelle.

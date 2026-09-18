@@ -1,6 +1,6 @@
 # Mycelora — Onboarding nouvel utilisateur
 
-Ce flow se déclenche quand `mnemos_session_start` retourne un profil vide ou une erreur "user not found".
+Ce flow se déclenche quand `mycelora_session_start` retourne un profil vide ou une erreur "user not found".
 Le LLM DOIT lire ce fichier et suivre les étapes dans l'ordre.
 
 ---
@@ -18,9 +18,9 @@ Demander : "Comment tu veux que je t'appelle ? Et quels sont tes principes de tr
 
 Avec la réponse, appeler :
 ```
-mnemos_update_profile(displayName:[prénom ou nom choisi], principles:[tableau de strings], portrait:"À compléter au fil des échanges")
+mycelora_update_profile(displayName:[prénom ou nom choisi], principles:[tableau de strings], portrait:"À compléter au fil des échanges")
 ```
-Puis appeler `mnemos_whoami()` pour récupérer le UUID de l'utilisateur (nécessaire à l'étape 4).
+Puis appeler `mycelora_whoami()` pour récupérer le UUID de l'utilisateur (nécessaire à l'étape 4).
 
 ---
 
@@ -28,7 +28,7 @@ Puis appeler `mnemos_whoami()` pour récupérer le UUID de l'utilisateur (néces
 
 Demander : "Sur quel projet tu travailles en ce moment ? Je vais créer ton premier dossier."
 
-Appeler : `mnemos_create_space(name:[nom du projet])`
+Appeler : `mycelora_create_space(name:[nom du projet])`
 
 ---
 
@@ -76,7 +76,7 @@ Le fichier SYNC-MAIL-AGENDA-PROMPT.md (dans ce même dossier skills/mycelora/) c
 - {{USER_EMAIL}} : adresse email principale
 - {{USER_EMAIL_ALT}} : adresse secondaire (ou identique à la principale)
 - {{CALENDARS}} : liste des calendriers entre guillemets (ex: "Travail", "Personnel")
-- {{USER_UUID}} : UUID Mycelora de l'utilisateur (retourné par `mnemos_whoami()` à l'étape 1)
+- {{USER_UUID}} : UUID Mycelora de l'utilisateur (retourné par `mycelora_whoami()` à l'étape 1)
 
 Après la création, expliquer : "Au premier lancement automatique, tu devras approuver les outils Mycelora une fois. Clique sur la tâche active dans la barre latérale, puis 'Toujours autorisé' pour chaque outil. Après ça, tout est automatique."
 

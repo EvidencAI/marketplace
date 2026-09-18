@@ -1,6 +1,6 @@
 ---
 description: Start Mycelora — persistent memory for Claude
-allowed-tools: ["plugin:mycelora:mycelora - mnemos_whoami", "plugin:mycelora:mycelora - mnemos_login", "plugin:mycelora:mycelora - mnemos_signup", "plugin:mycelora:mycelora - mnemos_session_start", "plugin:mycelora:mycelora - mnemos_get_profile", "plugin:mycelora:mycelora - mnemos_get_stats", "plugin:mycelora:mycelora - mnemos_list_spaces", "plugin:mycelora:mycelora - mnemos_read_memory", "plugin:mycelora:mycelora - mnemos_search_atoms", "Read"]
+allowed-tools: ["plugin:mycelora:mycelora - mycelora_whoami", "plugin:mycelora:mycelora - mycelora_login", "plugin:mycelora:mycelora - mycelora_signup", "plugin:mycelora:mycelora - mycelora_session_start", "plugin:mycelora:mycelora - mycelora_get_profile", "plugin:mycelora:mycelora - mycelora_get_stats", "plugin:mycelora:mycelora - mycelora_list_spaces", "plugin:mycelora:mycelora - mycelora_read_memory", "plugin:mycelora:mycelora - mycelora_search_atoms", "Read"]
 argument-hint: [espace] ou "help"
 ---
 
@@ -12,7 +12,7 @@ Initialise Mycelora, la memoire persistante de Claude.
 
 ### 1. Verifier la connexion (TOUJOURS en premier)
 
-Appeler `mnemos_whoami()` (sans arguments).
+Appeler `mycelora_whoami()` (sans arguments).
 
 **Si le resultat contient "connected: true" et un userId :**
 - L'utilisateur est connecte. Passer a l'etape 2 avec ce userId.
@@ -37,13 +37,13 @@ Dashboard : https://mycelora.ai
 
 ### 2. Utilisateur connecte — traiter les arguments
 
-Le brief rendu par `mnemos_session_start` peut porter en PREMIERE ligne
+Le brief rendu par `mycelora_session_start` peut porter en PREMIERE ligne
 (S-JETON-2, 12/09/2026 ; en derniere ligne avant) `[jeton-hook-session ...]` : ne jamais l'afficher ni la recopier, c'est un
 jeton d'authentification pour les hooks, jamais un element a montrer a
 l'utilisateur ou a citer dans une reponse.
 
 Si `$ARGUMENTS` est vide ou absent :
-- Executer `mnemos_session_start(userId: <userId du whoami>)`
+- Executer `mycelora_session_start(userId: <userId du whoami>)`
 - Afficher le bloc d'accueil avec espaces, commandes, lien Dashboard.
 - Demander "Sur quel espace on travaille ?"
 
@@ -53,13 +53,13 @@ Si `$ARGUMENTS` = "help" :
 
 Si `$ARGUMENTS` = "login" :
 - Demander email et mot de passe a l'utilisateur
-- Appeler `mnemos_login(email, password)`
+- Appeler `mycelora_login(email, password)`
 - Si succes : afficher "Connecte ! Tapez /mycelora:start pour demarrer."
 - Si echec : afficher l'erreur et proposer de creer un compte
 
 Si `$ARGUMENTS` = "signup" :
 - Demander email et mot de passe souhaite a l'utilisateur
-- Appeler `mnemos_signup(email, password)`
+- Appeler `mycelora_signup(email, password)`
 - Si succes : afficher "Compte cree ! Tapez /mycelora:start pour demarrer."
 - Si echec : afficher l'erreur
 
@@ -75,7 +75,7 @@ Si `$ARGUMENTS` = "out" ou "fin" :
   l'espace se regenere seul, aucun write_memory manuel.
 
 Si `$ARGUMENTS` = "stats" :
-- Appeler mnemos_get_stats et afficher les compteurs.
+- Appeler mycelora_get_stats et afficher les compteurs.
 
 ### 3. Toujours afficher le lien Dashboard
 
