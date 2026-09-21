@@ -1,6 +1,6 @@
 {
   "name": "mycelora",
-  "version": "0.13.2",
+  "version": "0.13.3",
   "description": "Sous chacun de vos projets, un réseau qui relie, retient et apprend : Mycelora est la mémoire persistante de Claude. Le plugin apporte skills, commandes et hooks : rappel injecté à chaque message, collecte des échanges, réflexe d'impact avant un geste structurant. Les atomes sont écrits par le modèle. Les 51 outils MCP viennent du connecteur Mycelora : graphe de connaissances (atomes, espaces, connexions), neurone cross-insights, collecte mail et agenda, quotas par plan.",
   "author": {
     "name": "EvidencAI"
