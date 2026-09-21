@@ -69,10 +69,16 @@ Si `$ARGUMENTS` = un nom d'espace (ex: "Developpement Mycelora", "CodirIA") :
 - Afficher le contexte et demander confirmation
 
 Si `$ARGUMENTS` = "out" ou "fin" :
-- Executer le protocole de cloture : workSummary, puis session_end en fournissant
-  TOUJOURS decisions et pendingTasks (sans elles, un modele serveur refait ce
-  travail moins bien et la cloture est nettement plus lente). Le codex de
-  l'espace se regenere seul, aucun write_memory manuel.
+- Executer le protocole de cloture du skill Mycelora (§ PROTOCOLE DE CLOTURE),
+  dans cet ordre :
+  1. `mycelora_session_end_atoms` avec le sessionId rendu a l'ouverture ;
+  2. `mycelora_session_end` avec `spaceId`, workSummary, decisions, pendingTasks,
+     les cinq listes structurees, ET le codex de l'espace MIS A JOUR dans le
+     champ `codex` (codex servi a l'ouverture + delta du fil).
+- Le serveur ne regenere JAMAIS le codex d'un fil pilote : sans codex fourni,
+  l'ancien est conserve tel quel. Verifier dans la reponse que le bloc `codex`
+  porte `accepte: true` ; sinon corriger d'apres ses raisons et resoumettre par
+  `mycelora_write_memory(type:"codex")`, sans relancer session_end.
 
 Si `$ARGUMENTS` = "stats" :
 - Appeler mycelora_get_stats et afficher les compteurs.
