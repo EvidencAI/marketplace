@@ -17,8 +17,8 @@ Graphe de connaissances : **atomes** (6 types, grille 2.1), **espaces** (projets
 | Config | Valeur |
 |--------|--------|
 | Dashboard | https://mycelora.ai |
-| Canal 1 | Plugin Cowork (skills + hooks automatiques, rien à configurer) |
-| Canal 2 | Connecteur claude.ai / Claude Desktop "Mycelora" (OAuth) → outils MCP mycelora_* |
+| Canal 1 | Plugin Mycelora (skills + hooks automatiques, rien à configurer), actif dans toute session de l'app où il est installé, Chat et Cowork fusionnés depuis le 21/09/2026 |
+| Canal 2 | Connecteur claude.ai / Claude Desktop "Mycelora" (OAuth) → outils MCP mycelora_* ; seul canal là où le plugin ne tourne pas |
 
 OUTILS : fournis par le connecteur custom claude.ai "Mycelora" (51 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
 USERID : `userId` est IGNORÉ par le serveur (identité résolue depuis la connexion, S-USERID-1 du 25/08/2026, écrasement inconditionnel dans `mycelora-mcp/index.ts`) : OMETS-LE dans tous les appels, sur toutes les surfaces. Seule exception : le chemin de la clé de service (tâches planifiées avec `x-mycelora-key`), où il désigne le compte cible en UUID.
@@ -204,12 +204,12 @@ Deux hooks embarqués dans le plugin assurent la mémoire automatique, sans acti
 
 Un journal technique est tenu dans `/tmp/mycelora-hook.log` (diagnostic local). Les deux hooks ignorent les notifications système et les messages trop courts pour être utiles. Limite connue : un rappel planifié (wakeup) au libellé libre peut ne pas être filtré et apparaître comme un message utilisateur normal.
 
-### Deux surfaces, un seul skill
-Mycelora tourne sur DEUX surfaces avec le même skill et le même connecteur : **Cowork** (plugin installé, watcher v3 actif) et le **Chat claude.ai / Claude Desktop** (connecteur seul, pas de hooks, donc pas de watcher). Le skill ne sait pas où il tourne, et il n'a pas besoin de le savoir : la consigne est écrite pour être juste sur les deux.
+### Surfaces : avec ou sans hooks
+Depuis le 21/09/2026, Chat et Cowork sont FUSIONNÉS sur le compte de Stéphane : une seule interface, sessions dans le cloud d'Anthropic, et les hooks du plugin tournent dans la session unifiée (vérifié le 21/09 au soir : rappel à chaque message, `log_exchange` à chaque fin d'échange, journal `/tmp/mycelora-hook.log` du conteneur). Le constat du 20/09 « le Chat n'a pas de watcher » décrivait l'ancien Chat : il est périmé. La distinction qui compte n'est donc plus Chat contre Cowork, mais **session avec hooks** (plugin installé et actif) contre **session sans hooks** (connecteur seul : compte pas encore fusionné, autre client, plugin désactivé). NON VÉRIFIÉ au 21/09 : une session ouverte depuis le mobile ou le web ; ne pas présumer que les hooks y tournent. Le skill ne sait pas dans quel cas il tourne, et il n'a pas besoin de le savoir : la consigne est écrite pour être juste dans les deux.
 
 - **Ce qui est identique partout** : l'ouverture (`session_start`), la création proactive d'atomes, les atomes de clôture et le handover. Tu écris les souvenirs toi-même dans tous les cas.
-- **Le seul écart : le rappel contextuel.** Sur Cowork, le watcher l'injecte avant chaque réponse. Sur le Chat, rien n'arrive tout seul. Et même sur Cowork il peut manquer : rien de pertinent ce tour (bloc vide, normal), message filtré, ou watcher sans jeton (bloc d'ouverture trop gros pour le transcript, défaut connu du 12/09/2026). **Règle unique** : quand une question porte sur le contexte de l'utilisateur (ses projets, ses décisions, ses chiffres) et qu'aucun rappel n'est arrivé, appelle `mycelora_search_atoms` ou `mycelora_recall` toi-même avant de répondre. Un rappel demandé en trop coûte un appel ; un rappel manqué coûte une décision retranchée à l'aveugle.
-- **Ne jamais appeler `mycelora_log_exchange` toi-même** : c'est l'appel du watcher, et le serveur refuse un lot connecteur quand un lot hook existe pour le fil (règle D5). Sur le Chat, sans watcher, le fil n'est pas collecté : c'est connu et assumé, sa mémoire est ce que tu écris en atomes et à la clôture.
+- **Le seul écart : le rappel contextuel.** Avec hooks, le watcher l'injecte avant chaque réponse. Sans hooks, rien n'arrive tout seul. Et même avec hooks il peut manquer : rien de pertinent ce tour (bloc vide, normal), message filtré, ou watcher sans jeton (aucun `session_start` encore fait, ou bloc d'ouverture trop gros pour le transcript, défaut connu du 12/09/2026). **Règle unique** : quand une question porte sur le contexte de l'utilisateur (ses projets, ses décisions, ses chiffres) et qu'aucun rappel n'est arrivé, appelle `mycelora_search_atoms` ou `mycelora_recall` toi-même avant de répondre. Un rappel demandé en trop coûte un appel ; un rappel manqué coûte une décision retranchée à l'aveugle.
+- **Ne jamais appeler `mycelora_log_exchange` toi-même** : c'est l'appel du watcher, et le serveur refuse un lot connecteur quand un lot hook existe pour le fil (règle D5). Dans une session sans hooks, le fil n'est pas collecté : c'est connu et assumé, sa mémoire est ce que tu écris en atomes et à la clôture.
 
 ### Réflexes de senior (impact, état du fil, contradiction)
 
