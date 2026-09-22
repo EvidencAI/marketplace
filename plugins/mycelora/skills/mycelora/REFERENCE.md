@@ -15,16 +15,13 @@ Mycelora est multi-utilisateur. Deux canaux vivants donnent accès à la mémoir
 
 Un utilisateur du plugin n'a jamais besoin d'une clé service_role Supabase : ce niveau d'accès reste interne à l'infrastructure EvidencAI.
 
-| Variable | Description | Exemple (Stéphane) |
-|----------|--------------|---------------------|
-| USER_ALIAS | Identifiant court historique. `userId` est IGNORÉ par le serveur depuis S-USERID-1 (25/08/2026) : ne plus le passer, sauf chemin clé de service (UUID cible) | "stephane" |
-| SUPABASE_PROJECT_REF | Référence projet Supabase | hpbsowihyydzdnxuzoxs |
+`userId` est IGNORÉ par le serveur depuis S-USERID-1 (25/08/2026) : ne pas le passer, sauf chemin clé de service (UUID du compte cible).
 
 - `mycelora_get_profile()` → principes, portrait, instructions
 
 Premier setup : voir ONBOARDING.md.
 
-Dette technique (mono-tenant) : dans ce déploiement, toute valeur de `userId` qui n'est pas un UUID valide est silencieusement remplacée par l'utilisateur unique configuré côté serveur (filet de sécurité mono-tenant, pas une résolution d'alias par nom comme pour les espaces). Ce n'est pas un défaut à corriger maintenant, mais si Mycelora devient multi-utilisateur un jour, ce mécanisme devra être revu AVANT : sinon un `userId` mal formé de n'importe quel appelant finirait associé au mauvais compte.
+Identité : le serveur est multi-compte. Tout `userId` reçu est écrasé par l'identité résolue de la connexion (jeton OAuth, clé API ou jeton de hook), sans condition ; seul le chemin de la clé de service désigne un compte cible, validé côté serveur.
 
 ---
 
@@ -129,18 +126,17 @@ En cas d'erreur d'insertion sur un ou plusieurs événements, la réponse inclut
 ## Collecte cloud mail/agenda (S7)
 
 Depuis le sprint S7, la collecte mail/agenda tourne côté serveur Mycelora,
-sans aucun prérequis Mac ni Cowork ouvert. Deux connecteurs actifs :
+sans aucun prérequis Mac ni Cowork ouvert. Trois types de sources :
 
-- **Google Workspace** (`stephane@commenge.net`) : mail (4h glissantes,
-  plafond de rattrapage 7j) + agenda (fenêtre ±5j), via OAuth 2.0. Refresh
-  token chiffré dans Supabase Vault.
-- **OVH IMAP** (`s.c@naturedeaux.com`) : mail seul (l'offre MXPLAN 25 ne
-  propose pas de CalDAV). Client IMAP minimal (identifiants stables via
-  UID), mot de passe d'application chiffré dans Supabase Vault.
+- **IMAP** (Gmail, Outlook, iCloud, OVH et autres) : mail, avec un mot de
+  passe d'application. Tous les dossiers utiles sont lus (corbeille,
+  indésirables et brouillons exclus), fenêtre de rattrapage de 7 jours.
+- **Google Agenda** : agenda par OAuth 2.0 (scope calendar.readonly seul).
+- **CalDAV** : agenda.
 
-Les deux comptes sont représentés dans une table `sources` (multi-compte,
+Chaque compte est une ligne de la table `sources` (multi-compte,
 observable : `last_sync_at`, `last_sync_status`, `consecutive_errors` par
-source). Un seul job pg_cron (`mnemos-collect-google`, toutes les 2h,
+source). Un seul job pg_cron (`mycelora-collect-google`, toutes les 2h,
 appelle l'outil `mycelora_collect_events`) traite en réalité **toutes** les
 sources actives, malgré son nom historique — il ne se limite pas à Google.
 

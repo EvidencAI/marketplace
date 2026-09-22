@@ -190,7 +190,8 @@ except Exception:
 # utilise par ailleurs pour le filtrage.
 query = prompt[:2000]
 
-arguments = {"userId": "stephane", "query": query}
+# Pas de userId : le serveur impose l'identite resolue du jeton (22/09/2026).
+arguments = {"query": query}
 if space_id:
     arguments["spaceId"] = space_id
 if session_id:
