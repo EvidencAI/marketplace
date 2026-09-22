@@ -45,40 +45,15 @@ Présenter :
 
 ## Étape 4 : Collecte mail/agenda
 
-### Sur macOS
-Expliquer : "Mycelora peut collecter automatiquement tes mails et RDV toutes les 2h via Mail.app et Calendar.app. On la configure ?"
+La collecte tourne côté serveur Mycelora, toutes les 2 h, sur n'importe quel système, ordinateur éteint ou non. Aucune tâche planifiée à créer, rien à laisser tourner en local.
 
-Si l'utilisateur accepte, demander :
-- Son compte Mail.app (ex: "Google") et la mailbox (ex: "[Gmail]/Tous les messages")
-- Son adresse email principale et secondaire éventuelle (pour détecter envoyé/reçu)
-- Ses calendriers Calendar.app (ex: "Travail", "Personnel")
+Expliquer : "Mycelora peut lire tes mails et ton agenda toutes les deux heures pour garder le fil de tes échanges et de tes engagements. Le texte des mails est effacé 7 jours après le tri. On branche une boîte ?"
 
-### Sur Windows/Linux
-La collecte automatique par scheduled task n'est pas disponible (pas de Mail.app/Calendar.app).
-Alternative : les connecteurs Anthropic natifs (gmail_*, gcal_*) permettent la collecte en conversation directe.
-Expliquer : "Sur ton système, la collecte se fait à la demande. Dis 'brief matinal' ou 'collecte mes mails' et j'utiliserai tes connecteurs Gmail et Google Calendar pour alimenter ta mémoire."
-Vérifier que l'utilisateur a bien activé les connecteurs Gmail et Google Calendar dans ses paramètres Claude.
-Passer directement à l'étape 5 (pas de tâche à créer).
+Si l'utilisateur accepte, deux chemins :
+- **Dashboard, page Connexions** (https://mycelora.ai) : le plus simple. Mail par IMAP (Gmail, Outlook, iCloud, OVH, Free, Orange et autres), agenda Google par consentement, agendas CalDAV.
+- **En conversation** : `mycelora_create_source` pour une boîte IMAP ou un agenda CalDAV (la connexion est testée avant toute création, le secret n'est posé que si le test réussit) ; `mycelora_google_consent_url` pour l'agenda Google (lien de consentement à ouvrir par l'utilisateur).
 
-### Création de la tâche (macOS uniquement, suite de la section macOS ci-dessus)
-
-Puis créer la tâche via `create_scheduled_task` avec ces paramètres :
-```
-taskId: "mnemos-sync-mail-agenda"
-description: "Collecte auto mails + agenda + contacts → Mycelora (toutes les 2h via Mail.app et Calendar.app)"
-cronExpression: "0 */2 * * *"
-prompt: <copier intégralement le contenu du fichier SYNC-MAIL-AGENDA-PROMPT.md en adaptant les valeurs utilisateur>
-```
-
-Le fichier SYNC-MAIL-AGENDA-PROMPT.md (dans ce même dossier skills/mycelora/) contient le prompt complet de la tâche avec les 8 étapes du pipeline. Le LLM DOIT le lire et remplacer les 6 placeholders avant de créer la tâche :
-- {{MAIL_ACCOUNT}} : nom du compte Mail.app (ex: "Google")
-- {{MAILBOX}} : chemin de la boîte (ex: "[Gmail]/Tous les messages")
-- {{USER_EMAIL}} : adresse email principale
-- {{USER_EMAIL_ALT}} : adresse secondaire (ou identique à la principale)
-- {{CALENDARS}} : liste des calendriers entre guillemets (ex: "Travail", "Personnel")
-- {{USER_UUID}} : UUID Mycelora de l'utilisateur (champ `user_id` rendu par `mycelora_list_spaces()` à l'étape 1)
-
-Après la création, expliquer : "Au premier lancement automatique, tu devras approuver les outils Mycelora une fois. Clique sur la tâche active dans la barre latérale, puis 'Toujours autorisé' pour chaque outil. Après ça, tout est automatique."
+Mot de passe : chez les fournisseurs qui en proposent un (Gmail, Outlook, iCloud), toujours un mot de passe d'application, jamais le mot de passe principal du compte ; chez les autres (OVH, Free, Orange), le mot de passe de la boîte mail. Ne jamais créer de tâche planifiée de collecte (l'ancienne tâche Mail.app / Calendar.app est abandonnée).
 
 ---
 

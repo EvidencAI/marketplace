@@ -284,8 +284,8 @@ def read_file(path):
 user_message = read_file(user_path)
 assistant_response = read_file(assistant_path)
 
+# Pas de userId : le serveur impose l'identite resolue du jeton (22/09/2026).
 arguments = {
-    "userId": "stephane",
     "sessionId": session_id,
     "userMessage": user_message,
     "assistantResponse": assistant_response,

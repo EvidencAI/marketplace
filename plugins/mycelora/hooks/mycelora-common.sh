@@ -412,6 +412,9 @@ mycelora_resolve_hook_token() {
 # le recall depassait le --max-time 5 (mesure : 4,6-7,9 s sans l'en-tete,
 # 3,2-3,65 s avec). Cet en-tete epingle l'execution dans la region de la
 # base ; ne pas le retirer sans re-mesurer depuis un conteneur Cowork.
+# 22/09/2026 : depuis la bascule self-hosted du 30/08 (Scaleway, Kong), cet
+# en-tete n'a plus d'effet attendu (aucun routage par region) ; conserve car
+# inoffensif, effet non mesure. Le retirer seulement avec une mesure a l'appui.
 mycelora_curl_post() {
   local body_file="$1" cfgfile="$2" resp_file="$3" timeout="${4:-5}"
   local http_code curl_rc

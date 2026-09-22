@@ -22,7 +22,7 @@ Graphe de connaissances : **atomes** (6 types, grille 2.1), **espaces** (projets
 
 OUTILS : fournis par le connecteur custom claude.ai "Mycelora" (51 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
 USERID : `userId` est IGNORÉ par le serveur (identité résolue depuis la connexion, S-USERID-1 du 25/08/2026, écrasement inconditionnel dans `mycelora-mcp/index.ts`) : OMETS-LE dans tous les appels, sur toutes les surfaces. Seule exception : le chemin de la clé de service (tâches planifiées avec `x-mycelora-key`), où il désigne le compte cible en UUID.
-Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md, SYNC-MAIL-AGENDA-PROMPT.md
+Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md
 
 ---
 
@@ -319,20 +319,19 @@ mémoire : le codex répond à « où en est ce projet », le journal des briefs
   premier gisement de bruit de l'injection automatique (13 injections jugées
   bruit pour 0 utile). Ils se consultent, ils ne se servent pas tout seuls.
 
-### Collecte mail/agenda : cloud (recommandé) vs legacy Mac
-Depuis S7, la collecte mail/agenda tourne côté serveur Mycelora
-(`mnemos-collect-google`, pg_cron toutes les 2h) : **fonctionne sur
-n'importe quelle plateforme, Mac éteint ou non, Cowork ouvert ou non.**
+### Collecte mail/agenda : côté serveur uniquement
+La collecte mail/agenda tourne côté serveur Mycelora (cron
+`mycelora-collect-google`, toutes les 2h, qui traite TOUTES les sources
+actives malgré son nom) : **fonctionne sur n'importe quelle plateforme,
+ordinateur éteint ou non, Cowork ouvert ou non.** Brancher une source :
+dashboard, page Connexions, ou `mycelora_create_source` /
+`mycelora_google_consent_url` (ONBOARDING.md, étape 4).
 Détail architecture : REFERENCE.md § Collecte cloud mail/agenda.
 
-La tâche Cowork macOS historique (`mnemos-sync-mail-agenda`) reste active
-en parallèle pendant la période de transition (double-collecte, dédup
-automatique côté serveur, aucun doublon observé) : sa mise en pause est un
-geste manuel de l'utilisateur dans l'UI Scheduled, pas automatique. Ne pas
-la présumer désactivée sans confirmation explicite.
-Windows/Linux : la collecte cloud fonctionne nativement, aucune tâche
-locale requise (contrairement à avant S7 où seuls les connecteurs
-Anthropic natifs en conversation directe étaient disponibles hors macOS).
+L'ancienne tâche planifiée macOS de collecte par Mail.app et Calendar.app
+(`mnemos-sync-mail-agenda`) est abandonnée : ne jamais la créer. Si un
+utilisateur l'a encore, lui proposer de la mettre en pause (geste manuel
+dans la liste des tâches planifiées).
 
 ---
 

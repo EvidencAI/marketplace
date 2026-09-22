@@ -241,8 +241,8 @@ EOF
     if [ "$tool_name" = "mycelora_recall" ]; then
       local user_id
       user_id="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('userId', ''))" < "$capture_body")"
-      if [ "$user_id" != "stephane" ]; then
-        echo "FAIL $test_name : expected userId 'stephane', got '$user_id'"
+      if [ -n "$user_id" ]; then
+        echo "FAIL $test_name : userId must be absent (server imposes identity), got '$user_id'"
         return 1
       fi
 
@@ -339,9 +339,9 @@ EOF
       user_id="$(python3 -c "import json, sys; data=json.loads(sys.stdin.read()); print(data.get('params', {}).get('arguments', {}).get('userId', ''))" < "$capture_body")"
       
       if [ "$test_name" = "mycelora-stop-10" ]; then
-        # Pour ce test, vérifier le userId
-        if [ "$user_id" != "stephane" ]; then
-          echo "FAIL $test_name : expected userId 'stephane', got '$user_id'"
+        # Pour ce test, vérifier l'absence de userId (identite imposee par le serveur)
+        if [ -n "$user_id" ]; then
+          echo "FAIL $test_name : userId must be absent (server imposes identity), got '$user_id'"
           return 1
         fi
       fi
