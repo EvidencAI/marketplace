@@ -12,7 +12,7 @@
       "name": "mycelora",
       "source": "./plugins/mycelora",
       "description": "Mémoire persistante de Claude. Le plugin apporte skills, commandes et hooks ; les 51 outils MCP viennent du connecteur Mycelora : sessions, atomes, espaces, profil, contacts, collecte mail et agenda, cross-insights.",
-      "version": "0.13.3"
+      "version": "0.13.4"
     },
     {
       "name": "mon-greffier",

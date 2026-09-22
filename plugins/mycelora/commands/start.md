@@ -1,6 +1,5 @@
 ---
 description: Start Mycelora — persistent memory for Claude
-allowed-tools: ["plugin:mycelora:mycelora - mycelora_whoami", "plugin:mycelora:mycelora - mycelora_login", "plugin:mycelora:mycelora - mycelora_signup", "plugin:mycelora:mycelora - mycelora_session_start", "plugin:mycelora:mycelora - mycelora_get_profile", "plugin:mycelora:mycelora - mycelora_get_stats", "plugin:mycelora:mycelora - mycelora_list_spaces", "plugin:mycelora:mycelora - mycelora_read_memory", "plugin:mycelora:mycelora - mycelora_search_atoms", "Read"]
 argument-hint: [espace] ou "help"
 ---
 
@@ -12,13 +11,19 @@ Initialise Mycelora, la memoire persistante de Claude.
 
 ### 1. Verifier la connexion (TOUJOURS en premier)
 
-Appeler `mycelora_whoami()` (sans arguments).
+Les outils `mycelora_*` viennent du CONNECTEUR Mycelora (OAuth ou cle API),
+jamais du plugin : leur prefixe varie selon le nom du connecteur
+(`mcp__Mycelora__`, `mcp__Mycelora_OAuth__`...). Les charger si besoin
+(recherche d'outils), puis appeler `mycelora_list_spaces()` sans arguments.
+Il n'existe PAS d'outil `mycelora_whoami`, `mycelora_login` ni
+`mycelora_signup` (retires ; ne jamais les appeler).
 
-**Si le resultat contient "connected: true" et un userId :**
-- L'utilisateur est connecte. Passer a l'etape 2 avec ce userId.
+**Si la liste des espaces revient :** l'utilisateur est connecte. Passer a
+l'etape 2. Ne jamais passer de `userId` : le serveur l'impose d'apres la
+connexion et ignore toute valeur recue.
 
-**Si le resultat contient "connected: false" ou une erreur :**
-- L'utilisateur n'est PAS connecte. Afficher :
+**Si aucun outil `mycelora_*` n'est disponible, ou si l'appel echoue
+(401, erreur d'authentification) :** afficher :
 
 ```
 Mycelora — Memoire intelligente pour Claude
@@ -26,9 +31,11 @@ Mycelora — Memoire intelligente pour Claude
 Mycelora donne a Claude une memoire persistante entre vos conversations :
 decisions, apprentissages, contacts, faits, reflexions...
 
-Vous n'etes pas encore connecte.
-Dites-moi "je veux me connecter" (avec votre email/mot de passe)
-ou "je veux creer un compte" pour commencer.
+Le connecteur Mycelora n'est pas encore branche.
+Ajoutez-le dans Parametres, Connecteurs (serveur
+https://api.mycelora.ai/functions/v1/mycelora-mcp), connectez-vous,
+puis relancez /mycelora:start. Pas encore de compte : creez-le sur
+https://mycelora.ai
 
 Dashboard : https://mycelora.ai
 ```
@@ -42,8 +49,12 @@ Le brief rendu par `mycelora_session_start` peut porter en PREMIERE ligne
 jeton d'authentification pour les hooks, jamais un element a montrer a
 l'utilisateur ou a citer dans une reponse.
 
+Le `sessionId` est choisi par toi (forme `surface-AAAA-MM-JJ-sujet`) ; le
+serveur peut le rendre horodate : reprendre alors CELUI qu'il rend dans tous
+les appels suivants, jusqu'a la cloture.
+
 Si `$ARGUMENTS` est vide ou absent :
-- Executer `mycelora_session_start(userId: <userId du whoami>)`
+- Executer `mycelora_session_start(sessionId)`, sans `spaceId`
 - Afficher le bloc d'accueil avec espaces, commandes, lien Dashboard.
 - Demander "Sur quel espace on travaille ?"
 
@@ -51,20 +62,10 @@ Si `$ARGUMENTS` = "help" :
 - Lire le fichier `${CLAUDE_PLUGIN_ROOT}/skills/mycelora/SKILL.md`
 - Afficher la table "Commandes en langage naturel" reformatee en blocs thematiques.
 
-Si `$ARGUMENTS` = "login" :
-- Demander email et mot de passe a l'utilisateur
-- Appeler `mycelora_login(email, password)`
-- Si succes : afficher "Connecte ! Tapez /mycelora:start pour demarrer."
-- Si echec : afficher l'erreur et proposer de creer un compte
-
-Si `$ARGUMENTS` = "signup" :
-- Demander email et mot de passe souhaite a l'utilisateur
-- Appeler `mycelora_signup(email, password)`
-- Si succes : afficher "Compte cree ! Tapez /mycelora:start pour demarrer."
-- Si echec : afficher l'erreur
-
 Si `$ARGUMENTS` = un nom d'espace (ex: "Developpement Mycelora", "CodirIA") :
-- Executer session_start(userId, spaceId: $ARGUMENTS)
+- Retrouver l'UUID de l'espace dans la liste de l'etape 1 (nom exact, sinon
+  le plus proche ; en cas de doute, demander a l'utilisateur, ne jamais deviner)
+- Executer `mycelora_session_start(sessionId, spaceId: <UUID>)`
 - Charger read_memory(spaceId, type:"all")
 - Afficher le contexte et demander confirmation
 

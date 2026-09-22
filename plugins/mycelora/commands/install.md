@@ -9,7 +9,7 @@ Le plugin Mycelora fournit les skills (comportement). Les outils MCP (mémoire, 
 
 ## Détection
 Avant d'afficher les instructions, vérifie si les outils mycelora_* sont déjà disponibles :
-- Si `mycelora_whoami` ou `mycelora_list_spaces` répond → un canal est déjà configuré, dis-le a l'utilisateur.
+- Si `mycelora_list_spaces` répond → un canal est déjà configuré, dis-le a l'utilisateur.
 - Sinon → continue avec l'installation.
 
 ## Instructions a afficher a l'utilisateur
@@ -35,8 +35,8 @@ Aucune installation locale n'est nécessaire — pas de script, pas de bundle a 
 ## Après configuration
 
 Une fois que l'utilisateur revient :
-1. Teste `mycelora_whoami` pour confirmer que le canal fonctionne.
-2. Si ça marche, propose `mycelora login` ou `mycelora signup` selon si l'utilisateur a déjà un compte.
+1. Teste `mycelora_list_spaces` pour confirmer que le canal fonctionne.
+2. Si ça marche, propose `/mycelora:start` ; sans compte, renvoie vers https://mycelora.ai pour le créer (il n'existe pas d'outil de connexion ni d'inscription).
 3. Si ça ne marche pas, vérifie :
    - Le connecteur Mycelora est bien ajouté et activé dans claude.ai / Claude Desktop ?
    - L'authentification (OAuth ou clé API `mk_live_...`) a bien abouti ?
