@@ -20,7 +20,7 @@ Avec la réponse, appeler :
 ```
 mycelora_update_profile(displayName:[prénom ou nom choisi], principles:[tableau de strings], portrait:"À compléter au fil des échanges")
 ```
-Puis appeler `mycelora_whoami()` pour récupérer le UUID de l'utilisateur (nécessaire à l'étape 4).
+Puis appeler `mycelora_list_spaces()` : le champ `user_id` des espaces rendus est l'UUID de l'utilisateur (nécessaire à l'étape 4). Il n'existe pas d'outil `mycelora_whoami`.
 
 ---
 
@@ -76,7 +76,7 @@ Le fichier SYNC-MAIL-AGENDA-PROMPT.md (dans ce même dossier skills/mycelora/) c
 - {{USER_EMAIL}} : adresse email principale
 - {{USER_EMAIL_ALT}} : adresse secondaire (ou identique à la principale)
 - {{CALENDARS}} : liste des calendriers entre guillemets (ex: "Travail", "Personnel")
-- {{USER_UUID}} : UUID Mycelora de l'utilisateur (retourné par `mycelora_whoami()` à l'étape 1)
+- {{USER_UUID}} : UUID Mycelora de l'utilisateur (champ `user_id` rendu par `mycelora_list_spaces()` à l'étape 1)
 
 Après la création, expliquer : "Au premier lancement automatique, tu devras approuver les outils Mycelora une fois. Clique sur la tâche active dans la barre latérale, puis 'Toujours autorisé' pour chaque outil. Après ça, tout est automatique."
 
