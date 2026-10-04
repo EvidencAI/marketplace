@@ -75,7 +75,9 @@ Si `$ARGUMENTS` = "out" ou "fin" :
   1. `mycelora_session_end_atoms` avec le sessionId rendu a l'ouverture ;
   2. `mycelora_session_end` avec `spaceId`, workSummary, decisions, pendingTasks,
      les cinq listes structurees, ET le codex de l'espace MIS A JOUR dans le
-     champ `codex` (codex servi a l'ouverture + delta du fil).
+     champ `codex` (ancien format : codex servi a l'ouverture + delta du fil ;
+     codex MAP : codex ENTIER relu par read_memory(type:"codex") + delta, jamais
+     le sommaire de l'ouverture, voir skill § cloture bloc 2a).
 - Le serveur ne regenere JAMAIS le codex d'un fil pilote : sans codex fourni,
   l'ancien est conserve tel quel. Verifier dans la reponse que le bloc `codex`
   porte `accepte: true` ; sinon corriger d'apres ses raisons et resoumettre par
