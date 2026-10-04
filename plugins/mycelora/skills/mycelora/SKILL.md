@@ -78,6 +78,13 @@ Résolution nom : `session_start` résout lui-même un nom partiel ou sans accen
 
 ---
 
+### Fil non clôturé signalé à l'ouverture (S-ORPHELINS-1, 04/10/2026)
+Si le bloc d'ouverture porte une section « Fil non clôturé (…) » : c'est un fil précédent du même espace, inactif depuis plus de 6 h, jamais clôturé. AVANT de répondre sur le fond :
+1. lis ses échanges : `mycelora_read_memory(type:"fil", sessionId:"<fil orphelin>")` ;
+2. clôture-le comme un fil normal (listes, sujets du codex) : `mycelora_session_end(sessionId:"<fil orphelin>", clotureDifferee:true, ...)` ; les atomes ne sont pas exigés ;
+3. dis-le à l'utilisateur en une phrase et conseille-lui de clôturer ses fils (« dites clôture en fin de fil »).
+Le sessionId de l'orphelin ne sert QU'À ces deux appels ; tout le reste du fil garde l'identifiant rendu à l'ouverture. Les autres lignes de la section (« non clôturé », « sans échange, abandonné ») sont des mentions : rien à faire.
+
 ## REPRISE POST-COMPRESSION
 
 Trigger : "continued from a previous conversation", "context compaction", résumé de session.
