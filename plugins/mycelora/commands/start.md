@@ -82,6 +82,9 @@ Si `$ARGUMENTS` = "out" ou "fin" :
   l'ancien est conserve tel quel. Verifier dans la reponse que le bloc `codex`
   porte `accepte: true` ; sinon corriger d'apres ses raisons et resoumettre par
   `mycelora_write_memory(type:"codex")`, sans relancer session_end.
+  Exception : si session_end LEVE une erreur "Sujets refuses" ou "codex et
+  sujets/enBref sont exclusifs", rien n'a ete ecrit (handover compris) :
+  corriger les sujets et rappeler session_end.
 
 Si `$ARGUMENTS` = "stats" :
 - Appeler mycelora_get_stats et afficher les compteurs.
