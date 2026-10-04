@@ -41,7 +41,7 @@ NE JAMAIS continuer en se fiant uniquement au résumé compressé.
 Triggers : "ouvre un fil", "mycelora in", "session start", "lance Mycelora", ou appel implicite du skill.
 
 ### Étape 1 : Boot
-Appeler `mycelora_session_start(sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé.
+Appeler `mycelora_session_start(sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé. **Le nom tel que l'utilisateur le dit suffit, même partiel ou sans accent** (« mycelora » ouvre « Développement Mycelora », S-CODEX-REFS-1, 04/10/2026) : pas d'appel `list_spaces` préalable. Quand le nom n'était pas exact, le bloc d'ouverture rend une ligne `Espace : <nom complet> (id <uuid>)` : **reprends cet uuid** dans tous les appels suivants (les autres outils, eux, n'acceptent que l'uuid ou le nom exact). Nom ambigu : le bloc liste les candidats et le fil s'ouvre sans espace ; rappelle avec le nom complet.
 
 **L'IDENTIFIANT DÉFINITIF DU FIL EST CELUI QUE LE SERVEUR REND, pas celui que tu as envoyé.** Depuis le fil 86 (26/08/2026), le serveur horodate lui-même le sessionId à l'heure LOCALE et l'annonce en tête du bloc d'ouverture, sur la ligne `Fil : ...`. Ne calcule pas l'heure toi-même, ne la devine pas : **relis cette ligne et reprends cet identifiant-là dans TOUS les appels suivants**, jusqu'à la clôture comprise.
 
@@ -74,7 +74,7 @@ Sur quel espace on travaille ?
 Le lien Dashboard DOIT apparaître à chaque ouverture de fil.
 Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(sessionId:L'IDENTIFIANT RENDU À L'ÉTAPE 1, spaceId:X)` pour attacher la session à l'espace. Le serveur rattache ce second appel au seau déjà ouvert, il n'en crée pas un second.
 Note : `userId` s'omet (voir QUICK REFERENCE) ; les exemples de ce skill ne le portent plus.
-Résolution nom : `list_spaces` + matching souple insensible à la casse.
+Résolution nom : `session_start` résout lui-même un nom partiel ou sans accent (voir Étape 1) ; `list_spaces` ne sert qu'à montrer la liste à l'utilisateur.
 
 ---
 
@@ -86,7 +86,7 @@ CE SCÉNARIO EST CRITIQUE : le LLM a perdu ~70% du contexte. Sans ce protocole, 
 
 1. Détecter l'espace actif dans le résumé compressé
 2. `mycelora_session_start(sessionId:"resume-AAAA-MM-JJ", spaceId:"[espace]")` — le serveur horodate, reprends l'identifiant qu'il rend
-3. `mycelora_read_memory(spaceId:"[espace]", type:"all")`
+3. `mycelora_read_memory(spaceId:"[espace]", type:"all")` (rend le codex et les 5 derniers handovers complets, chacun avec son id, depuis le 04/10/2026 ; avant, le contenu des handovers revenait vide)
 4. Croiser résumé compressé + mémoire Mycelora
 5. "Je reprends après compression. Voici ce que j'ai retrouvé : [résumé croisé]. On continue ?"
 
@@ -110,7 +110,7 @@ Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora o
    - **Contrôle la réponse.** Le champ `remplacees` (réponse de write_memory, bloc `codex` de session_end) liste les lignes de l'ancien codex disparues sans retrait déclaré : relis-le ; une ligne qui n'aurait pas dû partir se remet par une nouvelle écriture du sujet, tant que sa date figure encore dans les sources (handovers récents ou codex courant).
    - **Schéma en cache.** Si ton outil n'affiche pas `sujets`/`enBref` (connecteur au schéma en cache, piège du 04/10) et exige encore `content` ou `codex`, écris le codex ENTIER relu par `read_memory`, comme avant : ça marche toujours.
    - **Forme** : `EN BREF : ` (état en une ou deux phrases, puis la prochaine échéance), puis des sujets `## <Titre>` (80 c au plus, uniques à l'accent et à la casse près, 60 sujets au plus ; garde les titres existants sauf raison dite à l'utilisateur). Dans un sujet, UNIQUEMENT des lignes typées, genre écrit exactement ainsi, espace avant les deux-points : `- En vigueur : `, `- À faire : `, `- Piège : `, `- Réfuté : `, `- Chiffre : `. Aucune prose, aucune sous-puce, aucune ligne non typée.
-   - **Date en fin de ligne, obligatoire** : `(03/10)`, `(12/08, 19/08)` ou `(03/10, réf. 790115b2)`. Uniquement des dates des handovers récents ou de l'ancien codex (sinon « dates hors sources »). La référence est facultative et n'est pas vérifiée : n'y mets qu'un identifiant réel (atome, story).
+   - **Date en fin de ligne, obligatoire** : `(03/10)`, `(12/08, 19/08)` ou `(03/10, réf. 790115b2)`. Uniquement des dates des handovers récents ou de l'ancien codex (sinon « dates hors sources »). La référence est facultative et **VÉRIFIÉE** (S-CODEX-REFS-1, 04/10/2026) : uniquement l'identifiant d'un souvenir ou d'un handover existant de ton compte, ses 8 premiers caractères hexadécimaux ou son uuid complet, plusieurs séparés par virgule, point-virgule ou espace. Un nom de story, de PR ou de fichier va dans le texte de la ligne, JAMAIS en réf. : refus de toute l'écriture, ligne citée. Seules les lignes nouvelles ou modifiées sont vérifiées. Relire une réf. : `mycelora_read_memory(type:"ref", refs:["790115b2"])`, sans spaceId. Le handover du fil en cours n'existe qu'après sa clôture : il n'est pas référençable dans le codex de cette même clôture.
    - **Mise à jour** : une décision qui change REMPLACE sa ligne dans son sujet ; une tâche faite sort de « À faire » (elle devient « En vigueur » ou part en retrait) ; une même chose ne figure jamais dans deux sujets.
    - **Retrait** : le serveur compare l'ancien et le nouveau par (sujet, genre). Une ligne de l'ancien codex absente du nouveau doit être soit compensée par une ligne nouvelle du MÊME genre dans le MÊME sujet, soit déclarée dans `retraits` (`{ligne: copie exacte, motif: 10 à 300 c}`, 30 au plus). Une ligne déplacée à l'identique dans un autre sujet, ou un sujet renommé dont les lignes restent identiques, passe sans retrait (par sujet : les deux blocs, voir plus haut). Renomme OU modifie un sujet, pas les deux dans la même écriture : sinon ses lignes changées comptent comme retirées de l'ancien titre et doivent être déclarées en retraits.
    - **Garde-fous** : 600 c au minimum ; pour un codex MAP, le budget de l'espace est remplacé par un garde-fou de 100 000 c (refus seulement s'il dépasse ET grossit ; pour ce garde-fou, une condensation passe toujours, les lignes retirées restant soumises à la règle des retraits) ; un espace MAP ne revient jamais à l'ancien format (refus) ; le modèle serveur ne touche jamais un codex MAP : sans codex fourni à la clôture, rien ne bouge.
