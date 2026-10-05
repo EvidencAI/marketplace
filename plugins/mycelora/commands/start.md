@@ -59,7 +59,7 @@ If `$ARGUMENTS` = "out" or "fin":
 - Follow the skill's closing protocol (§ CLOSING PROTOCOL), in this order:
   1. `mycelora_session_end_atoms` with the sessionId returned at opening;
   2. `mycelora_session_end` with `spaceId`, workSummary, decisions, pendingTasks, the five structured lists, and the space's updated codex in the `codex` field (old form: the codex served at opening plus the thread's delta; MAP form: fields `sujets` and `enBref` instead of `codex`, only the topics touched, each reread beforehand with `read_memory(sujets)`; see the skill's Codex section).
-- Without a supplied codex, the server keeps the old one as is. Check in the response that the `codex` block carries `accepte: true`; otherwise fix it according to its reasons and resubmit through `mycelora_write_memory(type:"codex")`, without re-running `session_end`. Exception: if `session_end` raises "Sujets refusés" or "codex et sujets/enBref sont exclusifs", nothing was written (handover included): fix the `sujets` and call `session_end` again.
+- Without a supplied codex, the server keeps the old one as is. Check in the response that the `codex` block carries `accepte: true`; otherwise fix it according to its reasons and resubmit through `mycelora_write_memory(type:"codex")`, without re-running `session_end`. Exception: if `session_end` raises "Topics refused" or "codex and sujets/enBref are mutually exclusive", NOTHING WAS WRITTEN (handover included): fix the `sujets` and call `session_end` again.
 
 If `$ARGUMENTS` = "stats":
 - Call `mycelora_get_stats` and display the counters.
