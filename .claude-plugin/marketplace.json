@@ -10,9 +10,12 @@
   "plugins": [
     {
       "name": "mycelora",
-      "source": "./plugins/mycelora",
+      "source": {
+        "source": "github",
+        "repo": "EvidencAI/mycelora-plugin"
+      },
       "description": "Mémoire persistante de Claude. Le plugin apporte skills, commandes et hooks ; les 51 outils MCP viennent du connecteur Mycelora : sessions, atomes, espaces, profil, contacts, collecte mail et agenda, cross-insights.",
-      "version": "0.16.1"
+      "version": "0.17.0"
     },
     {
       "name": "mon-greffier",
