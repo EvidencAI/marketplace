@@ -1,43 +1,43 @@
 ---
-description: "Installer ou mettre a jour le serveur MCP Mycelora sur cette machine"
+description: "Install or update the Mycelora MCP server on this machine"
 ---
 
-# Mycelora — Installation du serveur MCP
+# Mycelora — MCP server installation
 
-## Contexte
-Le plugin Mycelora fournit les skills (comportement). Les outils MCP (mémoire, recall, extraction) sont fournis par deux canaux distincts et indépendants — il n'y a plus de bundle local a installer.
+## Context
+The Mycelora plugin provides the skills (behavior). The MCP tools (memory, recall, extraction) come from a separate remote connector: there is no local bundle to install.
 
-## Détection
-Avant d'afficher les instructions, vérifie si les outils mycelora_* sont déjà disponibles :
-- Si `mycelora_list_spaces` répond → un canal est déjà configuré, dis-le a l'utilisateur.
-- Sinon → continue avec l'installation.
+## Detection
+Before displaying the instructions, check whether the `mycelora_*` tools are already available:
+- If `mycelora_list_spaces` responds, a channel is already configured: tell the user.
+- Otherwise, continue with the installation.
 
-## Instructions a afficher a l'utilisateur
+## Instructions to display to the user
 
-Affiche ce message :
-
----
-
-**Mycelora fonctionne via deux canaux, au choix (ou les deux ensemble) :**
-
-**1. Ce plugin Cowork**
-Installé depuis le marketplace EvidencAI, il fournit les skills et les hooks automatiques (rappel contextuel, extraction). Rien a configurer une fois le plugin activé.
-
-**2. Le connecteur Mycelora (claude.ai / Claude Desktop)**
-Pour accéder aux outils mémoire (espaces, atomes, recall...) depuis claude.ai ou Claude Desktop, ajoutez le connecteur distant :
-- Serveur MCP : `https://api.mycelora.ai/functions/v1/mycelora-mcp`
-- Authentification : OAuth via le connecteur, ou clé API `mk_live_...` créée depuis le dashboard [https://mycelora.ai](https://mycelora.ai)
-
-Aucune installation locale n'est nécessaire — pas de script, pas de bundle a télécharger.
+Display this message:
 
 ---
 
-## Après configuration
+**Mycelora works through two channels, your choice (or both together):**
 
-Une fois que l'utilisateur revient :
-1. Teste `mycelora_list_spaces` pour confirmer que le canal fonctionne.
-2. Si ça marche, propose `/mycelora:start` ; sans compte, renvoie vers https://mycelora.ai pour le créer (il n'existe pas d'outil de connexion ni d'inscription).
-3. Si ça ne marche pas, vérifie :
-   - Le connecteur Mycelora est bien ajouté et activé dans claude.ai / Claude Desktop ?
-   - L'authentification (OAuth ou clé API `mk_live_...`) a bien abouti ?
-   - Le dashboard https://mycelora.ai confirme un compte actif ?
+**1. This plugin**
+Installed from the Claude directory, it provides the skills and the automatic hooks (contextual recall, exchange collection). Nothing to configure once the plugin is enabled.
+
+**2. The Mycelora connector (claude.ai / Claude Desktop)**
+To access the memory tools (spaces, atoms, recall...), add the remote connector:
+- MCP server: `https://api.mycelora.ai/functions/v1/mycelora-mcp`
+- Authentication: OAuth via the connector (recommended), or an API key `mk_live_...` for advanced use
+
+No local installation is needed: no script, no bundle to download.
+
+---
+
+## After configuration
+
+Once the user comes back:
+1. Test `mycelora_list_spaces` to confirm that the channel works.
+2. If it works, suggest `/mycelora:start`; without an account, point to https://mycelora.ai to create one (there is no login or signup tool).
+3. If it doesn't work, check:
+   - Is the Mycelora connector added and enabled in claude.ai / Claude Desktop?
+   - Did the authentication (OAuth or API key `mk_live_...`) complete successfully?
+   - Does the dashboard https://mycelora.ai confirm an active account?

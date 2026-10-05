@@ -2,20 +2,22 @@
 # Fonctions partagees par mycelora-userpromptsubmit.sh et mycelora-stop.sh.
 # Ce fichier est SOURCE (via `source`), jamais execute directement.
 
+# Files created by the hooks (log, caches, markers) are readable by the user only.
+umask 077
+
 MYCELORA_EDGE_URL="https://api.mycelora.ai/functions/v1/mycelora-mcp"
 MYCELORA_LOG_FILE="/tmp/mycelora-hook.log"
 
-# 0.11.4 (03/09/2026) : outils porteurs d'une COMMANDE shell, donc du reflexe
-# d'impact (refus en PreToolUse, jalon en PostToolUse). Rend l'etiquette
-# courte de l'outil ("Bash", "Desktop_Commander"), ou rien si l'outil n'est
-# pas concerne. Desktop Commander est reconnu par le SUFFIXE de son nom :
-# "mcp__remote-devices__Desktop_Commander__start_process" sur un fil cloud
-# relie au Mac, "mcp__Desktop_Commander__start_process" (ou autre prefixe)
-# sur un fil local. Motivation : l'outil Bash de Cowork tourne dans la VM
-# cloud, sans cle ssh ni sql.sh ; le seul chemin vers la prod est Desktop
-# Commander, que la v1 (brief 4.2) laissait hors du reflexe. Decision
-# Stephane du 03/09 : start_process seulement ; interact_with_process
-# (texte envoye a un programme deja lance) reste en dette.
+# Tools carrying a shell COMMAND, hence the impact reflex (refusal in
+# PreToolUse, milestone in PostToolUse). Returns the short label of the tool
+# ("Bash", "Desktop_Commander"), or nothing if the tool is not concerned.
+# Desktop Commander is recognized by the SUFFIX of its name:
+# "mcp__remote-devices__Desktop_Commander__start_process" on a cloud thread
+# linked to the Mac, "mcp__Desktop_Commander__start_process" (or another
+# prefix) on a local thread. Reason: the Cowork Bash tool runs in the cloud
+# VM, without ssh key nor sql.sh; the only path to production is Desktop
+# Commander. Only start_process is covered; interact_with_process (text sent
+# to an already running program) is a known gap.
 mycelora_outil_commande() {
   local nom_min
   case "$1" in
@@ -50,7 +52,7 @@ mycelora_log() {
 }
 
 # ============================================================================
-# Etiquettes du fil (S-ALIAS-1, fil 76, 24/08/2026)
+# Etiquettes du fil
 # ============================================================================
 #
 # Le watcher est le SEUL point du systeme qui voit a la fois l'identifiant
@@ -66,7 +68,7 @@ mycelora_log() {
 #                  titre HUMAIN, celui que l'utilisateur voit et renomme dans
 #                  son interface.
 #
-# CACHE INCREMENTAL (v3, S-REFLEXES-6). L'ancien cache figeait le resultat des
+# CACHE INCREMENTAL (v3). L'ancien cache figeait le resultat des
 # le premier succes, ce qui interdisait de voir apparaitre plus tard une
 # etiquette encore absente — or l'utilisateur peut renommer son fil a tout
 # moment, et session_start peut etre appele apres le premier tour. Le cache
@@ -87,7 +89,7 @@ mycelora_log() {
 # ("dernier vu gagne", jamais efface par une absence).
 #
 # Format : {"v":3,"offset":<int>,"spaceId":"","sessionLabel":"","customTitle":"","hookToken":"","attenteJeton":[]}
-# (attenteJeton ajoute par S-JETON-2, 12/09/2026, optionnel a la lecture)
+# (attenteJeton est optionnel a la lecture)
 
 # _mycelora_charger_fil <session_id> <transcript_path>
 # Rend QUATRE lignes sur stdout, dans cet ordre, chacune eventuellement vide :
@@ -105,7 +107,7 @@ import json, os, re, sys
 
 cache_path, transcript_path = sys.argv[1], sys.argv[2]
 
-# S-JETON-2 (12/09/2026) : attenteJeton = identifiants (tool_use id) des
+# attenteJeton = identifiants (tool_use id) des
 # appels mycelora_session_start deja vus dont la reponse n'est pas encore
 # passee. Le jeton et la ligne « Fil : » ne sont acceptes QUE dans un
 # tool_result qui repond a l'un d'eux. Un cache v3 anterieur sans ce champ
@@ -138,9 +140,9 @@ def propre(valeur):
     return " ".join(valeur.split()).strip()
 
 
-# S-REFLEXES-6 : le jeton de session hook voyage dans le TEXTE du brief rendu
-# par mycelora_session_start (le tool_result), sur une ligne dediee. Fonction
-# PURE, testee isolement et par mutation (regle 8bis).
+# The hook session token travels in the TEXT of the opening summary returned
+# by mycelora_session_start (the tool_result), on a dedicated line. PURE
+# function.
 _RE_JETON = re.compile(r"^\[jeton-hook-session[^\]]*\][ \t]+(mk_sess_[A-Za-z0-9_-]+)[ \t]*$", re.MULTILINE)
 
 
@@ -153,16 +155,14 @@ def extraire_jeton(texte):
     return matches[-1] if matches else None
 
 
-# Correctif du 02/09/2026 soir (fil cowork-2026-09-02-2147-mycelora) : depuis
-# le fil 86 (26/08), le serveur HORODATE lui-meme le sessionId envoye a
-# mycelora_session_start et annonce l'identifiant DEFINITIF sur la ligne
-# « Fil : ... » du brief (tool_result). C'est cet identifiant-la, pas celui
-# de l'appel, qui signe le handover a la cloture. sessionLabel etait lu dans
-# input.sessionId de l'appel : l'alias (session_aliases.session_label)
-# divergeait donc du handover sur chaque fil ouvert depuis le 26/08, et
-# l'appariement lots / compte rendu que ce champ doit rendre exact etait
-# casse. Meme forme que extraire_jeton : fonction pure, ligne dediee, le
-# dernier vu gagne, rien a cheval sur deux lignes.
+# The server stamps the sessionId sent to mycelora_session_start itself and
+# announces the FINAL identifier on the "Fil : ..." line of the opening
+# summary (tool_result). That identifier, not the one of the call, signs the
+# handover at closing. Reading sessionLabel from input.sessionId of the
+# call made the alias (session_aliases.session_label) diverge from the
+# handover, which broke the batch / report matching this field must make
+# exact. Same form as extraire_jeton: pure function, dedicated line, last
+# seen wins, nothing spanning two lines.
 _RE_FIL = re.compile(r"^Fil[ \t]*:[ \t]+([A-Za-z0-9._-]+)(?:[ \t]|$)", re.MULTILINE)
 
 
@@ -218,12 +218,11 @@ if transcript_path and os.path.exists(transcript_path):
                         modifie = True
                     continue
 
-                # Resultat d'outil : c'est ICI, dans le texte du tool_result
-                # de mycelora_session_start, que voyage le jeton hook (pas dans
-                # l'appel type=assistant ci-dessous). PAS de correlation par
-                # tool_use_id (contrat figé S-REFLEXES-6) : on regarde juste
-                # si un bloc tool_result de cette entree porte la ligne
-                # jeton, quel que soit l'appel qu'il repond.
+                # Tool result: it is HERE, in the text of the tool_result of
+                # mycelora_session_start, that the hook token travels (not in
+                # the type=assistant call below). It is only accepted from
+                # the tool_result answering a seen opening call (see the
+                # correlation guard below).
                 if entry.get("type") == "user":
                     message = entry.get("message") or {}
                     content = message.get("content")
@@ -244,30 +243,26 @@ if transcript_path and os.path.exists(transcript_path):
                                             morceaux.append(t)
                                 if morceaux:
                                     texte_bloc = "\n".join(morceaux)
-                            # S-JETON-2 (12/09/2026) : GARDE PAR CORRELATION.
-                            # Un jeton (et la ligne « Fil : ») n'est retenu
-                            # que dans le tool_result qui REPOND a un appel
-                            # mycelora_session_start deja vu (tool_use_id dans
-                            # attenteJeton, rempli plus bas sur l'entree
-                            # assistant, toujours ecrite AVANT sa reponse).
-                            # Paye le 12/09 sur le fil 128 : un tail sur un
-                            # fichier de test a affiche une ligne de forme
-                            # jeton dans le resultat d'un autre outil, « le
-                            # dernier vu gagne » l'a prise pour le vrai
-                            # jeton, le serveur l'a rejetee (jeton-expire)
-                            # et le watcher est reste inerte jusqu'a une
-                            # reouverture. Une garde par co-presence du
-                            # bandeau MNEMOS IN a ete essayee et refutee le
-                            # meme soir (revue adversariale) : un cat des
-                            # exemplaires du depot porte les deux. Seule la
-                            # reponse a l'appel d'ouverture fait foi ; ceci
-                            # retranche la clause « pas de correlation par
-                            # tool_use_id » de S-REFLEXES-6 (02/09), decision
-                            # Stephane du 12/09.
-                            # Le jeton est en PREMIERE ligne du bloc cote
-                            # serveur depuis S-JETON-2 : il survit a l'apercu
-                            # 2 Ko de <persisted-output> que Cowork substitue
-                            # au-dela de ~50 Ko (la ligne « Fil : » aussi).
+                            # CORRELATION GUARD. A token (and the "Fil :"
+                            # line) is only kept from the tool_result that
+                            # ANSWERS an already seen mycelora_session_start
+                            # call (tool_use_id in attenteJeton, filled
+                            # below on the assistant entry, always written
+                            # BEFORE its answer). Observed in practice: a
+                            # tail on a test file displayed a token-shaped
+                            # line in the result of another tool, "last seen
+                            # wins" took it for the real token, the server
+                            # rejected it (jeton-expire) and the watcher
+                            # stayed inert until a reopening. A guard based
+                            # on the co-presence of the opening banner was
+                            # tried and refuted: a cat of the repository
+                            # samples carries both. Only the answer to the
+                            # opening call is authoritative.
+                            # On the server side the token is on the FIRST
+                            # line of the block: it survives the 2 KB
+                            # <persisted-output> preview that Cowork
+                            # substitutes beyond ~50 KB (so does the
+                            # "Fil :" line).
                             tuid = block.get("tool_use_id")
                             est_brief = isinstance(tuid, str) and tuid in etat["attenteJeton"]
                             if est_brief:
@@ -303,7 +298,7 @@ if transcript_path and os.path.exists(transcript_path):
                     name = block.get("name", "")
                     if not (isinstance(name, str) and name.endswith("mycelora_session_start")):
                         continue
-                    # S-JETON-2 : l'id de cet appel autorise le PROCHAIN
+                    # l'id de cet appel autorise le PROCHAIN
                     # tool_result qui le porte a livrer jeton et ligne Fil.
                     # Borne a 8 (un fil rouvre rarement plus).
                     tuid = block.get("id")
@@ -363,22 +358,18 @@ mycelora_resolve_space_id() {
 
 # mycelora_resolve_etiquettes <session_id> <transcript_path>
 # Affiche DEUX lignes sur stdout : sessionLabel puis customTitle (chacune
-# eventuellement vide). S-ALIAS-1.
+# eventuellement vide).
 mycelora_resolve_etiquettes() {
   _mycelora_charger_fil "$1" "$2" | sed -n '2,3p'
 }
 
 # mycelora_resolve_hook_token <session_id> <transcript_path>
 # AFFECTE la variable globale MYCELORA_HOOK_TOKEN (ne la retourne pas sur
-# stdout). Contrat figé S-REFLEXES-6 :
-#   1) MYCELORA_HOOK_TOKEN deja non vide ET != "__MYCELORA_HOOK_KEY__" -> gardee
-#   2) sinon, hookToken du cache v3 (peut declencher sa lecture/reconstruction)
-#   3) sinon, chaine vide
+# stdout). Depuis 0.17.0 (annuaire Anthropic) : SEULE source, le hookToken du
+# cache v3 du fil (rendu par session_start) ; sinon chaine vide. Plus aucune
+# lecture d'environnement ni d'option de plugin.
 mycelora_resolve_hook_token() {
   local session_id="$1" transcript_path="$2"
-  if [ -n "${MYCELORA_HOOK_TOKEN:-}" ] && [ "$MYCELORA_HOOK_TOKEN" != "__MYCELORA_HOOK_KEY__" ]; then
-    return 0
-  fi
   MYCELORA_HOOK_TOKEN="$(_mycelora_charger_fil "$session_id" "$transcript_path" | sed -n '4p')"
 }
 
@@ -397,24 +388,22 @@ mycelora_resolve_hook_token() {
 # cette fonction n'ecrit rien sur stdout. Definit les variables globales
 # MYCELORA_LAST_HTTP_CODE (code HTTP, "000" si inconnu) et MYCELORA_LAST_CURL_RC
 # (code de retour de curl).
-# timeout_secondes (S-REFLEXES-2, 02/09/2026) : optionnel, defaut 5 (contrat
-# historique inchange pour les appelants existants qui ne le passent pas).
-# mycelora_impact_lookup se donne un budget de 4 s (mesure du 29/08 : 3,2-3,65 s
-# par appel depuis un conteneur Cowork), distinct des 5 s de mycelora_recall/
-# mycelora_log_exchange.
+# timeout_secondes: optional, default 5 (historical contract, unchanged for
+# existing callers that do not pass it). mycelora_impact_lookup gives itself
+# a 4 s budget (measured at 3.2-3.65 s per call from a Cowork container),
+# distinct from the 5 s of mycelora_recall/mycelora_log_exchange.
 # Securite obligatoire : le jeton ne doit JAMAIS apparaitre en argument sur
 # la ligne de commande curl (visible dans `ps aux`). Utiliser un fichier de
 # config curl temporaire (-K), cree via heredoc bash (jamais via echo/printf
 # avec le token en argument), chmod 600. curl --max-time systematiquement.
-# x-region: eu-west-1 (0.9.8, fil myy 29/08/2026) : l'edge function s'execute
-# pres de l'APPELANT par defaut, or les conteneurs Cowork tournent aux US et
-# la base est en eu-west-1 -- chaque aller-retour base payait l'Atlantique et
-# le recall depassait le --max-time 5 (mesure : 4,6-7,9 s sans l'en-tete,
-# 3,2-3,65 s avec). Cet en-tete epingle l'execution dans la region de la
-# base ; ne pas le retirer sans re-mesurer depuis un conteneur Cowork.
-# 22/09/2026 : depuis la bascule self-hosted du 30/08 (Scaleway, Kong), cet
-# en-tete n'a plus d'effet attendu (aucun routage par region) ; conserve car
-# inoffensif, effet non mesure. Le retirer seulement avec une mesure a l'appui.
+# x-region: eu-west-1: the edge function runs near the CALLER by default,
+# while the Cowork containers run in the US and the database is in
+# eu-west-1 -- every database round trip paid for the Atlantic and recall
+# exceeded --max-time 5 (measured: 4.6-7.9 s without the header, 3.2-3.65 s
+# with). The header pins execution to the database region. With the current
+# deployment it has no expected effect (no region-based routing); it is kept
+# because it is harmless, its effect is not measured. Only remove it with a
+# measurement to back it up.
 mycelora_curl_post() {
   local body_file="$1" cfgfile="$2" resp_file="$3" timeout="${4:-5}"
   local http_code curl_rc
@@ -431,7 +420,7 @@ CFGEOF
 }
 
 # ============================================================================
-# RÉFLEXE D'IMPACT (S-REFLEXES-2, 02/09/2026) — fonctions partagees par
+# RÉFLEXE D'IMPACT — fonctions partagees par
 # mycelora-pretooluse.sh et mycelora-posttooluse.sh. Voir les deux scripts
 # pour l'orchestration ; ce qui suit ne fait qu'implementer les briques
 # communes (detection, enrichissement, journal, interrupteur).
@@ -441,7 +430,7 @@ MYCELORA_REFLEXES_LOG_MAX_BYTES=1000000
 
 # mycelora_repo_root <dir>
 # Remonte depuis <dir> jusqu'a trouver un .git dont la racine contient
-# supabase/ OU plugins/mycelora/ (edge-function ou evidencai-marketplace).
+# supabase/ OU plugins/mycelora/ (depot du backend ou du plugin).
 # Affiche le chemin trouve sur stdout ; rien si aucun (jamais d'erreur).
 mycelora_repo_root() {
   local dir="$1"
@@ -463,7 +452,7 @@ mycelora_repo_root() {
 # Affiche "1" si le reflexe d'impact est desarme (MYCELORA_REFLEXE_IMPACT=0
 # OU fichier .mycelora-reflexes-off a la racine du depot resolu), "0" sinon.
 # Necessaire aussi parce que le sprint lui-meme modifie les fichiers que le
-# reflexe surveille (brief section 4.2).
+# reflexe surveille .
 mycelora_reflexe_desarme() {
   local repo_root="${1:-}"
   if [ "${MYCELORA_REFLEXE_IMPACT:-}" = "0" ]; then
@@ -488,9 +477,9 @@ mycelora_purge_markers_anciens() {
 
 # mycelora_reflexe_log <session_id> <evt> <outil> <objets_json_array> <empreinte> <rapport_vide 0|1> [carte_age_jours]
 # Ecrit une ligne JSONL dans /tmp/mycelora-reflexes-<session_id>.jsonl,
-# tronque a 1 Mo comme mycelora_log (contrat FIGÉ, brief section 4.2). N'ecrit
+# tronque a 1 Mo comme mycelora_log (contrat FIGÉ). N'ecrit
 # rien si session_id est vide. Erreurs toujours avalees.
-# carte_age_jours (S-REFLEXES-5b) : 7e argument OPTIONNEL, chaine vide =
+# carte_age_jours : 7e argument OPTIONNEL, chaine vide =
 # absent. N'ecrit la cle "carte_age_jours" dans le JSON QUE si la valeur
 # recue est non vide et numerique (jamais une cle a null, jamais une chaine
 # vide) -- meme discipline que tools.ts cote serveur pour ce meme champ.
@@ -537,7 +526,7 @@ PYEOF
 }
 
 # mycelora_reflexe_detecter <stdin_json_path> <out_json_path>
-# FONCTION D'ORCHESTRATION DE LA DETECTION (brief section 4.2, contrat
+# FONCTION D'ORCHESTRATION DE LA DETECTION (contrat
 # FIGÉ). Lit l'evenement PreToolUse/PostToolUse (stdin_json_path), et si
 # tool_input.command (outil Bash) correspond a un geste structurant, ecrit
 # dans out_json_path un objet {"ok":true,"geste":...,"sous_type":...,
@@ -608,7 +597,7 @@ def detecter_ddl(texte_nettoye):
     (ancrage en tete d'instruction)."""
     return bool(RE_DDL.search(texte_nettoye))
 
-# CORRECTION (relecture reviewer/ergonome du 02/09) : l'ancien motif
+# CORRECTION : l'ancien motif
 # \b(update|delete\s+from)\b, applique sans ancrage, matchait le mot anglais
 # "update" n'importe ou dans une commande Bash quelconque -- confirme en
 # reel : "npm update", "sudo apt-get update", "brew update",
@@ -670,7 +659,7 @@ RE_CURL = re.compile(r"\bcurl\b", re.IGNORECASE)
 RE_PATCH_VERBE = re.compile(r"(-X\s*PATCH\b|--request\s+PATCH\b)", re.IGNORECASE)
 RE_ENVS_URL = re.compile(r"/envs\b", re.IGNORECASE)
 
-# CORRECTION (relecture reviewer/ergonome du 02/09) : "docker restart",
+# CORRECTION : "docker restart",
 # "rsync" et "curl" (Coolify) declenchaient depuis N'IMPORTE OU dans la
 # chaine -- confirme en reel : echo "docker restart plus tard" et
 # git commit -m "add docker restart step" declenchaient un deny absurde.
@@ -679,12 +668,12 @@ RE_ENVS_URL = re.compile(r"/envs\b", re.IGNORECASE)
 # &&/||/;/|/saut de ligne. ssh_psql reste SANS gating : c'est un motif
 # COMPOSE (docker exec ET psql) deja peu propice a la prose, et surtout
 # INTRINSEQUEMENT imbrique dans un wrapper ("ssh hote \"docker exec -i
-# conteneur psql ...\"", forme reelle unique de ce depot, section 9 du
-# brief) -- un gating de position aurait casse son propre cas d'usage
+# conteneur psql ...\"", forme reelle unique de ce depot)
+# -- un gating de position aurait casse son propre cas d'usage
 # vise. Gap assume pour docker_restart/coolify_patch imbriques de la meme
-# facon via ssh (non observe dans ce depot), documente en v2-decisions.
-# 0.11.5 (05/09/2026) : la segmentation par regex ci-dessus (conservee pour
-# memoire) ignorait les GUILLEMETS et les HEREDOCS. Prouve en reel le 05/09
+# facon via ssh (non observe dans ce depot), documente.
+# La segmentation par regex ci-dessus (conservee pour
+# memoire) ignorait les GUILLEMETS et les HEREDOCS. Prouve en reel
 # sur ce meme depot : `grep -n "docker exec\|docker restart plus tard" f`
 # etait refuse (le `\|` du motif grep pris pour un pipe shell, puis "docker
 # restart" en tete de faux segment), puis journalise en jalon "docker_restart
@@ -704,7 +693,7 @@ RE_ENVS_URL = re.compile(r"/envs\b", re.IGNORECASE)
 #      d'exclusion et non d'admission : un wrapper inconnu reste refuse (la
 #      forme reelle `ssh hote "docker exec -i … psql"` garde sa tete ssh).
 # Gap assume : `python3 - <<EOF` dont le corps lance ssh+psql par subprocess
-# est un python (non-executant) -> pas de refus. Documente en v2-decisions.
+# est un python (non-executant) -> pas de refus. Documente.
 RE_DEBUT_SEGMENT = re.compile(r"(?:\A|&&|\|\||;|\||\n)\s*")
 RE_HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 RE_AFFECTATION_ENV = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -830,7 +819,7 @@ def detecter_infra(texte_brut):
     return None
 
 # ==========================================================================
-# EXTRACTION D'IDENTIFIANTS (brief section 4.2). Une instruction a la fois
+# EXTRACTION D'IDENTIFIANTS. Une instruction a la fois
 # (split sur ';') pour supporter N objets dans une meme commande.
 # ==========================================================================
 
@@ -877,7 +866,7 @@ def extraire_objets(texte_nettoye, texte_brut, geste):
                 table = _nom(m)
                 ajouter(table)
                 reste = instruction[m.end():]
-                # CORRECTION (relecture ergonome du 02/09) : .search() ne
+                # CORRECTION : .search() ne
                 # rendait que la PREMIERE occurrence de chaque motif -- un
                 # ALTER TABLE a plusieurs clauses ADD/DROP COLUMN separees
                 # par des virgules perdait silencieusement les colonnes du
@@ -933,11 +922,11 @@ if m_fichier:
     except Exception:
         pass
 
-# 0.11.4 (fil du 03/09/2026) : psql -c "…" / -c '…' / --command=… . Le motif
+# psql -c "…" / -c '…' / --command=… . Le motif
 # DDL est ancre en tete d'instruction (un SELECT ne matche jamais, une prose
 # "alter table" dans un echo non plus) : un ALTER passe EN LIGNE a psql etait
 # donc invisible, et pire avec des guillemets simples, nettoyer_sql effacant le
-# litteral avant le matching. Prouve en reel le 03/09 : psql "postgresql://…"
+# litteral avant le matching. Prouve en reel : psql "postgresql://…"
 # -c "ALTER TABLE atoms ADD COLUMN …" = no-match. Correctif : chaque argument
 # de -c est extrait AVANT le nettoyage et ajoute comme ligne propre du texte
 # analyse, meme traitement que le fichier < x.sql. Marche aussi dans un ssh
@@ -954,10 +943,10 @@ RE_PSQL_C = re.compile(
 )
 
 # Separateurs de segment shell : le mot psql doit preceder le -c DANS LE
-# MEME segment (revue adversariale 0.11.4, defaut confirme : `grep -c
+# MEME segment (defaut confirme : `grep -c
 # "alter table" /var/log/psql.log` satisfaisait le gate global \bpsql\b et
-# produisait un refus absurde, la famille de faux positifs deja corrigee le
-# 02/09 sur npm update / docker restart).
+# produisait un refus absurde, la famille de faux positifs deja corrigee
+# pour npm update / docker restart).
 RE_SEPARATEUR_SEGMENT = re.compile(r"&&|\|\||;|\||\n")
 
 def extraire_arguments_psql_c(commande_brute):
@@ -981,7 +970,7 @@ def extraire_arguments_psql_c(commande_brute):
 
 arguments_c = extraire_arguments_psql_c(commande)
 
-# Nettoyage FRAGMENT PAR FRAGMENT (revue adversariale 0.11.4, defaut
+# Nettoyage FRAGMENT PAR FRAGMENT (defaut
 # confirme) : nettoyer_sql apparie les apostrophes sur tout le texte et
 # [^'\\] traverse les sauts de ligne ; une apostrophe impaire dans la
 # commande (`# l'admin`, `don't`) s'appariait avec la premiere apostrophe de
@@ -1019,14 +1008,14 @@ else:
     objets = extraire_objets(texte_nettoye, commande, geste)
     if not objets:
         objets = [f"{geste}:non-identifie"]
-    # 0.11.4 (revue adversariale, regression confirmee) : un DDL arrive par
-    # le wrapper ssh + docker exec + psql etait classe infra:ssh_psql en
-    # 0.11.3 (refus aveugle, mais UN SEUL par fil pour toute la forme). Le
-    # classer ddl avec objets, sans plus, laissait un second refus infra au
-    # premier SELECT ssh suivant, et perdait l'avertissement "acces direct a
-    # la base de prod". L'objet infra est donc AJOUTE aux objets du geste :
-    # le marqueur du fil le consomme (refus unique tenu), le rapport garde
-    # la ligne infra (voir mycelora_reflexe_construire_rapport).
+    # A DDL arriving through the ssh + docker exec + psql wrapper used to be
+    # classified infra:ssh_psql (blind refusal, but ONE SINGLE one per thread
+    # for the whole form). Classifying it as ddl with objects alone left a
+    # second infra refusal at the next ssh SELECT, and lost the "direct
+    # access to the production database" warning. The infra object is
+    # therefore ADDED to the objects of the gesture: the thread marker
+    # consumes it (single refusal kept), the report keeps the infra line
+    # (see mycelora_reflexe_construire_rapport).
     if detecter_infra(commande) == "ssh_psql":
         objets.append("infra:ssh_psql")
 
@@ -1056,7 +1045,7 @@ PYEOF
 # Grep FRAIS (privilégié sur la carte serveur, potentiellement perimee) des
 # lecteurs/ecrivains d'une table par recherche `.from('table')` dans le
 # depot local, borne a un budget de 2 s (deadline logicielle : `timeout`
-# n'existe pas sur macOS, verifiee absente le 02/09). Une colonne
+# n'existe pas sur macOS, verifiee absente). Une colonne
 # ("table.colonne") reprend le resultat de sa table.
 mycelora_reflexe_grep_local() {
   local repo_root="$1" objets_json="$2" out_path="$3"
@@ -1207,7 +1196,7 @@ PYEOF
 
 # mycelora_reflexe_construire_rapport <objets_json> <geste> <sous_type> <uid_valeur> <fichier_lu> <lookup_evt> <local_json_path> <server_json_path> <out_report_path> <out_meta_path>
 # Combine grep local + reponse serveur (mycelora_impact_lookup) en un rapport
-# texte (contrat FIGÉ, brief section 4.2) et un meta {"rapport_vide":bool,
+# texte (contrat FIGÉ) et un meta {"rapport_vide":bool,
 # "lookup_evt":str}.
 mycelora_reflexe_construire_rapport() {
   local objets_json="$1" geste="$2" sous_type="$3" uid_valeur="$4" fichier_lu="$5" lookup_evt="$6" local_path="$7" server_path="$8" out_report="$9" out_meta="${10}"
@@ -1274,16 +1263,15 @@ def age_jours(iso):
 
 def resume_liste(liste, max_affiches=3):
     if not liste:
-        return "aucun"
+        return "none"
     if len(liste) <= max_affiches:
         return ", ".join(liste)
     return ", ".join(liste[:max_affiches]) + f" (+{len(liste) - max_affiches})"
 
 lignes_objets = []
 vide_par_objet = []
-# carte_age_jours (S-REFLEXES-5b) : un candidat d'age par objet resolu,
-# collecte au fil de la boucle ci-dessous (voir choix documente en
-# .claude/v2-decisions/S-REFLEXES-5b.md) : 0 pour une resolution LOCALE
+# carte_age_jours : un candidat d'age par objet resolu,
+# collecte au fil de la boucle ci-dessous : 0 pour une resolution LOCALE
 # (grep frais, fraicheur immediate), age_jours(genere_le) pour une
 # resolution SERVEUR d'age connu. Un objet inconnu/non resolu ne contribue
 # aucun candidat (ne force pas l'absence globale). Le resultat final est le
@@ -1297,8 +1285,8 @@ for o in objets:
     # d'avertissement, qui ne compte ni pour rapport_vide ni pour l'age.
     if o == "infra:ssh_psql":
         lignes_objets.append(
-            "Objet : accès direct à la base de prod par SSH + docker exec + psql "
-            "(hors migration versionnée). Existe-t-il une procédure versionnée à la place ?"
+            "Object: direct access to the production database via SSH + docker exec + psql "
+            "(outside a versioned migration). Is there a versioned procedure to use instead?"
         )
         continue
     loc = local_resultats.get(o) or {}
@@ -1309,14 +1297,14 @@ for o in objets:
     # premier segment est un schema Postgres connu, pas une table.
     _SCHEMAS = ("public", "cron", "vault", "auth", "storage", "net", "extensions", "pg_catalog", "information_schema", "realtime", "supabase_functions")
     if "." in o and o.split(".", 1)[0].lower() not in _SCHEMAS:
-        type_txt = "colonne"
+        type_txt = "column"
     else:
         type_txt = "table"
 
     if lu_local or ecrit_local:
         lignes_objets.append(
-            f"Objet : {o} ({type_txt}). Lu par : {resume_liste(lu_local)}. "
-            f"Écrit par : {resume_liste(ecrit_local)}. (grep local frais)"
+            f"Object: {o} ({type_txt}). Read by: {resume_liste(lu_local)}. "
+            f"Written by: {resume_liste(ecrit_local)}. (fresh local grep)"
         )
         vide_par_objet.append(False)
         candidats_age.append(0)
@@ -1342,34 +1330,34 @@ for o in objets:
                 section_txt = f" « {m.group(1)} » l.{m.group(2)},"
             else:
                 section_txt = f" « {section} »,"
-        rpc_txt = f" RPC : {resume_liste(rpc)}." if rpc else ""
+        rpc_txt = f" RPC: {resume_liste(rpc)}." if rpc else ""
         carte_txt = ""
         if genere_le:
             age_txt = age if age is not None else "?"
-            carte_txt = f" Carte :{section_txt} générée le {format_date(genere_le)} ({age_txt} j)."
+            carte_txt = f" Map:{section_txt} generated on {format_date(genere_le)} ({age_txt} d)."
         lignes_objets.append(
-            f"Objet : {o} ({type_srv}). Lu par : {resume_liste(lu)}. "
-            f"Écrit par : {resume_liste(ecrit)}.{rpc_txt}{carte_txt}"
+            f"Object: {o} ({type_srv}). Read by: {resume_liste(lu)}. "
+            f"Written by: {resume_liste(ecrit)}.{rpc_txt}{carte_txt}"
         )
         vide_par_objet.append(False)
         continue
 
     if lookup_evt == "lookup_timeout":
-        detail = "Carte : indisponible (timeout), grep local : néant."
+        detail = "Map: unavailable (timeout), local grep: nothing found."
     elif lookup_evt == "lookup_erreur":
-        detail = "Carte : indisponible (erreur), grep local : néant."
+        detail = "Map: unavailable (error), local grep: nothing found."
     elif server_carte_vide:
-        detail = "Carte : jamais indexée pour cet espace, grep local : néant."
+        detail = "Map: never indexed for this space, local grep: nothing found."
     elif srv is not None and srv.get("inconnu"):
-        detail = "Inconnu de la carte (jamais vu par le générateur), grep local : néant."
+        detail = "Unknown to the map (never seen by the generator), local grep: nothing found."
     else:
-        detail = "Carte : indisponible, grep local : néant."
-    lignes_objets.append(f"Objet : {o} ({type_txt}). {detail} Vérifiez vous-même qui lit {o}.")
+        detail = "Map: unavailable, local grep: nothing found."
+    lignes_objets.append(f"Object: {o} ({type_txt}). {detail} Check for yourself who reads {o}.")
     vide_par_objet.append(True)
 
 rapport_vide = all(vide_par_objet) if vide_par_objet else True
 
-# carte_age_jours (S-REFLEXES-5b) : priorite absolue a l'echec REEL de
+# carte_age_jours : priorite absolue a l'echec REEL de
 # l'appel serveur (lookup_timeout/lookup_erreur) -- "absent sur echec",
 # meme si par ailleurs un objet a ete resolu localement (candidat 0).
 # Sinon, le pire (max) des candidats collectes, ou None si aucun objet
@@ -1383,24 +1371,24 @@ else:
     carte_age_jours = None
 
 if geste == "ddl":
-    portee = "Portée : changement de PRODUIT (schéma), tous les comptes."
+    portee = "Scope: PRODUCT change (schema), all accounts."
 elif geste == "update_delete":
     if sous_type == "user_id":
-        cible = uid_valeur if uid_valeur else "(valeur non extraite, vérifiez la commande)"
+        cible = uid_valeur if uid_valeur else "(value not extracted, check the command)"
         portee = (
-            f"Portée : UPDATE/DELETE ciblant user_id {cible} : ceci corrige les données d'UN compte. "
-            "Si le défaut vient du produit, où est le correctif produit ?"
+            f"Scope: UPDATE/DELETE targeting user_id {cible}: this fixes the data of ONE account. "
+            "If the defect comes from the product, where is the product fix?"
         )
     else:
-        portee = "Portée : UPDATE/DELETE SANS clause WHERE : toutes les lignes de la table, tous les comptes."
+        portee = "Scope: UPDATE/DELETE WITHOUT a WHERE clause: every row of the table, all accounts."
 else:
-    portee = "Portée : geste à impact large, vérifiez la portée réelle vous-même."
+    portee = "Scope: wide-impact action, check the real scope for yourself."
 
 if fichier_lu:
-    lignes_objets.append(f"(analysé aussi depuis le fichier lu par redirection : {fichier_lu})")
+    lignes_objets.append(f"(also analysed from the file read by redirection: {fichier_lu})")
 
 texte = "\n".join(
-    ["RÉFLEXE D'IMPACT (refus unique, rejouez la commande telle quelle si les incidences sont traitées)."]
+    ["IMPACT REFLEX (single refusal: rerun the command unchanged once the impacts are dealt with)."]
     + lignes_objets
     + [portee]
 )
@@ -1411,15 +1399,14 @@ with open(out_meta, "w", encoding="utf-8") as f:
     json.dump({"rapport_vide": rapport_vide, "lookup_evt": lookup_evt, "carte_age_jours": carte_age_jours}, f)
 PYEOF
 
-  # CORRECTION (relecture reviewer du 02/09, piege 3 du brief : "fail-open
-  # jamais silencieux") : si le bloc python ci-dessus a leve AVANT d'ecrire
-  # out_report (JSON invalide en entree, cle inattendue, etc. -- avale par
-  # le "2>/dev/null" ci-dessus), out_report resterait un fichier VIDE
-  # (cree par mktemp chez l'appelant) et le deny partirait avec un motif
-  # vide : jamais acceptable. Repli textuel generique + rapport_vide forcé
-  # a true dans le meta, MEME si out_meta lui-meme est illisible.
+  # Fail-open, never silent: if the python block above raised BEFORE writing
+  # out_report (invalid JSON input, unexpected key, etc. -- swallowed by the
+  # "2>/dev/null" above), out_report would stay an EMPTY file (created by
+  # mktemp in the caller) and the deny would go out with an empty reason:
+  # never acceptable. Generic text fallback + rapport_vide forced to true
+  # in the meta, EVEN if out_meta itself is unreadable.
   if [ ! -s "$out_report" ]; then
-    printf '%s' "RÉFLEXE D'IMPACT : geste structurant détecté, incidences non calculables, vérifiez manuellement." > "$out_report"
+    printf '%s' "IMPACT REFLEX: structural action detected, impacts could not be computed, check manually." > "$out_report"
     python3 - "$out_meta" "$lookup_evt" <<'PYEOF' 2>/dev/null || printf '{"rapport_vide": true, "lookup_evt": null}' > "$out_meta"
 import json, sys
 out_meta, lookup_evt = sys.argv[1], sys.argv[2]
@@ -1447,7 +1434,7 @@ PYEOF
 
 # mycelora_reflexe_fichier_sensible <file_path>
 # Detection PURE (bash, pas de python) niveau 2 (INFORMATION, PostToolUse
-# seul) : chemins sensibles du brief section 4.2. Affiche une categorie non
+# seul) : chemins sensibles (voir les motifs ci-dessous). Affiche une categorie non
 # vide si sensible, rien sinon.
 mycelora_reflexe_fichier_sensible() {
   local chemin="${1:-}"
@@ -1474,12 +1461,12 @@ mycelora_reflexe_fichier_sensible() {
 
 # mycelora_reflexe_construire_jalon <objets_json> <action_libelle> <local_json_path> <server_json_path> <out_report_path>
 # PostToolUse UNIQUEMENT : rapport du jalon apres un geste structurant
-# EXECUTE (contrat FIGÉ, brief section 4.2) : "JALON D'IMPACT : <objets>
-# <action>. Lecteurs : <résumé>. Lancez le reviewer frais avec ces
-# références avant de continuer." local_json_path/server_json_path peuvent
+# EXECUTE (contrat FIGÉ, décision C8 : phrase neutre, sans consigne de
+# reviewer) : "IMPACT CHECKPOINT: <objets> <action>. Used by: <résumé>.
+# Check these dependencies before continuing." local_json_path/server_json_path peuvent
 # etre des fichiers vides ({}) quand aucun enrichissement n'a ete tente
-# (geste infra, fichier sensible sans objet de schema) : "Lecteurs : aucun
-# connu" dans ce cas.
+# (geste infra, fichier sensible sans objet de schema) : "Used by: none
+# known" dans ce cas.
 mycelora_reflexe_construire_jalon() {
   local objets_json="$1" action="$2" local_path="$3" server_path="$4" out_path="$5"
   python3 - "$objets_json" "$action" "$local_path" "$server_path" "$out_path" <<'PYEOF' 2>/dev/null
@@ -1536,12 +1523,12 @@ for o in objets:
         if c not in lecteurs:
             lecteurs.append(c)
 
-lecteurs_txt = resume_liste(lecteurs) or "aucun connu"
-objets_txt = ", ".join(objets) if objets else "objet non identifié"
+lecteurs_txt = resume_liste(lecteurs) or "none known"
+objets_txt = ", ".join(objets) if objets else "unidentified object"
 
 texte = (
-    f"JALON D'IMPACT : {objets_txt} {action}. Lecteurs : {lecteurs_txt}. "
-    "Lancez le reviewer frais avec ces références avant de continuer."
+    f"IMPACT CHECKPOINT: {objets_txt} {action}. Used by: {lecteurs_txt}. "
+    "Check these dependencies before continuing."
 )
 
 with open(out_path, "w", encoding="utf-8") as f:
@@ -1552,7 +1539,7 @@ PYEOF
 # mycelora_reflexe_marquer_carte_perimee <repo_root_ou_vide> <objets_json>
 # Marqueur .carte-perimee (contrat figé) : une ligne JSONL par jalon,
 # ajoutee a la racine du depot resolu. Silencieux si repo_root est vide
-# (aucun depot local resolu — limite assumee, documentee en decisions).
+# (aucun depot local resolu — limite assumee).
 mycelora_reflexe_marquer_carte_perimee() {
   local repo_root="${1:-}" objets_json="${2:-[]}"
   [ -z "$repo_root" ] && return 0

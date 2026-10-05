@@ -1,238 +1,160 @@
-# Mycelora — Référence technique
+# Mycelora — Technical reference
 
-Ce document est consulté à la demande, PAS à chaque tour. Le LLM le lit uniquement quand il a besoin d'un détail technique, en cas d'erreur, ou sur demande explicite de l'utilisateur.
-
----
-
-## Configuration par utilisateur
-
-Mycelora est multi-utilisateur. Deux canaux vivants donnent accès à la mémoire (détail complet : install.md) :
-
-| Canal | Ce qu'il faut à l'utilisateur | Où |
-|-------|-------------------------------|-----|
-| Plugin Cowork (marketplace EvidencAI) | Jeton hook, embarqué automatiquement dans le zip du plugin par `scripts/build-plugin-zip.sh` — rien à configurer manuellement | — |
-| Connecteur Mycelora (claude.ai / Claude Desktop) | OAuth via le connecteur, ou clé API `mk_live_...` | Dashboard https://mycelora.ai |
-
-Un utilisateur du plugin n'a jamais besoin d'une clé service_role Supabase : ce niveau d'accès reste interne à l'infrastructure EvidencAI.
-
-`userId` est IGNORÉ par le serveur depuis S-USERID-1 (25/08/2026) : ne pas le passer, sauf chemin clé de service (UUID du compte cible).
-
-- `mycelora_get_profile()` → principes, portrait, instructions
-
-Premier setup : voir ONBOARDING.md.
-
-Identité : le serveur est multi-compte. Tout `userId` reçu est écrasé par l'identité résolue de la connexion (jeton OAuth, clé API ou jeton de hook), sans condition ; seul le chemin de la clé de service désigne un compte cible, validé côté serveur.
+Consult this document on demand, not every turn: for a technical detail, in case of error, or at the user's request.
 
 ---
 
-## 6 types d'atomes (grille 2.1, heuristique de typage)
+## Configuration
 
-Source de vérité : `supabase/functions/_shared/grille-atomes.ts` (`TYPES_ATOME`,
-`DEFINITIONS_TYPE_ATOME`). Cette table en est le reflet, jamais l'original : si
-les deux divergent, c'est le module qui a raison.
+Two channels give access to the memory (details: install.md):
 
-| Type | Répond à | Portée naturelle | Périme par l'âge | Déclencheurs typiques |
+| Channel | What the user needs |
+|-------|-------------------------------|
+| Mycelora plugin (Claude directory) | Nothing to configure: skills and hooks work once the plugin is enabled |
+| Mycelora connector (claude.ai / Claude Desktop) | OAuth sign-in (recommended), or an API key `mk_live_...` for advanced use |
+
+`userId` is ignored by the server, which resolves the identity from the connection: do not pass it.
+
+`mycelora_get_profile()` returns principles, portrait and instructions. First setup: see ONBOARDING.md.
+
+---
+
+## Atom types
+
+| Type | Answers | Natural scope | Expires with age | Typical triggers |
 |------|----------|------------------|------------------|----------------------|
-| regle | comment agir ici : décision en vigueur, méthode, préférence, consigne | locale ou transverse | non | "on part sur X", "décidé que", "toujours faire ainsi" |
-| piege | ce qui échoue et pourquoi, payé au moins une fois | transverse | non | "j'ai appris que", "erreur : ne plus faire X" |
-| refute | ce qu'il ne faut plus croire | locale ou transverse | non | "en fait non", "c'était faux", démenti |
-| repere | où, qui, combien, comment c'est fait : pointeur, chiffre, contact, identifiant, fait de structure | locale | non | fait vérifiable, chiffre, chemin, "Jean-Marc est le DG" |
-| etat | où on en est, ce qui attend | locale | **oui** | "on en est là", "il reste à", prochaine étape |
-| non_affecte | ce qui n'entre dans aucune des cinq autres familles | locale | non | rien : c'est une pile de tri à la main, pas un choix |
+| regle | how to act here: decision in force, method, preference, instruction | local or cross-cutting | no | "we're going with X", "always do it this way" |
+| piege | what fails and why, paid for at least once | cross-cutting | no | "I learned that", "don't do X anymore" |
+| refute | what must no longer be believed | local or cross-cutting | no | "actually no", "that was wrong" |
+| repere | where, who, how much, how it is made: pointer, figure, contact, identifier | local | no | verifiable fact, figure, path, "Alex is the CEO" |
+| etat | where we stand, what is waiting | local | **yes** | "this is where we are", "what's left is" |
+| non_affecte | fits none of the other five | local | no | a hand-sorting pile, not a choice |
 
-Ne PAS mapper mécaniquement. Analyser le contenu. `non_affecte` n'est pas un
-repli commode : un fil qui en produit surtout a mal classé. `etat` est le seul
-type que l'horloge périme ; les cinq autres sortent par remplacement, clôture,
-revue humaine ou filet d'usage.
+Analyze the content; do not map mechanically. `portee` is mandatory for `regle` and `refute` (refused without it). `perime_si` is optional: the condition that will make the memory false.
 
-**Portée obligatoire pour `regle` et `refute`** : un atome de ces deux types
-sans `portee` est refusé. `perime_si` est optionnel partout : la condition qui
-rendra ce souvenir faux, en clair.
-
-Ancienne grille (`fact`, `decision`, `position`, `intention`, `event`,
-`contact`, `contradiction`, `signal_externe`, `apprentissage`, `reflexion`) :
-abandonnée. Les atomes déjà écrits sous ces types restent lisibles, mais aucun
-nouveau ne doit être créé avec.
+Older types (`fact`, `decision`, `position`, `intention`, `event`, `contact`, `contradiction`, `signal_externe`, `apprentissage`, `reflexion`) are abandoned: existing atoms stay readable, but never create new ones with them.
 
 ---
 
-## Outils MCP (référence rapide)
+## MCP tools
 
-51 outils exposés au LLM, regroupés par domaine :
+Grouped by domain:
 
-**Espaces** (4) : list_spaces, create_space, update_space, suggest_spaces
-**Atomes** (4) : search_atoms, create_atom_manual, update_atom, toggle_pin_atom
-**Contexte** (2) : get_context (5 modes : auto, onboard, recall, briefing, explore), recall (rappel FACE-A automatique, hook UserPromptSubmit)
-**Maintenance** (4) : get_stats, health_check, triage_atoms, garbage_collect
-**Sessions** (2) : session_start, session_end
-**Mémoire** (2) : write_memory, read_memory
-**Profil** (3) : get_profile, update_profile, get_calibration
-**Contacts** (2) : upsert_contact, search_contacts
-**Ingestion** (4) : ingest_document, ingest_events, process_events, collect_events (collecte cloud automatique mail/agenda, S7, voir § Collecte cloud)
-**Sources** (4) : create_source, disconnect_source, test_source_connection, google_consent_url
-**Clés API** (3) : create_api_key, list_api_keys, revoke_api_key
-**Insights & tensions** (5) : cross_insights, analyze_space, ack_tension, close_topic, reopen_topic
-**Documents** (1) : list_documents
-**Connexions** (1) : create_connection
-**Extraction** (2) : log_exchange, extract_atoms (aussi utilisés automatiquement par le transcript-watcher)
-**Sync** (1) : sync_status
-**Export** (2) : export_memory, export_status
-**Feedback** (1) : submit_feedback
-**Compte** (1) : delete_account
+**Spaces**: list_spaces, create_space, update_space, suggest_spaces
+**Atoms**: search_atoms, create_atom_manual, update_atom, toggle_pin_atom
+**Context**: get_context (modes: auto, onboard, recall, briefing, explore), recall (automatic contextual recall used by the hook)
+**Maintenance**: get_stats, health_check, triage_atoms, garbage_collect
+**Sessions**: session_start, session_end, session_end_atoms
+**Memory**: write_memory, read_memory
+**Profile**: get_profile, update_profile, get_calibration
+**Contacts**: upsert_contact, search_contacts
+**Ingestion**: ingest_document, ingest_events, process_events, collect_events
+**Sources**: create_source, disconnect_source, test_source_connection, google_consent_url
+**API keys**: create_api_key, list_api_keys, revoke_api_key
+**Insights and tensions**: cross_insights, analyze_space, ack_tension, ack_alerte, close_topic, reopen_topic
+**Documents**: list_documents
+**Connections**: create_connection
+**Extraction**: log_exchange, extract_atoms (called by the hooks)
+**Sync**: sync_status
+**Export**: export_memory, export_status
+**Feedback**: submit_feedback
+**Account**: delete_account
 
-Note : log_exchange et extract_atoms sont appelés automatiquement par les hooks du watcher v3 (UserPromptSubmit/Stop). Le LLM n'a pas besoin de les appeler en routine, mais ils sont disponibles si nécessaire (debug, extraction manuelle).
-Note : get_stats, health_check, triage_atoms, garbage_collect sont des outils standalone (`mycelora_get_stats`, `mycelora_health_check`, `mycelora_triage_atoms`, `mycelora_garbage_collect`). Il n'existe plus de dispatcher `mnemos_admin`.
+All names carry the `mycelora_` prefix. `log_exchange` is called by the hooks: do not call it routinely.
 
-Note spaceId : les outils MCP acceptent le **nom** de l'espace (résolution insensible à la casse) aussi bien que l'**UUID**.
-Note read_memory/write_memory : acceptent désormais le **nom** d'espace (comme les autres outils avec résolution de nom), en plus de l'UUID.
+`spaceId` accepts the space name (case-insensitive) or the UUID, including on `read_memory` and `write_memory`.
 
 ---
 
-## get_context — 5 modes
+## get_context modes
 
-| Mode | Atomes | Usage |
+| Mode | Atoms | Usage |
 |------|--------|-------|
-| auto | variable | Défaut, adaptatif |
-| onboard | 25 | Ouverture de fil |
-| recall | 8 | Rappel ponctuel |
-| briefing | 15 | Résumé projet |
+| auto | variable | Default, adaptive |
+| onboard | 25 | Thread opening |
+| recall | 8 | One-off recall |
+| briefing | 15 | Project summary |
 | explore | 20 | Brainstorm, exploration |
 
 ---
 
-## ingest_events — format des événements
+## ingest_events — event format
 
-Chaque élément du tableau `events` :
+Each element of the `events` array:
 
-| Champ | Requis | Type | Exemple |
+| Field | Required | Type | Example |
 |-------|--------|------|---------|
-| source | oui | string, valeurs contraintes (voir ci-dessous) | "gmail" |
-| event_type | oui | string, valeurs contraintes (voir ci-dessous) | "mail_received" |
-| event_id | oui | string | identifiant unique (dédup) |
-| event_timestamp | oui | string ISO 8601 | "2026-07-14T09:00:00Z" |
-| subject | non | string | — |
-| body_preview | non | string | — |
-| participants | non | array de strings | — |
-| metadata | non | objet libre | — |
+| source | yes | string, constrained values (below) | "gmail" |
+| event_type | yes | string, constrained values (below) | "mail_received" |
+| event_id | yes | string | unique identifier (deduplication) |
+| event_timestamp | yes | ISO 8601 string | "2026-07-14T09:00:00Z" |
+| subject | no | string | — |
+| body_preview | no | string | — |
+| participants | no | array of strings | — |
+| metadata | no | free-form object | — |
 
-**Valeurs contraintes (CHECK en base, table `source_events`)** — toute autre valeur est rejetée silencieusement à l'insertion (comptée dans `errors`, pas d'exception) :
-- `source` : `gmail`, `google_calendar`, `outlook`, `microsoft_calendar`, `imap_ovh`
-- `event_type` : `mail_received`, `mail_sent`, `meeting_created`, `meeting_updated`, `meeting_cancelled`
+Constrained values (any other value is rejected at insertion and counted in `errors`):
+- `source`: `gmail`, `google_calendar`, `outlook`, `microsoft_calendar`, `imap_ovh`
+- `event_type`: `mail_received`, `mail_sent`, `meeting_created`, `meeting_updated`, `meeting_cancelled`
 
-En cas d'erreur d'insertion sur un ou plusieurs événements, la réponse inclut désormais un tableau `errorDetails` (`{event_id, message}` par événement en échec), en plus du compteur `errors`.
-
----
-
-## Collecte cloud mail/agenda (S7)
-
-Depuis le sprint S7, la collecte mail/agenda tourne côté serveur Mycelora,
-sans aucun prérequis Mac ni Cowork ouvert. Trois types de sources :
-
-- **IMAP** (Gmail, Outlook, iCloud, OVH et autres) : mail, avec un mot de
-  passe d'application. Tous les dossiers utiles sont lus (corbeille,
-  indésirables et brouillons exclus), fenêtre de rattrapage de 7 jours.
-- **Google Agenda** : agenda par OAuth 2.0 (scope calendar.readonly seul).
-- **CalDAV** : agenda.
-
-Chaque compte est une ligne de la table `sources` (multi-compte,
-observable : `last_sync_at`, `last_sync_status`, `consecutive_errors` par
-source). Un seul job pg_cron (`mycelora-collect-google`, toutes les 2h,
-appelle l'outil `mycelora_collect_events`) traite en réalité **toutes** les
-sources actives, malgré son nom historique — il ne se limite pas à Google.
-
-Aucun secret Google/OVH n'est stocké en clair : uniquement dans Supabase
-Vault, référencé depuis `sources.vault_secret_id`.
+When an insertion fails, the response includes an `errorDetails` array (`{event_id, message}` per failed event) in addition to the `errors` counter.
 
 ---
 
-## Réflexes de senior (impact, état du fil, contradiction)
+## Cloud mail/calendar collection
 
-Trois réflexes ajoutés au plugin Cowork pour retenir Claude — et Stéphane —
-d'une glissade, sans geste manuel supplémentaire.
+Collection runs on the Mycelora side: no computer needs to be on. Source types:
 
-**Réflexe d'impact.** Avant un geste structurant en ligne de commande
-(modification de schéma, suppression ou mise à jour massive, opération sur
-la prod), le plugin REFUSE une première fois et montre un rapport (qui lit
-et qui écrit l'objet visé, ou la portée de l'opération prod concernée
-quand l'objet n'est pas une table). Le même geste, rejoué tel quel juste
-après, passe : le refus ne se répète jamais pour le même objet dans le
-même fil. Aujourd'hui limité aux commandes shell (Bash) ; les autres
-outils restent seulement notés au passage, sans blocage.
+- **IMAP** (Gmail, Outlook, iCloud, OVH and others): mail, with an app password. Useful folders are read (trash, junk and drafts excluded), with a 7-day catch-up window.
+- **Google Calendar**: calendar via OAuth 2.0, read-only scope.
+- **CalDAV**: calendar.
 
-**État du fil.** Le plugin tient un court état du fil en cours (objectif,
-périmètre en cours, ce qui est décidé, écarté, ouvert, corrections
-faites, etc.), régénéré automatiquement à intervalles réguliers pendant la
-conversation. Visible dans le dashboard, onglet **Réflexes**, bloc **Fils
-en cours** : un aperçu de « où en est ce fil » sans avoir à le relire en
-entier.
-
-**Réflexe de contradiction.** Quand une réponse contredit une décision déjà
-prise ailleurs (un autre projet, un fil antérieur), une alerte apparaît.
-Deux endroits pour la lire : dans le rappel de la conversation elle-même,
-ou dans le dashboard, onglet Réflexes, bloc **Alertes**.
-
-**Acquitter une alerte** — deux chemins, au choix, avec exactement le même
-effet côté serveur :
-- Depuis claude.ai ou Claude Desktop (connecteur Mycelora) : demander à
-  Claude d'acquitter l'alerte ; il utilise l'outil `mycelora_ack_alerte` avec
-  le petit identifiant donné dans le texte de l'alerte, et un verdict,
-  utile ou bruit.
-- Depuis le dashboard : onglet Réflexes, bloc Alertes, deux boutons
-  **Utile** / **Bruit**.
-
-Les deux chemins marquent l'alerte, ils ne la suppriment jamais. Le
-verdict donné ici (par Claude ou par un clic) est un signal d'appoint ; la
-décision qui compte reste celle que Stéphane prend en la lisant — c'est
-elle qui alimente les compteurs de fiabilité du même onglet (bloc
-Compteurs, dashboard uniquement, jamais dans le rappel).
-
-**Rien à coller.** Aucun de ces trois réflexes ne demande à l'utilisateur
-de copier une clé ou un jeton : le canal marketplace (plugin Cowork)
-authentifie automatiquement ses hooks avec un jeton de session lu depuis le
-brief d'ouverture du fil, à l'insu de l'utilisateur. Le dashboard, lui,
-s'appuie sur la session déjà connectée.
+Each account is a separate source, with its own sync status and error counter. All active sources are processed every 2 hours. Secrets are stored in a secrets vault, never in clear text.
 
 ---
 
-## Hygiène mémoire (détail technique)
+## Reflexes (impact, thread state, contradiction)
 
-### Déduplication automatique (v0.4.1)
-Tous les chemins d'insertion (extract_atoms, create_atom_manual, ingest_document, extractAtomsFromBuffer) vérifient les doublons AVANT insertion via vector_score (cosine).
-Paliers : >= 0.90 skip (garder le plus long), 0.80-0.90 classification Haiku (DOUBLON/SUPERSEDE/DISTINCT).
+**Impact reflex.** Before a structuring command-line action (schema change, mass deletion or update, production operation), the plugin refuses the first time and shows a report (who reads and writes the targeted object, or the scope of the production operation). The same action, replayed as is, goes through: the refusal does not repeat for the same object in the same thread. Limited to shell commands; other tools are only noted, without blocking.
 
-### Supersession temporelle (v0.4.1)
-Quand un atome rend un précédent obsolète (ex: "problème X" → "problème X résolu") :
-1. **Convention agent** (prioritaire) : search_atoms → update_atom(active:false) → create_connection(type:"précède"). Le LLM DOIT suivre ce pattern.
-2. **Extraction prompt** : Haiku peut renseigner `supersedes` pour archiver automatiquement.
-3. **Filet dedup/GC** : garbage_collect v2 pgvector détecte les paires similaires (>=0.85) côté SQL.
-Note : le cosine est inadapté pour détecter la supersession (vocabulaire opposé = score bas). La couche 1 est la plus fiable.
+**Thread state.** The plugin keeps a short state of the thread (objective, scope in progress, decided, ruled out, open, corrections), regenerated at regular intervals. It is visible in the dashboard, **Réflexes** tab, **Fils en cours** block.
 
-### garbage_collect (pg_cron dimanche 5h FR)
-GC v2 pgvector : calculs de similarité côté PostgreSQL. 3 étapes : lifecycle insights, archivage obsolètes, déduplication (>=0.95 fusion auto, 0.85-0.95 rapport). Consolidation orphelins par espace. Fonctions SQL : `find_duplicate_atoms`, `find_orphan_atoms`, `find_orphan_pairs_by_space`.
+**Contradiction reflex.** When a reply contradicts a decision made elsewhere (another project, an earlier thread), an alert appears in the conversation's recall and in the dashboard, Réflexes tab, **Alertes** block.
 
-### health_check (pg_cron quotidien 5h UTC)
-Edge Function health-cron. Génère embeddings manquants, reconnecte orphelins, purge connexions obsolètes. Aussi appelable manuellement : `mycelora_health_check(repair:true)`.
+**Acknowledging an alert**, two equivalent paths:
+- In conversation: ask Claude to acknowledge it; it uses `mycelora_ack_alerte` with the short identifier given in the alert text and a verdict, useful or noise.
+- In the dashboard: Réflexes tab, Alertes block, buttons **Utile** / **Bruit**.
+
+Both mark the alert, never delete it. The verdict is a supplementary signal; the user decides. It feeds the reliability counters of the same tab (**Compteurs** block, dashboard only).
+
+None of these reflexes asks the user to paste a key or token: the plugin's hooks authenticate automatically.
 
 ---
 
-## Gestion des erreurs
+## Memory hygiene
 
-1. Un appel MCP `mycelora_*` échoue → retenter une fois. Échec persistant → vérifier que le canal (plugin Cowork ou connecteur Mycelora, voir install.md) est bien actif et authentifié.
-2. Toujours indisponible → "L'accès mémoire est indisponible. Je continue sans, session non sauvegardée."
-3. Ne JAMAIS ignorer un échec d'écriture (handover, mémoire, atome). Toujours prévenir l'utilisateur.
-4. Clôture échouée → copier handover/mémoire dans le chat pour sauvegarde manuelle.
+**Automatic deduplication.** Every insertion path checks for duplicates before inserting, by vector similarity: at 0.90 or above the new atom is skipped (the longest is kept); between 0.80 and 0.90 a classification decides between duplicate, supersession and distinct.
+
+**Temporal supersession.** When an atom makes a previous one obsolete ("problem X" then "problem X resolved"), follow this convention: `search_atoms`, then `update_atom(active:false)` on the old one, then `create_connection(type:"précède")`. Similarity alone detects supersession poorly (opposite vocabulary scores low); the garbage collector is only a safety net.
+
+**garbage_collect.** Runs automatically each week and can be called directly. It handles insight lifecycle, archiving of obsolete items and deduplication (0.95 and above merged automatically, 0.85 to 0.95 reported), and consolidates orphan atoms per space.
+
+**health_check.** Runs automatically each day. It generates missing embeddings, reconnects orphans and purges obsolete connections. Manual call: `mycelora_health_check(repair:true)`.
 
 ---
 
-## Architecture technique
+## Error handling
 
-Une seule base Supabase, deux canaux d'accès vivants :
-- **Source** (vérité) : répertoire local du développeur, dossier mcp-server/src/ (TypeScript)
-- **Distribution** : plugin Cowork (~16 Ko, skills only, hooks automatiques) via le marketplace EvidencAI, et connecteur Mycelora distant (OAuth ou clé API `mk_live_...`) dans claude.ai / Claude Desktop
-- **Dashboard** : https://mycelora.ai (Coolify)
-- **Supabase** : pgvector, Voyage AI voyage-3-lite 512 dim, Haiku extraction
-- **Edge Function** (serveur MCP distant) : https://api.mycelora.ai/functions/v1/mycelora-mcp
-- **Transcript-watcher** : parse les sessions Cowork, extrait les atomes automatiquement. Standalone supprimé (26/03/2026).
+1. A `mycelora_*` call fails: retry once. If it persists, check that the channel (plugin or connector, see install.md) is active and authenticated.
+2. Still unavailable: tell the user "Memory access is unavailable. I'm continuing without it, thread not saved."
+3. Never ignore a write failure (handover, memory, atom): always warn the user.
+4. Closing failed: copy the handover and codex into the chat for manual saving.
 
-### Canal local (bundle) retiré
-Le canal d'installation locale (bundle CJS dans ~/mycelora-mcp/, build via `esbuild`, script install.sh servi depuis un bucket de stockage Supabase dédié — bucket aujourd'hui supprimé) a été retiré le 21/08/2026. Voir l'historique git pour la procédure précédente.
+---
+
+## Architecture
+
+- **Plugin**: skills and automatic hooks, distributed through the Claude directory.
+- **Connector**: remote MCP server `https://api.mycelora.ai/functions/v1/mycelora-mcp` (OAuth or API key `mk_live_...`).
+- **Dashboard**: https://mycelora.ai
+- **Storage**: vector database with semantic search.

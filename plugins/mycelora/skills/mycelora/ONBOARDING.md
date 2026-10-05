@@ -1,71 +1,69 @@
-# Mycelora — Onboarding nouvel utilisateur
+# Mycelora — New user onboarding
 
-Ce flow se déclenche quand `mycelora_session_start` retourne un profil vide ou une erreur "user not found".
-Le LLM DOIT lire ce fichier et suivre les étapes dans l'ordre.
-
----
-
-## Bienvenue
-
-Présenter Mycelora en 3 phrases max :
-"Mycelora est ta mémoire persistante entre tes conversations avec Claude. Il retient tes décisions, projets, contacts, et te restitue le contexte pertinent à chaque nouveau fil. Tout est stocké dans ton espace sécurisé."
+This flow applies when `mycelora_session_start` returns an empty profile or a "user not found" error. Follow the steps in order.
 
 ---
 
-## Étape 1 : Créer le profil
+## Welcome
 
-Demander : "Comment tu veux que je t'appelle ? Et quels sont tes principes de travail que je dois toujours garder en tête ?"
+Present Mycelora in 3 sentences at most:
+"Mycelora is your persistent memory across your conversations with Claude. It remembers your decisions, projects and contacts, and gives you back the relevant context in each new thread. Everything is stored in your secure space."
 
-Avec la réponse, appeler :
+---
+
+## Step 1: Create the profile
+
+Ask: "What would you like me to call you? And what are your working principles that I should always keep in mind?"
+
+With the answer, call:
 ```
-mycelora_update_profile(displayName:[prénom ou nom choisi], principles:[tableau de strings], portrait:"À compléter au fil des échanges")
+mycelora_update_profile(displayName:[first name or chosen name], principles:[array of strings], portrait:"To be completed as we talk")
 ```
-Puis appeler `mycelora_list_spaces()` : le champ `user_id` des espaces rendus est l'UUID de l'utilisateur (nécessaire à l'étape 4). Il n'existe pas d'outil `mycelora_whoami`.
 
 ---
 
-## Étape 2 : Créer le premier espace
+## Step 2: Create the first space
 
-Demander : "Sur quel projet tu travailles en ce moment ? Je vais créer ton premier dossier."
+Ask: "What project are you working on right now? I'll create your first folder."
 
-Appeler : `mycelora_create_space(name:[nom du projet])`
-
----
-
-## Étape 3 : Les 5 commandes essentielles
-
-Présenter :
-- "ouvre [espace]" → charger un projet
-- "retiens que..." → mémoriser une info
-- "cherche [sujet]" → fouiller la mémoire
-- "brief matinal" → résumé du jour (mails, RDV, insights)
-- "fin de fil" → sauvegarder et fermer
+Call: `mycelora_create_space(name:[project name])`
 
 ---
 
-## Étape 4 : Collecte mail/agenda
+## Step 3: The 5 essential commands
 
-La collecte tourne côté serveur Mycelora, toutes les 2 h, sur n'importe quel système, ordinateur éteint ou non. Aucune tâche planifiée à créer, rien à laisser tourner en local.
-
-Expliquer : "Mycelora peut lire tes mails et ton agenda toutes les deux heures pour garder le fil de tes échanges et de tes engagements. Le texte des mails est effacé 7 jours après le tri. On branche une boîte ?"
-
-Si l'utilisateur accepte, deux chemins :
-- **Dashboard, page Connexions** (https://mycelora.ai) : le plus simple. Mail par IMAP (Gmail, Outlook, iCloud, OVH, Free, Orange et autres), agenda Google par consentement, agendas CalDAV.
-- **En conversation** : `mycelora_create_source` pour une boîte IMAP ou un agenda CalDAV (la connexion est testée avant toute création, le secret n'est posé que si le test réussit) ; `mycelora_google_consent_url` pour l'agenda Google (lien de consentement à ouvrir par l'utilisateur).
-
-Mot de passe : chez les fournisseurs qui en proposent un (Gmail, Outlook, iCloud), toujours un mot de passe d'application, jamais le mot de passe principal du compte ; chez les autres (OVH, Free, Orange), le mot de passe de la boîte mail. Ne jamais créer de tâche planifiée de collecte (l'ancienne tâche Mail.app / Calendar.app est abandonnée).
+Present:
+- "open [space]" → load a project
+- "remember that..." → store a piece of information
+- "search [topic]" → dig through the memory
+- "morning brief" → summary of the day (mails, appointments, insights)
+- "end of thread" → save and close
 
 ---
 
-## Étape 5 : Dashboard
+## Step 4: Mail/calendar collection
 
-"Ton dashboard Mycelora est ici : https://mycelora.ai
-Il te permet de visualiser tes espaces, atomes, connexions et l'activité de ta mémoire."
+Collection runs on the Mycelora side every 2 hours, whether or not the computer is on. There is nothing to schedule or leave running locally.
+
+Explain: "Mycelora can read your mails and your calendar every two hours to keep track of your exchanges and commitments. The text of the mails is erased 7 days after sorting. Shall we connect a mailbox?"
+
+If the user accepts, two paths:
+- **Dashboard, Connections page** (https://mycelora.ai), the simplest: mail via IMAP (Gmail, Outlook, iCloud, OVH, Free, Orange and others), Google calendar by consent, CalDAV calendars.
+- **In conversation**: `mycelora_create_source` for an IMAP mailbox or a CalDAV calendar (the connection is tested first, and the secret is stored only if the test succeeds); `mycelora_google_consent_url` for the Google calendar (a consent link for the user to open).
+
+Password: for providers that offer one (Gmail, Outlook, iCloud), always an app password, never the account's main password; for the others (OVH, Free, Orange), the mailbox password.
 
 ---
 
-## Fin d'onboarding
+## Step 5: Dashboard
 
-Présenter le bloc d'accueil standard (voir SKILL.md § Protocole d'ouverture, Étape 2) avec le lien Dashboard.
+"Your Mycelora dashboard is here: https://mycelora.ai
+It lets you view your spaces, atoms, connections and the activity of your memory."
 
-"Tu es prêt. Dis 'ouvre [ton espace]' pour commencer, ou 'mycelora help' pour voir toutes les commandes."
+---
+
+## End of onboarding
+
+Present the standard welcome block (SKILL.md § Opening protocol, Step 2) with the Dashboard link, then:
+
+"You're ready. Say 'open [your space]' to get started, or 'mycelora help' to see all the commands."

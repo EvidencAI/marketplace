@@ -1,2 +1,0 @@
-{"type": "user", "sessionId": "aaaa1111-2222-3333-4444-555566667777", "session_id": "aaaa1111-2222-3333-4444-555566667777", "message": {"role": "user", "content": "bonjour, premiere question sans espace choisi"}, "uuid": "u1", "parentUuid": null, "timestamp": "2026-07-14T11:00:00.000Z"}
-{"type": "assistant", "sessionId": "aaaa1111-2222-3333-4444-555566667777", "session_id": "aaaa1111-2222-3333-4444-555566667777", "message": {"role": "assistant", "content": [{"type": "text", "text": "Bonjour."}]}, "uuid": "a1", "parentUuid": "u1", "timestamp": "2026-07-14T11:00:01.000Z"}

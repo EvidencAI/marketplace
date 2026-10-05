@@ -9,10 +9,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/mycelora-common.sh"
 
-# Jeton hook : variable CLAUDE_PLUGIN_OPTION_HOOK_KEY (userConfig hook_key, canal
-# marketplace, saisie a l'activation et rangee dans le trousseau) si elle est
-# definie, sinon la valeur substituee dans le zip par build-plugin-zip.sh.
-MYCELORA_HOOK_TOKEN="${CLAUDE_PLUGIN_OPTION_HOOK_KEY:-__MYCELORA_HOOK_KEY__}"
+# Session token: read only from the thread cache built by session_start
+# (never from the environment or a plugin option).
+MYCELORA_HOOK_TOKEN=""
 
 CLEANUP_FILES=()
 cleanup_and_exit() {
@@ -76,10 +75,9 @@ TRANSCRIPT_PATH="$(printf '%s\n' "$META_OUT" | sed -n '2p')"
 PROMPT_ID="$(printf '%s\n' "$META_OUT" | sed -n '3p')"
 CWD="$(printf '%s\n' "$META_OUT" | sed -n '4p')"
 
-# S-REFLEXES-6 : jeton de session hook. Priorite 1 (zip substitue) deja geree
-# par l'assignation de MYCELORA_HOOK_TOKEN ci-dessus ; sinon on tente le cache
-# v3 du fil. Sans jeton, le hook est inerte (premier message d'un fil, avant
-# l'ouverture : cas normal, jamais une erreur visible).
+# Hook session token, read from the cache. Without a token the hook is
+# inert (first message of a thread, before the opening: normal case, never
+# a visible error).
 mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
 if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
   mycelora_log "stop" "auth" 0 "sans-jeton" 0
@@ -165,14 +163,13 @@ if [ "$USER_DECISION" != "FOUND" ]; then
   exit 0
 fi
 
-# Filtre systeme (uniquement notifications, PAS de filtre de longueur : un
-# "ok" est un echange valide au Stop). "Rappel interne :" est un prefixe
-# conventionnel de nos automatismes internes (wakeups send_later) : verifie
-# en reel le 14/07, ces flux ne portent NULLE PART le prefixe
-# "[SYSTEM NOTIFICATION - NOT USER INPUT]" au niveau des hooks (uniquement
-# au niveau conversationnel du modele). Limite assumee : un wakeup au
-# libelle libre (pas prefixe "Rappel interne :") passera quand meme ce
-# filtre et sera archive comme un echange humain.
+# System filter (notifications only, NO length filter: an "ok" is a valid
+# exchange at Stop). "Rappel interne :" is a conventional prefix of
+# scheduled wakeup messages: those flows carry no
+# "[SYSTEM NOTIFICATION - NOT USER INPUT]" prefix at hook level (only at
+# the conversation level of the model). Known limit: a wakeup with a
+# free-form label (no "Rappel interne :" prefix) still passes this filter
+# and is archived as a human exchange.
 FILTER_DECISION="$(python3 - "$LAST_USER_FILE" <<'PYEOF'
 import sys
 
@@ -231,10 +228,10 @@ if [ "$EMPTY_CHECK" != "OK" ]; then
   exit 0
 fi
 
-# S-ALIAS-1 (fil 76, 24/08/2026) : UNE seule passe pour les trois etiquettes
-# du fil (espace, nom technique, titre humain). Ne pas appeler successivement
-# mycelora_resolve_space_id puis mycelora_resolve_etiquettes : ce serait deux
-# processus python pour la meme lecture.
+# ONE single pass for the three thread labels (space, technical name,
+# human title). Do not call mycelora_resolve_space_id then
+# mycelora_resolve_etiquettes in turn: that would be two python processes
+# for the same read.
 FIL_META="$(_mycelora_charger_fil "$SESSION_ID" "$TRANSCRIPT_PATH")"
 SPACE_ID="$(printf '%s\n' "$FIL_META" | sed -n '1p')"
 SESSION_LABEL="$(printf '%s\n' "$FIL_META" | sed -n '2p')"
@@ -243,21 +240,20 @@ CUSTOM_TITLE="$(printf '%s\n' "$FIL_META" | sed -n '3p')"
 BODY_FILE="$(mktemp /tmp/mycelora-hook-stop-body.XXXXXX)"
 CLEANUP_FILES+=("$BODY_FILE")
 
-# S-ACK-1 (29/08/2026) : accuse de reception des injections du tour. Le hook
-# UserPromptSubmit a appose chaque lot reellement injecte dans ce fichier
-# (un lot_id par ligne) ; on le rejoue dans ackLotIds pour que le serveur
-# confirme les lignes session_injections. Supprime seulement apres un 2xx
-# (plus bas) : sur echec ou timeout il reste, retente au Stop suivant.
+# Acknowledgment of the injections of the turn. The UserPromptSubmit hook
+# appended each batch actually injected to this file (one lot_id per line);
+# it is replayed in ackLotIds so the server confirms the session_injections
+# rows. Deleted only after a 2xx (below): on failure or timeout it stays,
+# retried at the next Stop.
 ACK_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
 ACK_FILE="/tmp/mycelora-ack-${ACK_SESSION}"
 if [ -z "$ACK_SESSION" ] || [ ! -f "$ACK_FILE" ]; then
   ACK_FILE=""
 fi
 
-# S-REFLEXES-5b (02/09/2026) : journal local des reflexes (S-REFLEXES-2),
-# meme filtre de session que mycelora_reflexe_log. Rejoue dans "reflexes" au
-# meme titre que ackLotIds l'est pour les lots, supprime seulement apres un
-# 2xx (plus bas) : sur echec ou timeout il reste, retente au Stop suivant.
+# Local reflex log, same session filter as mycelora_reflexe_log. Replayed
+# in "reflexes" just as ackLotIds is for batches, deleted only after a
+# 2xx (below): on failure or timeout it stays, retried at the next Stop.
 REFLEXES_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
 REFLEXES_FILE="/tmp/mycelora-reflexes-${REFLEXES_SESSION}.jsonl"
 if [ -z "$REFLEXES_SESSION" ] || [ ! -f "$REFLEXES_FILE" ]; then
@@ -284,7 +280,7 @@ def read_file(path):
 user_message = read_file(user_path)
 assistant_response = read_file(assistant_path)
 
-# Pas de userId : le serveur impose l'identite resolue du jeton (22/09/2026).
+# No userId: the server enforces the identity resolved from the token.
 arguments = {
     "sessionId": session_id,
     "userMessage": user_message,
@@ -292,17 +288,17 @@ arguments = {
 }
 if space_id:
     arguments["spaceId"] = space_id
-# S-ALIAS-1 : etiquettes du fil. Omises quand inconnues, jamais inventees
-# (regle R4) : un fil ouvert avant le premier session_start n'a pas de nom
-# technique, et un fil jamais renomme peut n'avoir aucun titre humain.
+# Thread labels. Omitted when unknown, never invented: a thread opened
+# before the first session_start has no technical name, and a thread never
+# renamed may have no human title.
 if session_label:
     arguments["sessionLabel"] = session_label
 if custom_title:
     arguments["customTitle"] = custom_title
 
-# S-ACK-1 : lots a confirmer, un uuid par ligne, dedupliques en gardant
-# l'ordre, plafond 50 (aligne sur le serveur). Fichier illisible ou vide :
-# on n'envoie rien, jamais une liste inventee.
+# Batches to confirm, one uuid per line, deduplicated keeping order, cap
+# 50 (aligned with the server). Unreadable or empty file: nothing is sent,
+# never an invented list.
 if ack_path:
     uuid_re = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
     lots = []
@@ -313,10 +309,9 @@ if ack_path:
     if lots:
         arguments["ackLotIds"] = lots[:50]
 
-# S-REFLEXES-5b : journal local des reflexes (S-REFLEXES-2), un objet JSON
-# par ligne valide du fichier ; lignes invalides ignorees silencieusement
-# (jamais d'echec du hook). Absent du corps si aucune ligne valide (meme
-# posture que ackLotIds absent).
+# Local reflex log: one JSON object per valid line of the file; invalid
+# lines are silently ignored (the hook never fails). Absent from the body
+# if no line is valid (same posture as an absent ackLotIds).
 if reflexes_path:
     entries = []
     for line in read_file(reflexes_path).splitlines():
@@ -330,40 +325,32 @@ if reflexes_path:
         if isinstance(obj, dict):
             entries.append(obj)
     if entries:
-        # question_humain : signal (a) un fichier .cc-attente-decision.md
-        # existe directement dans cwd (pas de recherche recursive), signal
-        # (b) presence d'un "?" dans la reponse assistant de ce tour
-        # (approximation actee a l'audit -- simple presence, pas de NLP). Si
-        # (a) OU (b), pose sur la ligne la PLUS RECENTE parmi celles dont
-        # evt == "refus" -- aucune si aucun refus dans le lot (jamais de
-        # ligne creee).
+        # question_humain: set when a "?" appears in the assistant reply of
+        # this turn (simple presence, no NLP). The flag is set on the MOST
+        # RECENT line among those with evt == "refus"; none if the batch has
+        # no refusal (no line is ever created).
         #
-        # CORRECTION (revue coordinateur, apres ff82375) : deux bugs sur
-        # l'ancienne implementation `max(refus_entries, key=lambda e:
-        # e.get("t") or "")`.
-        # 1. Fail-open casse : une ligne JSON valide mais au TYPE inattendu
-        #    (ex. "t":5, un entier) faisait planter ce max() avec un
-        #    TypeError NON attrape (comparaison str/int), hors de tout try —
-        #    le bloc python entier mourait avant json.dump(payload, ...),
-        #    BODY_FILE restait vide, curl envoyait un corps vide, la reponse
-        #    non-2xx empechait la purge, et CHAQUE Stop suivant recrashait a
-        #    l'identique sur la meme ligne empoisonnee (gel silencieux de
-        #    tout mycelora_log_exchange du fil, pas seulement reflexes). Les
-        #    entrees dont "evt" ou "t" ne sont pas des chaines sont
-        #    desormais exclues de CETTE logique (pas du tableau "reflexes"
-        #    envoye, qui les garde toutes) avant tout calcul.
-        # 2. "le plus recent" errone en cas d'egalite de "t" : "t" a une
-        #    resolution d'UNE SECONDE (mycelora_reflexe_log, format
-        #    %Y-%m-%dT%H:%M:%SZ) ; deux refus dans la meme seconde ont un
-        #    "t" identique, et max() renvoyait alors le PREMIER rencontre
-        #    (le plus ANCIEN dans le fichier), pas le plus recent. Le
-        #    journal etant append-only et lu dans l'ordre chronologique
-        #    d'ecriture, le DERNIER element de la liste filtree
-        #    (refus_entries[-1]) est a la fois plus simple (plus de
-        #    max()/key fragile) et correct meme a egalite de seconde.
-        signal_decision = bool(cwd) and os.path.exists(os.path.join(cwd, ".cc-attente-decision.md"))
+        # The most recent refusal is the LAST element of the filtered list
+        # (refus_entries[-1]), for two reasons:
+        # 1. Fail-open: a valid JSON line with an unexpected TYPE (e.g.
+        #    "t":5, an integer) would make a max() raise an uncaught
+        #    TypeError (str/int comparison), outside any try: the whole
+        #    python block would die before json.dump(payload, ...), BODY_FILE
+        #    would stay empty, curl would send an empty body, the non-2xx
+        #    response would prevent the purge, and EVERY following Stop would
+        #    crash again on the same poisoned line (silent freeze of the
+        #    whole mycelora_log_exchange, not only reflexes). Entries whose
+        #    "evt" or "t" are not strings are therefore excluded from THIS
+        #    logic (not from the "reflexes" array sent, which keeps them
+        #    all) before any computation.
+        # 2. Ties: "t" has a ONE SECOND resolution (mycelora_reflexe_log,
+        #    format %Y-%m-%dT%H:%M:%SZ); two refusals in the same second
+        #    have an identical "t", and max() would return the FIRST one met
+        #    (the OLDEST in the file), not the most recent. The log being
+        #    append-only and read in write order, the LAST element is both
+        #    simpler (no fragile max()/key) and correct even on a tie.
         signal_question = "?" in assistant_response
-        if signal_decision or signal_question:
+        if signal_question:
             refus_entries = [
                 e for e in entries
                 if isinstance(e.get("evt"), str) and e.get("evt") == "refus"
@@ -404,21 +391,21 @@ fi
 case "$HTTP_CODE" in
   2??)
     mycelora_log "stop" "log_exchange" "$DURATION_MS" "ok" "$RESP_SIZE"
-    # S-ACK-1 : accuses livres, le fichier de lots part avec le tour. Sur
-    # timeout ou erreur HTTP (branches ci-dessus/dessous), il RESTE en place
-    # et sera rejoue au prochain Stop du fil (l'accuse tardif confirme).
+    # Acknowledgments delivered, the batch file leaves with the turn. On
+    # timeout or HTTP error (branches above/below) it STAYS in place and is
+    # replayed at the next Stop of the thread (the late ack confirms).
     if [ -n "$ACK_FILE" ]; then
       rm -f "$ACK_FILE" 2>/dev/null || true
     fi
-    # S-REFLEXES-5b : meme semantique que l'accuse de lots -- purge du
-    # journal local des reflexes SEULEMENT apres ce 2xx.
+    # Same semantics as the batch acknowledgment: the local reflex log is
+    # purged ONLY after this 2xx.
     if [ -n "$REFLEXES_FILE" ]; then
       rm -f "$REFLEXES_FILE" 2>/dev/null || true
     fi
     ;;
   401)
-    # S-REFLEXES-6 : 401 typé (jeton expiré/révoqué) -> se taire, ce hook
-    # n'a JAMAIS de sortie stdout. Un 401 générique reste dans "*)".
+    # Typed 401 (token expired/revoked) -> stay silent, this hook NEVER
+    # writes to stdout. A generic 401 stays in "*)".
     if grep -q '"jeton_session_expire"' "$RESP_FILE" 2>/dev/null; then
       mycelora_log "stop" "auth" "$DURATION_MS" "jeton-expire" "$RESP_SIZE"
     else

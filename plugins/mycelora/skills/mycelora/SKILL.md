@@ -1,365 +1,239 @@
 ---
 name: mycelora
 description: >
-  Mémoire contextuelle et réflexive pour Claude. Graphe de connaissances avec
-  atomes (6 types, grille 2.1), espaces (projets), profil utilisateur et neurone cross-insights.
-  Déclencher pour : ouverture/clôture de fil, "mycelora in/out", "souviens-toi",
-  "cherche dans ma mémoire", "mes espaces", "retiens que", "brief matinal",
-  "analyse les tensions", ou toute référence à la mémoire persistante.
+  Contextual and reflective memory for Claude. Knowledge graph with
+  atoms (6 types), spaces (projects), user profile and cross-insights.
+  Trigger for: thread opening/closing, "mycelora in/out", "remember", "souviens-toi",
+  "search my memory", "cherche dans ma mémoire", "my spaces", "mes espaces", "remember that", "retiens que",
+  "morning brief", "brief matinal", "analyze the tensions", "analyse les tensions",
+  or any reference to persistent memory.
 ---
 
-# Mycelora — Mémoire contextuelle et réflexive
+# Mycelora — Contextual and reflective memory
 
-Graphe de connaissances : **atomes** (6 types, grille 2.1), **espaces** (projets), **profil** (principes + portrait), **neurone** (cross-insights).
+Knowledge graph: **atoms** (6 types), **spaces** (projects), **profile** (principles + portrait), **neuron** (cross-insights).
 
 ## QUICK REFERENCE
 
-| Config | Valeur |
-|--------|--------|
+| Item | Value |
+|------|--------|
 | Dashboard | https://mycelora.ai |
-| Canal 1 | Plugin Mycelora (skills + hooks automatiques, rien à configurer), actif dans toute session de l'app où il est installé, Chat et Cowork fusionnés depuis le 21/09/2026 |
-| Canal 2 | Connecteur claude.ai / Claude Desktop "Mycelora" (OAuth) → outils MCP mycelora_* ; seul canal là où le plugin ne tourne pas |
+| Plugin | Skills plus automatic hooks, nothing to configure. Active in any session where it is installed. |
+| Connector | The "Mycelora" connector (OAuth) in claude.ai / Claude Desktop provides the `mycelora_*` tools. |
 
-OUTILS : fournis par le connecteur custom claude.ai "Mycelora" (51 outils, edge function). `quick_boot` N'EXISTE PAS côté connecteur : ne jamais l'appeler. get_stats, triage_atoms, garbage_collect, health_check sont des outils standalone.
-USERID : `userId` est IGNORÉ par le serveur (identité résolue depuis la connexion, S-USERID-1 du 25/08/2026, écrasement inconditionnel dans `mycelora-mcp/index.ts`) : OMETS-LE dans tous les appels, sur toutes les surfaces. Seule exception : le chemin de la clé de service (tâches planifiées avec `x-mycelora-key`), où il désigne le compte cible en UUID.
-Fichiers associés (même dossier) : ONBOARDING.md, REFERENCE.md
-
----
-
-## POST-COMPACTION
-
-Après toute compression de contexte :
-1. Appeler `mycelora_get_profile()` puis suivre le protocole REPRISE POST-COMPRESSION ci-dessous
-2. RELIRE ce skill en entier
-3. Résumer ce qui a été retrouvé, demander confirmation
-NE JAMAIS continuer en se fiant uniquement au résumé compressé.
+- The tools come from the connector. `quick_boot` does not exist: never call it.
+- `userId`: omit it in all calls. The server resolves the identity from the connection and ignores any value sent.
+- Associated files (same folder): ONBOARDING.md, REFERENCE.md.
 
 ---
 
-## PROTOCOLE D'OUVERTURE (2 étapes)
+## AFTER A CONTEXT COMPACTION
 
-Triggers : "ouvre un fil", "mycelora in", "session start", "lance Mycelora", ou appel implicite du skill.
+When a conversation resumes from a summary ("continued from a previous conversation"), the context is mostly lost. Do not rely on the summary alone:
+1. Detect the active space in the summary.
+2. `mycelora_session_start(sessionId:"resume-YYYY-MM-DD", spaceId:"[space]")`; use the identifier the server returns.
+3. `mycelora_read_memory(spaceId:"[space]", type:"all")` (returns the codex and the last 5 handovers in full).
+4. Reread this skill, cross the summary with the memory, then say: "I'm resuming after compaction. Here is what I found: [summary]. Shall we continue?"
 
-### Étape 1 : Boot
-Appeler `mycelora_session_start(sessionId:"cowork-AAAA-MM-JJ-sujet")` — sans spaceId si l'espace n'est pas encore connu, avec spaceId directement si l'utilisateur l'a nommé. **Le nom tel que l'utilisateur le dit suffit, même partiel ou sans accent** (« mycelora » ouvre « Développement Mycelora », S-CODEX-REFS-1, 04/10/2026) : pas d'appel `list_spaces` préalable. Quand le nom n'était pas exact, le bloc d'ouverture rend une ligne `Espace : <nom complet> (id <uuid>)` : **reprends cet uuid** dans tous les appels suivants (les autres outils, eux, n'acceptent que l'uuid ou le nom exact). Nom ambigu : le bloc liste les candidats et le fil s'ouvre sans espace ; rappelle avec le nom complet.
+If the user asks to continue without a recap, still call `session_start`, then carry on. If the space cannot be identified, call `list_spaces` and ask.
 
-**L'IDENTIFIANT DÉFINITIF DU FIL EST CELUI QUE LE SERVEUR REND, pas celui que tu as envoyé.** Depuis le fil 86 (26/08/2026), le serveur horodate lui-même le sessionId à l'heure LOCALE et l'annonce en tête du bloc d'ouverture, sur la ligne `Fil : ...`. Ne calcule pas l'heure toi-même, ne la devine pas : **relis cette ligne et reprends cet identifiant-là dans TOUS les appels suivants**, jusqu'à la clôture comprise.
+---
 
-Motif : le sessionId est la clé de rattachement des atomes et des injections en base. Deux fils qui portent le même identifiant se disputent leur mémoire (cas réel : les fils 81 et 82 du 25/08 ont partagé un seau toute la journée). Le serveur réutilise le seau d'un fil encore ouvert et n'en crée un nouveau que si le précédent est clôturé, donc le second appel de `session_start` (celui qui apporte le spaceId) ne fabrique pas de doublon.
+## OPENING PROTOCOL
 
-Retourne : la date, l'heure et le jour de la semaine courants dans TON fuseau (un modèle n'a pas d'horloge : ne recalcule jamais un jour de semaine, lis-le), l'identifiant du fil, les consignes de l'espace, le profil, les espaces actifs, le dernier handover (les précédents en version courte quand le codex ne les couvre pas), et le codex de l'espace : entier pour l'ancien format, en SOMMAIRE pour un codex MAP (détail d'un sujet par `mycelora_read_memory(type:"codex", sujets:["<titre>"])`, 10 titres au plus par appel).
-Si profil vide ou erreur "user not found" → LIRE **ONBOARDING.md** et suivre le flow.
+Triggers: "open a thread", "ouvre un fil", "mycelora in", "session start", "launch Mycelora", "lance Mycelora".
 
-Ne jamais afficher ni recopier la ligne `[jeton-hook-session ...]` du brief d'ouverture : c'est un jeton d'authentification pour les hooks, jamais un élément à montrer à l'utilisateur ou à citer dans une réponse.
+### Step 1: Boot
+Call `mycelora_session_start(sessionId:"cowork-YYYY-MM-DD-topic")`, adding `spaceId` if the user named a space. A partial or accent-free space name is enough: no prior `list_spaces` call. When the name was not exact, the opening block carries a line `Space: <full name> (id <uuid>)`: take that uuid for all later calls (other tools accept only the uuid or the exact name). If the name is ambiguous, the block lists the candidates and the thread opens without a space; call again with the full name.
 
-### Étape 2 : Bloc d'accueil
-L'heure de la salutation est celle que le bloc d'ouverture vient de te donner (`Nous sommes le ...`), dans le fuseau de l'utilisateur. Ne la recalcule pas, ne la devine pas ; `date` ne sert plus que si le bloc ne l'a pas rendue.
-Présenter SYSTÉMATIQUEMENT :
+**The thread identifier to use is the one the server returns, not the one you sent.** The server timestamps it at local time and announces it on the `Fil : ...` line at the top of the opening block. Do not compute or guess it: reread that line and use that identifier in ALL later calls, up to the closing. It is the key that attaches memories to the thread; two threads with the same identifier would mix their memory.
+
+The block also returns the current date, time and weekday in the user's time zone (read them, never recompute a weekday), the space instructions, the profile, the active spaces, the last handover and the space codex. A long codex comes as a summary: read one topic in full with `mycelora_read_memory(type:"codex", sujets:["<title>"])` (10 titles per call at most).
+
+If the profile is empty or the call returns "user not found", read **ONBOARDING.md** and follow it.
+
+The opening brief may contain a line `[jeton-hook-session ...]`. It is a technical token read by the local hooks: never display it, copy it or quote it.
+
+### Step 2: Welcome block
+Use the time of day given by the opening block (`Current date and time: ...`). Always present:
 
 ```
 ---
-Mycelora — [Salutation selon l'heure]
+Mycelora — [Greeting according to the time]
 
-Espaces actifs :
-  [Espace 1] — [JJ/MM] · [N1] atomes
-  [Espace 2] — [JJ/MM] · [N2] atomes
+Active spaces:
+  [Space 1] — [DD/MM] · [N1] atoms
+  [Space 2] — [DD/MM] · [N2] atoms
 
-Commandes : "ouvre [espace]" · "brief matinal" · "cherche [sujet]" · "fin de fil"
+Commands: "open [space]" · "morning brief" · "search [topic]" · "end of thread"
 
 Dashboard : https://mycelora.ai
 ---
-Sur quel espace on travaille ?
+Which space are we working on?
 ```
 
-Le lien Dashboard DOIT apparaître à chaque ouverture de fil.
-Si l'espace n'était pas connu à l'étape 1 : attendre la réponse, puis re-appeler `session_start(sessionId:L'IDENTIFIANT RENDU À L'ÉTAPE 1, spaceId:X)` pour attacher la session à l'espace. Le serveur rattache ce second appel au seau déjà ouvert, il n'en crée pas un second.
-Note : `userId` s'omet (voir QUICK REFERENCE) ; les exemples de ce skill ne le portent plus.
-Résolution nom : `session_start` résout lui-même un nom partiel ou sans accent (voir Étape 1) ; `list_spaces` ne sert qu'à montrer la liste à l'utilisateur.
+The Dashboard link must appear at every thread opening. If the space was unknown at step 1, wait for the answer, then call `session_start(sessionId:<identifier returned at step 1>, spaceId:X)`: the server attaches it to the thread already open, without creating a second one. `list_spaces` is only for showing the list to the user.
+
+### Unclosed thread reported at opening
+If the opening block has a section « Fil non clôturé (…) », a previous thread of the same space was left open for more than 6 hours. Before answering on the substance:
+1. Read it: `mycelora_read_memory(type:"fil", sessionId:"<orphan thread>")`.
+2. Close it like a normal thread: `mycelora_session_end(sessionId:"<orphan thread>", clotureDifferee:true, ...)`; atoms are not required.
+3. Tell the user in one sentence and suggest saying "end of thread" when they finish a thread.
+
+Use the orphan's identifier only for these two calls. Other lines of the section (« non clôturé », « sans échange, abandonné ») are mentions: nothing to do.
 
 ---
 
-### Fil non clôturé signalé à l'ouverture (S-ORPHELINS-1, 04/10/2026)
-Si le bloc d'ouverture porte une section « Fil non clôturé (…) » : c'est un fil précédent du même espace, inactif depuis plus de 6 h, jamais clôturé. AVANT de répondre sur le fond :
-1. lis ses échanges : `mycelora_read_memory(type:"fil", sessionId:"<fil orphelin>")` ;
-2. clôture-le comme un fil normal (listes, sujets du codex) : `mycelora_session_end(sessionId:"<fil orphelin>", clotureDifferee:true, ...)` ; les atomes ne sont pas exigés ;
-3. dis-le à l'utilisateur en une phrase et conseille-lui de clôturer ses fils (« dites clôture en fin de fil »).
-Le sessionId de l'orphelin ne sert QU'À ces deux appels ; tout le reste du fil garde l'identifiant rendu à l'ouverture. Les autres lignes de la section (« non clôturé », « sans échange, abandonné ») sont des mentions : rien à faire.
+## CLOSING PROTOCOL
 
-## REPRISE POST-COMPRESSION
+Triggers: "end of thread", "fin de fil", "memorize", "mémorise", "we're closing", "on ferme", "session end", "mycelora out".
 
-Trigger : "continued from a previous conversation", "context compaction", résumé de session.
+Order: codex drafted (not sent), then closing atoms sent through `session_end_atoms`, then `session_end`, which carries the codex.
 
-CE SCÉNARIO EST CRITIQUE : le LLM a perdu ~70% du contexte. Sans ce protocole, la session reprend sans mémoire.
+1. **workSummary**: 8 lines at most, "where we stopped and why". The detail goes in the structured lists.
+2. **Closing atoms**: before the handover, with the same `sessionId`, write the thread's memories in ONE call: `mycelora_session_end_atoms(sessionId:<identifier returned at opening>, atomes:[...])`, 1 to 20 entries. Each has `type` and `contenu`, plus `portee` (mandatory for `regle` and `refute`, otherwise refused) and optionally `perime_si`. The batch refuses `remplace`: to replace a memory that became false, use `create_atom_manual` one at a time. Types and criteria: see § Atoms. If the call is forgotten, the closing is accepted but marked INCOMPLETE and the response returns the `sessionId`: call `session_end_atoms` again right away. If the thread truly has nothing to retain, say so in the `sansAtomes` field of `session_end`, with the reason.
+3. **Codex**: draft the space's up-to-date codex now (do not send it yet; step 4 carries it in `session_end`), BEFORE the closing call. It is an update, not a rewrite: start from the existing codex, apply the thread's delta (what happened, was settled, refuted, done), keep every line that is neither contradicted nor replaced, with its date and wording. Two forms exist, see § Codex.
+4. **Handover**: `mycelora_session_end(spaceId:<the thread's space>, workSummary, decisions, pendingTasks, refutations, pieges, pointeurs, correctionsUtilisateur, nonVerifie, codex or sujets/enBref, retraits if lines are removed)`.
 
-1. Détecter l'espace actif dans le résumé compressé
-2. `mycelora_session_start(sessionId:"resume-AAAA-MM-JJ", spaceId:"[espace]")` — le serveur horodate, reprends l'identifiant qu'il rend
-3. `mycelora_read_memory(spaceId:"[espace]", type:"all")` (rend le codex et les 5 derniers handovers complets, chacun avec son id, depuis le 04/10/2026 ; avant, le contenu des handovers revenait vide)
-4. Croiser résumé compressé + mémoire Mycelora
-5. "Je reprends après compression. Voici ce que j'ai retrouvé : [résumé croisé]. On continue ?"
+   **`spaceId` is mandatory at closing**, even if the thread was opened with it: without it the handover has no space and the codex is not updated. Pass the uuid returned at opening.
 
-Si "Continue directly" ou "do not recap" → faire session_start QUAND MÊME, enchaîner sans attendre.
-Si espace non identifiable → `list_spaces` puis demander.
+   Provide both lists, always. `decisions` = facts settled, with their reason. `pendingTasks` = what remains actionable, next action first. One of the two may be empty, not both. Write complete sentences: they are reinjected as is at the next opening. With both lists and a `workSummary` over 300 characters, the server makes no model call and the closing is fast.
 
----
+   **Five structured fields are required**; the server refuses the closing if any is absent or empty:
+   - `refutations`: what was tried or asserted then found false, and why.
+   - `pieges`: what must not be rediscovered (treacherous behaviors, tool limits).
+   - `pointeurs`: paths, scripts, identifiers, commands useful to resume.
+   - `correctionsUtilisateur`: what the user corrected in your assertions, quoted.
+   - `nonVerifie`: what you assert without proof.
 
-## PROTOCOLE DE CLÔTURE
+   An empty list is refused: if there is nothing to put, the justification is the entry (`["no refutation: read-only thread"]`). These fields come back at the next opening, and refutations and traps feed the codex.
+5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: if `session_end` raises « Sujets refusés » or « codex et sujets/enBref sont exclusifs », nothing was written: fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
+6. **Confirm**: "Thread closed. Handover (XXX words) and codex updated for [space]." and say whether the codex was accepted first time or resubmitted.
 
-Triggers : "fin de fil" / "mémorise" / "on ferme" / "session end" / "mycelora out"
+### Codex
 
-1. **workSummary** (8 lignes AU PLUS) : « où on s'est arrêté et pourquoi », pas un récit. Le détail vit dans les listes structurées ci-dessous, pas dans le résumé.
-2. **Codex** (DOIT, pas PEUT — S-CODEX-1, décision du 23/08) : RÉDIGE le codex à jour de l'espace AVANT l'appel de clôture. C'est une MISE À JOUR, pas une réécriture : pars de ce qui existe (ancien format : le codex ENTIER servi à l'ouverture ; codex MAP : chaque sujet touché, relu par `read_memory(type:"codex", sujets:[...])`, voir 2a), applique-lui le delta du fil (ce qui est advenu, tranché, réfuté, fait), conserve chaque ligne ancienne ni contredite ni remplacée AVEC sa date et sa formulation.
+A codex in **MAP form** has at least one line starting with `- En vigueur : `, `- À faire : `, `- Piège : `, `- Réfuté : ` or `- Chiffre : `. Otherwise it is in the **old form**. Never convert a space on your own; only at the user's request (total rewrite).
 
-   **DEUX FORMES COEXISTENT (S-CODEX-MAP-1, 04/10/2026).** Un codex est en forme MAP dès qu'il porte au moins une ligne `- En vigueur : `, `- À faire : `, `- Piège : `, `- Réfuté : ` ou `- Chiffre : ` en début de ligne. Un espace MAP suit le bloc 2a ; un espace encore à l'ancienne suit le bloc 2b. Ne convertis jamais un espace de toi-même : la conversion se fait sur demande de l'utilisateur.
+**MAP codex (by topic)**
+- Send only the topics touched by the thread: `sujets:["## <Title>\n- En vigueur : ... (DD/MM)\n..."]` (one or more complete « ## » blocks per string) and, if it changed, `enBref:"<text only, without the EN BREF : prefix>"` (one line). Use them on `session_end` instead of `codex`, or on `write_memory(type:"codex")` instead of `content`. They are mutually exclusive with `codex`/`content`.
+- The server merges: a block replaces the whole topic (title compared without accent or case), a new title is added at the end, a lone title removes the topic (lines not taken up elsewhere go to `retraits`, 30 at most; unknown title or last topic = refusal). To rename or move lines, send two blocks in the same call (destination in full, source without the line or its lone title); a new title sent alone adds a topic and renames nothing.
+- Read before sending: above 6,000 characters the opening serves only a summary (lines cut by « … », counters on a separate line, Pièges, Réfutés and Chiffres omitted). Before sending a topic, read it whole with `read_memory(spaceId, type:"codex", sujets:["<title>"])`. Reread the whole codex (`read_memory(type:"codex")`) only for a restructuring or a write through `codex`/`content`. A line or EN BREF ending with « … » is refused; never copy the counters line `[…]`; a title never carries counters.
+- If your tool does not show `sujets`/`enBref` (cached schema) and requires `content` or `codex`, send the whole codex reread through `read_memory`.
+- Form: `EN BREF : ` (state in one or two sentences, then the next deadline), then topics `## <Title>` (80 characters at most, unique up to accent and case, 60 topics at most). Within a topic, only typed lines, written exactly: `- En vigueur : `, `- À faire : `, `- Piège : `, `- Réfuté : `, `- Chiffre : `. No prose, sub-bullet or untyped line.
+- Each line ends with its date, mandatory: `(03/10)`, `(12/08, 19/08)` or `(03/10, réf. 790115b2)`. Use only dates found in recent handovers or the current codex. A `réf.` is optional and verified: only the first 8 hexadecimal characters (or full uuid) of an existing memory or handover of the account, separated by comma, semicolon or space. A story, PR or file name goes in the line's text, never in `réf.`: the whole write is refused. Check a ref with `mycelora_read_memory(type:"ref", refs:["790115b2"])`. The current thread's handover does not exist before its closing and cannot be referenced.
+- Update: a changed decision replaces its line; a finished task leaves « À faire »; the same thing never appears in two topics.
+- Removal: a line of the old codex that is absent from the new one must be replaced by a new line of the same kind in the same topic, or declared in `retraits` (`{ligne: copied identically from the old codex, motif: 10 to 300 characters}`, 30 at most; a line altered even by a period or a capital is refused as a fictitious removal). A line moved unchanged to another topic passes. Rename or modify a topic, not both in the same write.
+- The response field `remplacees` lists old lines that disappeared without a declared removal: reread it and, if a line should not have left, put it back by writing the topic again.
+- Safeguards: 600 characters minimum; 100,000 characters maximum when it also grows (condensing always passes); a MAP space never goes back to the old form. Without a codex supplied at closing, nothing changes.
 
-   **2a. Codex MAP (par sujet).** Règles vérifiées dans `_shared/codex-map.ts` et `controlerFormeMap` de `_shared/codex-reflecteur.ts` (mnemos-edge, tenir en phase) :
-   - **Écris PAR SUJET (S-CODEX-SUJETS-1, 04/10/2026).** Pour un codex MAP, n'envoie que les sujets touchés par le fil : `sujets:["## <Titre>\n- En vigueur : ... (JJ/MM)\n..."]` (un ou plusieurs blocs « ## » COMPLETS par chaîne) et, s'il change, `enBref:"<texte seul, sans le préfixe EN BREF :>"` (une seule ligne), sur `mycelora_session_end` À LA PLACE de `codex`, ou sur `mycelora_write_memory(type:"codex")` à la place de `content`. Le serveur fusionne : un bloc REMPLACE le sujet entier (titre comparé sans accent ni casse), un titre neuf s'ajoute en fin, un titre seul retire le sujet (ses lignes non reprises ailleurs en `retraits`, 30 au plus ; titre inconnu ou dernier sujet = refus), les autres sujets restent intacts au caractère près. **Renommer ou déplacer par sujet = DEUX blocs dans le même appel** : le sujet d'arrivée complet ET le sujet de départ sans la ligne (ou son titre seul pour un renommage) ; les lignes reprises ailleurs ne vont PAS en `retraits`. Un titre neuf envoyé seul NE renomme rien : il ajoute un sujet et l'ancien reste. `codex`/`content` et `sujets`/`enBref` sont exclusifs.
-   - **Ouvre AVANT d'envoyer.** Au-delà de 6 000 c, l'ouverture ne sert que le SOMMAIRE (lignes coupées par « … », compteurs `[3 En vigueur, 1 À faire]` sur une ligne à part, Pièges, Réfutés et Chiffres omis) ; en dessous, le codex entier. Avant d'envoyer un sujet, lis-le entier par `mycelora_read_memory(spaceId, type:"codex", sujets:["<titre>"])` : un bloc reconstruit depuis le sommaire perdrait ses Pièges. Ne relis le codex ENTIER (`read_memory(type:"codex")` sans `sujets`) que pour une restructuration ou une écriture par `codex`/`content`. Toute ligne ou tout EN BREF qui finit par « … » est refusé ; la ligne de compteurs `[…]` ne se recopie jamais ; un titre ne porte jamais de compteurs.
-   - **Contrôle la réponse.** Le champ `remplacees` (réponse de write_memory, bloc `codex` de session_end) liste les lignes de l'ancien codex disparues sans retrait déclaré : relis-le ; une ligne qui n'aurait pas dû partir se remet par une nouvelle écriture du sujet, tant que sa date figure encore dans les sources (handovers récents ou codex courant).
-   - **Schéma en cache.** Si ton outil n'affiche pas `sujets`/`enBref` (connecteur au schéma en cache, piège du 04/10) et exige encore `content` ou `codex`, écris le codex ENTIER relu par `read_memory`, comme avant : ça marche toujours.
-   - **Forme** : `EN BREF : ` (état en une ou deux phrases, puis la prochaine échéance), puis des sujets `## <Titre>` (80 c au plus, uniques à l'accent et à la casse près, 60 sujets au plus ; garde les titres existants sauf raison dite à l'utilisateur). Dans un sujet, UNIQUEMENT des lignes typées, genre écrit exactement ainsi, espace avant les deux-points : `- En vigueur : `, `- À faire : `, `- Piège : `, `- Réfuté : `, `- Chiffre : `. Aucune prose, aucune sous-puce, aucune ligne non typée.
-   - **Date en fin de ligne, obligatoire** : `(03/10)`, `(12/08, 19/08)` ou `(03/10, réf. 790115b2)`. Uniquement des dates des handovers récents ou de l'ancien codex (sinon « dates hors sources »). La référence est facultative et **VÉRIFIÉE** (S-CODEX-REFS-1, 04/10/2026) : uniquement l'identifiant d'un souvenir ou d'un handover existant de ton compte, ses 8 premiers caractères hexadécimaux ou son uuid complet, plusieurs séparés par virgule, point-virgule ou espace. Un nom de story, de PR ou de fichier va dans le texte de la ligne, JAMAIS en réf. : refus de toute l'écriture, ligne citée. Seules les lignes nouvelles ou modifiées sont vérifiées. Relire une réf. : `mycelora_read_memory(type:"ref", refs:["790115b2"])`, sans spaceId. Le handover du fil en cours n'existe qu'après sa clôture : il n'est pas référençable dans le codex de cette même clôture.
-   - **Mise à jour** : une décision qui change REMPLACE sa ligne dans son sujet ; une tâche faite sort de « À faire » (elle devient « En vigueur » ou part en retrait) ; une même chose ne figure jamais dans deux sujets.
-   - **Retrait** : le serveur compare l'ancien et le nouveau par (sujet, genre). Une ligne de l'ancien codex absente du nouveau doit être soit compensée par une ligne nouvelle du MÊME genre dans le MÊME sujet, soit déclarée dans `retraits` (`{ligne: copie exacte, motif: 10 à 300 c}`, 30 au plus). Une ligne déplacée à l'identique dans un autre sujet, ou un sujet renommé dont les lignes restent identiques, passe sans retrait (par sujet : les deux blocs, voir plus haut). Renomme OU modifie un sujet, pas les deux dans la même écriture : sinon ses lignes changées comptent comme retirées de l'ancien titre et doivent être déclarées en retraits.
-   - **Garde-fous** : 600 c au minimum ; pour un codex MAP, le budget de l'espace est remplacé par un garde-fou de 100 000 c (refus seulement s'il dépasse ET grossit ; pour ce garde-fou, une condensation passe toujours, les lignes retirées restant soumises à la règle des retraits) ; un espace MAP ne revient jamais à l'ancien format (refus) ; le modèle serveur ne touche jamais un codex MAP : sans codex fourni à la clôture, rien ne bouge.
-   - **Conversion ancien → MAP** (sur demande seulement) : réécriture totale ; le contrôle « histoire perdue » de l'ancien format (60 % des dates anciennes gardées, ou déclarées en `retraits`) s'applique encore pendant ce passage.
-
-   **2b. Ancien format (espaces pas encore convertis).** Forme imposée (même forme que le prompt serveur, `_shared/codex-reflecteur.ts::construirePromptCodex` — tenir les deux en phase, renvoi croisé du 23/08/2026, chemin corrigé le 31/08 après le déplacement du fil 74) :
-   - markdown direct, SANS frontmatter, SANS fence, SANS emoji ni tableau ;
-   - tête « EN BREF : » (avec les deux-points) : l'état de l'espace en une phrase, le plus structurant d'abord ; puis la prochaine échéance datée en une phrase ;
-   - cinq sections, exactement : `## Situation`, `## Décisions en vigueur`, `## Réfuté ou abandonné`, `## En attente`, `## Repères chiffrés` — jamais de sixième section : les repères d'infrastructure entrent comme LIGNE DATÉE de Situation ;
-   - lignes « - JJ/MM : ... », uniquement des dates citées par le fil, les handovers ou l'ancien codex ; « (antérieur) » si la date est inconnue ; prévu ≠ fait (le futur va dans En attente) ; dans « En attente », la date de tête est celle de la SOURCE qui pose la tâche, JAMAIS une échéance devinée — si une échéance est connue, dis-la dans le texte de l'action, pas en tête de ligne (le contrôle serveur refuse toute date de tête absente des sources : le petit modèle s'y est fait prendre le 31/08 en fabriquant un « 01/09 » et un « 15/09 ») ;
-   - **BUDGET DE L'ESPACE, RÈGLE DURE (19/09/2026)** : chaque espace a un budget de codex, 10 000 caractères par défaut, davantage pour les espaces denses (valeur propre à chaque espace, donnée par le bloc d'ouverture quand elle est dépassée). Si le bloc d'ouverture affichait « ATTENTION : codex à L caractères pour un budget de B », ta clôture DOIT rendre un codex sous B. Le serveur REFUSE un codex qui dépasse le budget ET grossit par rapport à l'ancien ; une condensation passe toujours. Sous le budget, le codex grandit et ne perd que des lignes périmées.
-   - **Deux façons de maigrir, jamais de suppression muette** : (a) FUSIONNER plusieurs lignes anciennes d'un même thème en UNE ligne dense qui porte TOUTES leurs dates (« - 12/08, 19/08 : ... »), en priorité les plus anciennes et les plus détaillées, jamais celles des sept derniers jours ; (b) RETIRER une ligne devenue inutile (dossier clos, dette soldée, fait périmé) en la DÉCLARANT dans le paramètre `retraits` : `[{ligne:"- 16/04 : texte exact de l'ancien codex", motif:"dossier clos par jugement du 18/11"}]`, ligne recopiée À L'IDENTIQUE depuis l'ancien codex, motif de 10 à 300 caractères, 30 retraits au plus. Le serveur vérifie que la ligne existait et qu'elle a bien disparu (recopiée avec un simple point ou d'autres majuscules, elle est refusée comme « retrait fictif »), compte ses dates comme justifiées dans le contrôle d'histoire, et l'archive en souvenir clos, retrouvable par `mycelora_search_atoms(inclure_clos:true)`. Toute date de l'ancien codex qui disparaît SANS être déclarée compte comme de l'histoire perdue. Même paramètre `retraits` sur `mycelora_write_memory(type:"codex")` pour une resoumission ;
-   - une même chose ne figure jamais dans deux sections. Depuis le 31/08 le serveur RETIRE la redite (première occurrence gardée) au lieu de refuser tout le codex, mais ne compte pas dessus pour ranger à ta place.
-   Le serveur contrôle ce codex avec les MÊMES garde-fous que le modèle, sans exemption : taille minimale = 60 % de l'ancien MAIS jamais plus de 8 500 caractères (c'est ce plafond du plancher qui rend la condensation possible), et 60 % au moins des dates antérieures à la fenêtre de handovers conservées. S'il est refusé, l'ancien codex reste protégé et C'EST À TOI de resoumettre (S-CLOTURE-ASYNC, 31/08/2026 : le repli modèle du chemin client est SUPPRIMÉ, le frontier est l'unique rédacteur quand un pilote est présent).
-3. **Atomes de clôture** (S-CLOT-1, sprint S-CLOTURE-2) : AVANT le handover et avec le MÊME `sessionId`, écris les souvenirs du fil par `mycelora_session_end_atoms(sessionId:L'IDENTIFIANT RENDU À L'OUVERTURE, atomes:[...])`, de 1 à 20 en UN seul appel. C'est le seul appel qui fait qu'un fil laisse une trace réutilisable ailleurs ; le handover, lui, ne se relit que dans cet espace.
-
-   **L'ordre compte** : les atomes d'abord, la clôture ensuite, pour que les souvenirs fraîchement écrits nourrissent le compte rendu.
-
-   Chaque entrée porte `type` et `contenu`, plus `portee` (**OBLIGATOIRE pour `regle` et `refute`**, sinon l'atome est refusé), et optionnellement `perime_si`. Le lot REFUSE `remplace` : remplacer un souvenir devenu faux passe par `create_atom_manual`, un à la fois. Types et critère d'écriture : voir § Création proactive d'atomes.
-
-   **Si tu oublies cet appel**, la clôture n'est PAS refusée : elle est acceptée et **marquée INCOMPLETE**, et sa réponse te rend le `sessionId` à reprendre. Rappelle alors `mycelora_session_end_atoms` dans la foulée. Une clôture incomplète est comptée : c'est une mesure, pas une punition, et elle dit exactement une chose, que ce fil n'a rien laissé.
-
-   **Si le fil n'a vraiment rien à retenir** (lecture seule, question ponctuelle), dis-le par le champ `sansAtomes` de `mycelora_session_end`, avec la justification en clair. Le vide déclaré et le vide oublié ne sont pas la même chose.
-4. **Handover** : `mycelora_session_end(spaceId:L'ESPACE DU FIL, workSummary:..., decisions:[...], pendingTasks:[...], refutations:[...], pieges:[...], pointeurs:[...], correctionsUtilisateur:[...], nonVerifie:[...], codex:"EN BREF : ..." (ancien format) OU sujets:[...] et enBref (codex MAP, bloc 2a), retraits:[...] si tu retires des lignes)`
-
-   **`spaceId` EST OBLIGATOIRE À LA CLÔTURE, même si le fil a été ouvert avec.**
-   Le serveur ne le retrouve pas tout seul : `sessionEnd` le résout depuis le
-   paramètre reçu, et `resolveSpaceId` rend `undefined` quand il est absent.
-   Sans lui, le handover s'écrit avec `space_id` à NULL, le codex n'est PAS
-   régénéré (`"aucun espace résolu"`), et la clôture est à moitié perdue. Cas
-   réel, fil 86 du 26/08/2026 : cette ligne omettait `spaceId`, et le fil l'a
-   payé. Repasser l'UUID rendu à l'ouverture.
-
-   **FOURNIR LES DEUX LISTES, TOUJOURS.** Tu as vécu le fil ; le modèle serveur n'en verrait qu'un résumé de quelques milliers de caractères. Quand les deux listes sont fournies avec un `workSummary` de plus de 300 caractères, **le serveur ne fait AUCUN appel modèle pour le handover** : la clôture est nettement plus rapide et ne consomme pas de tokens. Sans elles, un modèle refait ton travail moins bien.
-
-   `decisions` = faits tranchés pendant le fil, avec leur raison. `pendingTasks` = ce qui reste actionnable, **la prochaine action en premier** (elle est rendue en tête à l'ouverture du fil suivant). **L'une des deux peut être vide** (un fil peut n'avoir aucune tâche restante), pas les deux. Écris-les en phrases complètes : elles sont réinjectées telles quelles à l'ouverture du fil suivant.
-
-   **LA CLÔTURE STRUCTURÉE (obligatoire depuis le fil 69).** Sur ce chemin, le serveur REFUSE la clôture si l'un des cinq champs suivants est absent ou vide. Ce sont les champs que tu n'écris jamais spontanément : tu retiens tes conclusions, pas tes impasses.
-   - `refutations` : essayé ou affirmé pendant le fil, puis révélé faux. Quoi, et pourquoi c'est écarté.
-   - `pieges` : ce qu'il ne faut pas redécouvrir au fil suivant (comportements traîtres, limites d'outils, faux amis).
-   - `pointeurs` : chemins, scripts, identifiants, commandes utiles pour reprendre. Du « où regarder », pas du contenu.
-   - `correctionsUtilisateur` : ce que l'utilisateur a corrigé dans ce que tu affirmais. Ne te l'approprie pas : cite la correction.
-   - `nonVerifie` : ce que tu affirmes sans preuve (non testé, non mesuré, repris d'un souvenir).
-
-   **Une liste vide est refusée.** Si le fil n'a rien à mettre dans un champ, la justification EST l'entrée : `["aucune réfutation : fil de lecture seule"]`. Dates : cite la date de l'événement quand tu la connais. Ces champs sont rendus à l'ouverture du fil suivant dans l'ordre : prochaine action, réfutations, pièges, corrections, décisions, pointeurs, non vérifié, résumé ; et les réfutations et pièges alimentent la section « Réfuté ou abandonné » du codex (ancien format ; en MAP, des lignes `- Réfuté :` et `- Piège :` du sujet concerné).
-5. **Mémoire** : ton codex accepté est écrit par `session_end` (frontmatter `author: client`) et la clôture ne fait alors AUCUN appel modèle. **S'il est refusé, PLUS AUCUN repli modèle ne prend la main** (S-CLOTURE-ASYNC, décision du 31/08/2026) : l'ancien codex est conservé et la réponse porte les raisons du refus. La resoumission t'appartient : corrige le codex D'APRÈS CES RAISONS puis écris-le par `mycelora_write_memory(spaceId, type:"codex", content:...)` (ancien format) ou `sujets`/`enBref` (codex MAP), qui applique désormais les MÊMES garde-fous déterministes que la clôture (canal contrôlé, plus une porte dérobée) et rend ses propres raisons en cas de nouveau refus. Ancien format : aucun appel `read_memory` n'est nécessaire. Codex MAP : resoumets PAR SUJET (`sujets`, `enBref`, bloc 2a) après avoir ouvert les sujets concernés par `read_memory(sujets)`. Le repli modèle ne subsiste que pour les fils SANS pilote (clôtures automatiques), via une file de fond (`codex_regen_queue`, worker toutes les 5 min) — jamais sur ton chemin.
-6. **Vérifier** la réponse de l'outil. **`context_snapshot.source_listes` doit valoir `client`** (sinon tes listes n'ont pas été prises en compte : client trop ancien, ou `workSummary` sous le seuil). **Le bloc `codex` de la réponse doit porter `source:"client", accepte:true`** : s'il porte un refus, ANNONCE ses `raisons` à l'utilisateur, corrige le codex d'après elles et resoumets-le par `mycelora_write_memory(type:"codex")` (étape 5) ; ne relance JAMAIS `session_end` pour retenter — le handover est déjà écrit, et depuis S-CLOTURE-ASYNC le serveur rendrait de toute façon le handover existant tel quel (filet d'idempotence de 10 min, champ `rejeu: true`) sans rien réécrire. **Exception (écriture par sujet)** : si `session_end` LÈVE une erreur « Sujets refusés » ou « codex et sujets/enBref sont exclusifs », RIEN N'A ÉTÉ ÉCRIT, handover compris : corrige les sujets et RAPPELLE `session_end`. Si échec → voir REFERENCE.md § Gestion des erreurs.
-7. **Confirmer** : "Session clôturée. Handover (XXX mots) et codex mis à jour pour [espace]." — en citant le sort du codex (accepté du premier coup, ou resoumis après refus avec la raison).
+**Old form (spaces not yet converted)**
+- Direct markdown, no frontmatter, fence, emoji or table.
+- Head `EN BREF : ` (the space's state in one sentence, then the next dated deadline).
+- Exactly five sections: `## Situation`, `## Décisions en vigueur`, `## Réfuté ou abandonné`, `## En attente`, `## Repères chiffrés`. Never a sixth.
+- Lines `- DD/MM : ...`, only with dates cited by the thread, the handovers or the old codex (`(antérieur)` if unknown). Planned is not done: the future goes in En attente, where the leading date is that of the source that sets the task, never a guessed deadline (a deadline goes in the text). The same thing never appears in two sections.
+- Budget: each space has a codex size budget (10,000 characters by default; the opening block says « WARNING: codex at L characters for a budget of B » when exceeded). A codex above budget that also grows is refused; a condensation always passes.
+- To slim down, never delete silently: (a) merge several lines of the same theme into one dense line carrying all their dates; (b) remove a useless line by declaring it in `retraits` (`[{ligne:"- 16/04 : exact text of the old line", motif:"case closed"}]`, copied identically, motif 10 to 300 characters, 30 at most; a line altered even by a period or a capital is refused as a fictitious removal). Removed lines are archived and retrievable through `mycelora_search_atoms(inclure_clos:true)`. A date of the old codex that disappears undeclared counts as lost history.
+- The server checks: minimum size 60% of the old codex (never more than 8,500 characters) and at least 60% of the older dates kept. If refused, the old codex stays protected and resubmitting is up to you through `mycelora_write_memory(type:"codex", content:..., retraits:...)`.
 
 ---
 
-## COMPORTEMENT AUTOMATIQUE
+## ATOMS
 
-### Écriture des atomes : par toi, plus par extraction
-Depuis le 12/09/2026, l'extraction automatique d'atomes depuis les échanges est ÉTEINTE (cron `extract-from-exchanges` désactivé, décision D-2 du fil 117) : un petit modèle qui découpait les échanges produisait surtout du bruit. Les atomes d'un fil sont désormais écrits par le modèle du fil, c'est-à-dire par toi, à deux moments : en cours de fil quand un fait décisif tombe (§ Création proactive ci-dessous) et à la clôture, par lot (§ Protocole de clôture, étape 3). Ce qui n'est pas écrit par toi n'existe pas en mémoire. Le watcher collecte encore les échanges, mais pour d'autres usages (voir § Watcher v3).
+### Writing atoms
+Automatic extraction of atoms from exchanges is off. A thread's atoms are written by you, at two moments: during the thread when a decisive fact lands (`create_atom_manual`), and at closing as a batch (step 2). What you do not write is not in memory.
 
-### Création proactive d'atomes
-Si l'utilisateur exprime une décision, une leçon payée, un démenti, un repère, un état...
-Le LLM **DOIT** créer l'atome via `create_atom_manual` et informer : "Je retiens ça comme [type]."
-DOIT, pas PEUT. "PEUT" = ne le fait jamais. L'utilisateur peut corriger le type ou refuser.
+When the user expresses a decision, a lesson paid for, a denial, a landmark or a state, you MUST create the atom with `create_atom_manual` and say: "I'm keeping that as [type]." MUST, not MAY: "MAY" means it never happens. The user can correct the type or refuse.
 
-**Le critère, unique : ce souvenir servira-t-il ailleurs ou plus tard ?** Un autre modèle, dans un autre fil, doit pouvoir s'en servir sans avoir lu celui-ci. Chaque souvenir est une phrase COMPLÈTE et AUTONOME : « Il a dit oui » ne vaut rien, « Le client X a validé le devis de 12 k€ le 12/09/2026 » vaut quelque chose.
+**The criterion: will this memory be useful elsewhere or later?** Another model, in another thread, must be able to use it without having read this one. Each memory is a complete, self-contained sentence: "He said yes" is worthless, "Client X approved the €12k quote on 12/09/2026" is useful.
 
-**Les six types de la grille 2.1** (il n'en existe aucun autre ; un type hors de cette liste est rabattu sur `non_affecte`). Source : `_shared/grille-atomes.ts`, jamais recopiée à la main :
+**The six types** (no other; an unknown type becomes `non_affecte`):
 
-| type | la question à laquelle il répond | portée naturelle |
+| type | the question it answers | natural scope |
 |---|---|---|
-| `regle` | comment agir ici : décision en vigueur, méthode, préférence, consigne | locale ou transverse |
-| `piege` | ce qui échoue et pourquoi, payé au moins une fois | transverse |
-| `refute` | ce qu'il ne faut plus croire | locale ou transverse |
-| `repere` | où, qui, combien, comment c'est fait : pointeur, chiffre, contact, identifiant, fait de structure | locale |
-| `etat` | où on en est, ce qui attend | locale |
-| `non_affecte` | ce qui n'entre dans aucune des cinq autres familles : à voir et à traiter à la main | locale |
+| `regle` | how to act here: decision in force, method, preference, instruction | local or cross-cutting |
+| `piege` | what fails and why, paid for at least once | cross-cutting |
+| `refute` | what must no longer be believed | local or cross-cutting |
+| `repere` | where, who, how much, how it is made: pointer, figure, contact, identifier | local |
+| `etat` | where we stand, what is waiting | local |
+| `non_affecte` | fits none of the above: to be sorted by hand | local |
 
-`non_affecte` n'est pas un repli commode, c'est une pile de tri à la main : un fil qui en produit surtout a mal classé. `etat` est le seul type qui périme par l'âge ; les cinq autres sortent par remplacement, clôture ou revue humaine.
+`non_affecte` is not a fallback: a thread that mostly produces it has misclassified. `etat` is the only type that expires with age.
 
-**La portée** dit où le souvenir vaut : `locale` = seulement dans cet espace, `transverse` = dans tous. Elle est **OBLIGATOIRE pour `regle` et `refute`**, facultative ailleurs. Une méthode qui vaut partout est `transverse` ; une décision propre au dossier est `locale`.
+**`portee`**: `locale` (this space only) or `transverse` (all spaces). Mandatory for `regle` and `refute`, optional elsewhere. **`perime_si`** (optional): the condition that will make the memory false, in a few words.
 
-**`perime_si`**, optionnel : la condition qui rendra ce souvenir faux, en clair et en quelques mots. Un souvenir qui porte sa condition de péremption vaut mieux qu'un souvenir qu'il faudra deviner périmé.
+Deserves an atom:
+- "We're going with Next.js for the site" → `regle`, local
+- "I learned that mails arrive twice if the job runs more often than hourly" → `piege`, cross-cutting
+- "Actually the job runs every quarter hour, not at night" → `refute`, local
+- "Alex is the CEO, he leaves the project at the end of April" → `repere`, local
 
-Exemples — ça mérite un atome :
-- "On part sur Next.js pour le site" → `regle`, locale
-- "J'ai appris que les mails arrivent en double si le cron est < 1h" → `piege`, transverse
-- "Finalement le cron ne tourne pas la nuit, il tourne tous les quarts d'heure" → `refute`, locale
-- "Jean-Marc est le DG, il quitte le projet fin avril" → `repere`, locale
-Exemples — ça n'en mérite PAS :
-- "Oui, bonne idée" (acquiescement sans contenu)
-- "Passe-moi le fichier X" (instruction opérationnelle ponctuelle)
-- Discussion technique transitoire qui sera dans le handover de clôture
+Does not deserve one: "Yes, good idea"; "Pass me file X"; a transient technical discussion that the handover will cover.
 
-**TAILLE : 1500 CARACTÈRES, PLAFOND DUR.** Un atome plus long est **coupé** à
-l'écriture depuis S-PLAFOND-1 (26/08/2026) : ce qui dépasse n'est pas stocké,
-donc pas récupérable. Écris sous la limite, ou **fais deux atomes** plutôt qu'un
-gros. Ce n'est pas une préférence de style, c'est la taille servie : le rappel
-coupe à 1500 depuis toujours, et l'embedding se calcule sur ce texte-là. Un
-atome long dilue son propre vecteur sur trop de sujets et se retrouve moins
-bien. Un fait par atome se retrouve mieux que trois faits dans un pavé.
+**Size: 1,500 characters, hard ceiling.** A longer atom is cut at write time and the excess is lost. Write under the limit, or make two atoms. One fact per atom is also found better by recall.
 
-### Hygiène mémoire
-`triage_atoms` : quand > 30% d'atomes basse confiance, ou sur demande.
-`garbage_collect` et `health_check` : automatisés via pg_cron, aussi appelables directement (outils du même nom). Détails dans REFERENCE.md.
+### Replacing a memory
+When a new atom makes a previous one obsolete: `search_atoms`, then `update_atom(active:false)` on the old one, then `create_connection(type:"précède")`.
 
-### Watcher v3 (hooks du plugin)
-Deux hooks embarqués dans le plugin assurent la mémoire automatique, sans action de l'utilisateur :
-- **À chaque message utilisateur** : rappel contextuel FACE-A injecté avant la réponse.
-- **À la fin de chaque échange** : l'échange est collecté (`mycelora_log_exchange`) pour nourrir le compte rendu automatique des fils abandonnés (`auto-session-end`), l'état du fil et le réflexe de contradiction. Il n'alimente PLUS les atomes depuis le 12/09/2026.
-
-Un journal technique est tenu dans `/tmp/mycelora-hook.log` (diagnostic local). Les deux hooks ignorent les notifications système et les messages trop courts pour être utiles. Limite connue : un rappel planifié (wakeup) au libellé libre peut ne pas être filtré et apparaître comme un message utilisateur normal.
-
-### Surfaces : avec ou sans hooks
-Depuis le 21/09/2026, Chat et Cowork sont FUSIONNÉS sur le compte de Stéphane : une seule interface, sessions dans le cloud d'Anthropic, et les hooks du plugin tournent dans la session unifiée (vérifié le 21/09 au soir : rappel à chaque message, `log_exchange` à chaque fin d'échange, journal `/tmp/mycelora-hook.log` du conteneur). Le constat du 20/09 « le Chat n'a pas de watcher » décrivait l'ancien Chat : il est périmé. La distinction qui compte n'est donc plus Chat contre Cowork, mais **session avec hooks** (plugin installé et actif) contre **session sans hooks** (connecteur seul : compte pas encore fusionné, autre client, plugin désactivé). NON VÉRIFIÉ au 21/09 : une session ouverte depuis le mobile ou le web ; ne pas présumer que les hooks y tournent. Le skill ne sait pas dans quel cas il tourne, et il n'a pas besoin de le savoir : la consigne est écrite pour être juste dans les deux.
-
-- **Ce qui est identique partout** : l'ouverture (`session_start`), la création proactive d'atomes, les atomes de clôture et le handover. Tu écris les souvenirs toi-même dans tous les cas.
-- **Le seul écart : le rappel contextuel.** Avec hooks, le watcher l'injecte avant chaque réponse. Sans hooks, rien n'arrive tout seul. Et même avec hooks il peut manquer : rien de pertinent ce tour (bloc vide, normal), message filtré, ou watcher sans jeton (aucun `session_start` encore fait, ou bloc d'ouverture trop gros pour le transcript, défaut connu du 12/09/2026). **Règle unique** : quand une question porte sur le contexte de l'utilisateur (ses projets, ses décisions, ses chiffres) et qu'aucun rappel n'est arrivé, appelle `mycelora_search_atoms` ou `mycelora_recall` toi-même avant de répondre. Un rappel demandé en trop coûte un appel ; un rappel manqué coûte une décision retranchée à l'aveugle.
-- **Ne jamais appeler `mycelora_log_exchange` toi-même** : c'est l'appel du watcher, et le serveur refuse un lot connecteur quand un lot hook existe pour le fil (règle D5). Dans une session sans hooks, le fil n'est pas collecté : c'est connu et assumé, sa mémoire est ce que tu écris en atomes et à la clôture.
-
-### Réflexes de senior (impact, état du fil, contradiction)
-
-Trois réflexes automatiques, indépendants du protocole d'ouverture/clôture ci-dessus.
-
-**Réflexe d'impact** (commandes shell uniquement, v1) : avant un geste structurant (modification de schéma, suppression ou mise à jour massive, opération sur la prod), l'appel est REFUSÉ une fois, avec un rapport (qui lit et qui écrit l'objet visé). Ce n'est pas un blocage définitif : LIS le rapport, traite ce qu'il signale, puis REJOUE LA MÊME commande telle quelle — le refus ne se répète jamais pour le même objet dans le même fil. N'essaie jamais de contourner ce refus par un chemin détourné ; un refus veut dire « vérifie avant de rejouer », pas « renonce ».
-
-**État du fil** : un court état du fil courant (objectif, périmètre en cours, ce qui est décidé, écarté, ouvert, corrections faites, etc.) peut apparaître à position fixe dans le rappel, seulement quand il a changé depuis la dernière injection. C'est une matière de contexte pour toi, pas un message à recopier ni à commenter à l'utilisateur.
-
-**Réflexe de contradiction** : quand ce qui vient d'être dit contredit une décision en vigueur connue ailleurs (un autre projet, un fil antérieur), une ligne `ALERTE (...)` peut apparaître dans le rappel, avec un identifiant court à acquitter. Dès que tu la vois, acquitte-la : `mycelora_ack_alerte(id:"<identifiant donné dans le texte>", verdict:"utile"|"bruit")`, après avoir jugé en une phrase si elle est pertinente ou du bruit, puis informe l'utilisateur en une phrase. Ce verdict est un signal d'appoint, pas la décision finale (Stéphane tranche dans le dashboard) : acquitter n'efface jamais l'alerte.
+### Memory hygiene
+`triage_atoms`: when more than 30% of atoms are low confidence, or on request. `garbage_collect` and `health_check` also run automatically and can be called directly. Details in REFERENCE.md.
 
 ---
 
-## COMMANDES EN LANGAGE NATUREL
+## HOOKS AND RECALL
 
-| L'utilisateur dit | Action |
+The plugin's hooks provide automatic memory:
+- At each user message: a contextual recall is injected before the reply.
+- At the end of each exchange: the exchange is collected (`mycelora_log_exchange`) to build the report of abandoned threads, the thread state and the contradiction reflex.
+
+Both ignore system notifications and messages too short to be useful.
+
+A session may have no hooks (connector alone, plugin disabled), and even with hooks a recall may be missing (nothing relevant, filtered message, no `session_start` done yet). **Rule:** when a question concerns the user's context (projects, decisions, figures) and no recall has arrived, call `mycelora_search_atoms` or `mycelora_recall` yourself before answering.
+
+Opening, atom creation, closing atoms and handover are identical with or without hooks. **Never call `mycelora_log_exchange` yourself**: it is the hooks' call, and the server refuses a connector batch when a hook batch exists for the thread.
+
+### Reflexes
+
+**Impact reflex** (shell commands only): before a structuring action (schema change, mass deletion or update, production operation), the call is refused once, with a report of who reads and writes the targeted object. Read the report, handle what it flags, then replay the same command as is: the refusal does not repeat for the same object in the same thread. Never work around it.
+
+**Thread state**: a short state of the thread (objective, decided, ruled out, open, corrections) may appear in the recall when it has changed. It is context for you, not something to copy or comment to the user.
+
+**Contradiction reflex**: when what was just said contradicts a decision in force elsewhere, a line `ALERTE (...)` with a short identifier may appear in the recall. Judge in one sentence whether it is relevant, acknowledge it with `mycelora_ack_alerte(id:"<identifier from the text>", verdict:"utile"|"bruit")`, and tell the user in one sentence. The verdict is a signal; the user decides in the dashboard. Acknowledging never erases the alert.
+
+---
+
+## NATURAL-LANGUAGE COMMANDS
+
+| The user says | Action |
 |-------------------|--------|
-| (auto au 1er message) | session_start (sans spaceId) |
-| mycelora in X, ouvre X | session_start(spaceId:X) |
-| mycelora out, fin de fil | session_end_atoms(atomes) PUIS session_end(workSummary, decisions, pendingTasks, ..., codex) — dans cet ordre ; le codex est RÉDIGÉ par toi (protocole de clôture, étape 2) |
-| retiens que..., décision:, fait:, j'ai appris | create_atom_manual (type de la grille 2.1, + portee si regle ou refute) |
-| cherche Y, dans ma mémoire | search_atoms(query:Y) |
-| mes espaces, mes dossiers | list_spaces |
-| crée dossier X | create_space(name:X) |
-| analyse les tensions | cross_insights |
-| brief matinal | get_context(mode:"auto") (brief complet à venir, chantier dédié) |
-| stats, état mémoire | get_stats |
-| mon profil, qui suis-je | get_profile |
-| montre la mémoire de X | read_memory(spaceId:X, type:"codex") |
-| injecte ce document | ingest_document |
-| diagnostic, santé | health_check |
-| contact:, qui est X | upsert_contact / search_contacts |
-| mycelora help | afficher cette table en blocs thématiques |
+| (first message) | session_start (without spaceId) |
+| mycelora in X, open X / ouvre X | session_start(spaceId:X) |
+| mycelora out, end of thread / fin de fil | session_end_atoms(atomes) THEN session_end(...), codex written by you |
+| remember that... / retiens que..., decision: / décision:, fact: / fait:, I learned / j'ai appris | create_atom_manual (type, + portee if regle or refute) |
+| search Y / cherche Y, in my memory / dans ma mémoire | search_atoms(query:Y) |
+| my spaces / mes espaces, my folders / mes dossiers | list_spaces |
+| create folder X / crée dossier X | create_space(name:X) |
+| analyze the tensions / analyse les tensions | cross_insights |
+| morning brief / brief matinal | get_context(mode:"auto") |
+| stats, memory status / état mémoire | get_stats |
+| my profile / mon profil, who am I / qui suis-je | get_profile |
+| show the memory of X / montre la mémoire de X | read_memory(spaceId:X, type:"codex") |
+| inject this document / injecte ce document | ingest_document |
+| diagnostic, health / santé | health_check |
+| contact:, who is X / qui est X | upsert_contact / search_contacts |
+| mycelora help | display this table in thematic blocks |
 
 ---
 
-## TÂCHES PLANIFIÉES
+## MAIL AND CALENDAR COLLECTION
 
-### RÈGLE : une tâche planifiée est une SONDE, pas un fil
-
-Décision de Stéphane du 01/09/2026, à appliquer à TOUTE tâche planifiée
-(surveillance, brief, veille, envoi, contrôle) qui touche Mycelora.
-
-- Elle **n'ouvre jamais** de session (`mycelora_session_start`).
-- Elle **ne clôture jamais** (`mycelora_session_end`).
-- Elle **n'écrit ni handover ni codex**.
-- Sa seule écriture en mémoire est **UN atome**, via `mycelora_create_atom_manual`,
-  dans **l'espace qu'elle déclare**, et **seulement s'il y a quelque chose à
-  retenir**. Une sonde verte n'écrit rien : c'est le cas normal.
-
-**Pourquoi.** Un fil produit une compréhension qui a bougé, une sonde produit un
-relevé. Faire passer une sonde par le circuit des fils fabrique des handovers de
-données brutes sans contexte, qui remontent ensuite gonfler le codex de l'espace.
-Constat qui a produit la règle : le codex de l'espace NDO App était monté à
-27 402 caractères pour une cible de 10 000, nourri chaque matin par un brief
-automatique. Le petit modèle chargé de régénérer le codex n'a alors qu'une suite
-de chiffres sans récit, et le résultat est illisible.
-
-**Corollaire : toute tâche planifiée doit déclarer son espace.** Sans espace,
-son atome n'a pas de destination et finit dans « Non affecté ». L'espace se
-décide à la création de la tâche et se met en clair dans son prompt, avec son
-UUID.
-
-**Plafond à rappeler dans chaque prompt de tâche.** Un atome est tronqué **en
-silence** à 1500 caractères (`ATOME_TAILLE_MAX`), sans message d'erreur : la
-conclusion d'une sonde bavarde disparaît sans prévenir. Consigne à donner :
-l'essentiel en premier (symptôme, chiffre, écart), le détail ensuite, viser
-1400 caractères.
-
-**L'exception qui confirme la règle** : le brief général quotidien
-(`morning-brief`) n'est pas une sonde mais une synthèse transversale de la
-journée. Lui écrit un handover, dans l'espace **Mémoire générale**. Condition
-impérative : il lit les handovers pour se fabriquer, donc il doit **exclure les
-siens** de sa matière d'entrée, sinon il se nourrit de sa propre sortie.
-
-### Parc des crons serveur (stack Supabase auto-hébergée)
-
-| # | Cron | Fréquence (UTC) | Rôle |
-|---|------|-----------------|------|
-| 1 | extract-from-exchanges | toutes les 15 min | extraction d'atomes depuis les échanges |
-| 2 | auto-session-end | toutes les 15 min | clôture des fils inactifs |
-| 3 | mycelora-health-cron | chaque heure à :04 | contrôle de santé |
-| 4 | mycelora-weekly-insights | lundi 06h10 | cross-insights hebdomadaires |
-| 5 | mycelora-garbage-collect | quotidien 02h07 | ménage mémoire |
-| 6 | mycelora-collect-google | toutes les 2h | collecte mail/agenda (Google Workspace + IMAP), indépendante du Mac |
-| 7 | mycelora-process-events | toutes les 2h à :20 | traitement des événements collectés |
-| 8 | mycelora-morning-brief-hourly | chaque heure à :02 | brief général, écrit par glm-5.2, rangé dans `briefs` et envoyé par mail |
-| 9 | mycelora-export-queue | toutes les 2 min | file d'export mémoire |
-| 10 | mycelora-retention-purge | quotidien 03h37 | purge de rétention |
-| 11 | mycelora-retention-inactive-accounts | dimanche 04h15 | comptes inactifs |
-| 12 | mycelora-juge-injections | chaque heure à :21 | juge de l'utilité des injections |
-| 13 | mycelora-codex-worker | toutes les 5 min | dépilement de `codex_regen_queue` |
-
-Note : au premier run d'une tâche Cowork, l'utilisateur doit approuver les outils MCP une fois ("Toujours autorisé").
-
-### Journal des briefs : la table `briefs`
-
-Chaque brief général produit est conservé dans la table `briefs` (97 briefs au
-01/09/2026, le plus ancien du 04/06/2026). C'est le **seul artefact daté** de la
-mémoire : le codex répond à « où en est ce projet », le journal des briefs répond
-à « que s'est-il passé le 12 août ».
-
-- **Consultation à la demande uniquement.** Quand une question porte sur une
-  date, une période, ou sur ce qui s'est passé dans un autre projet à un moment
-  donné, ce journal est la bonne source.
-- **Jamais injecté dans le recall.** Les briefs datés ont été identifiés comme le
-  premier gisement de bruit de l'injection automatique (13 injections jugées
-  bruit pour 0 utile). Ils se consultent, ils ne se servent pas tout seuls.
-
-### Collecte mail/agenda : côté serveur uniquement
-La collecte mail/agenda tourne côté serveur Mycelora (cron
-`mycelora-collect-google`, toutes les 2h, qui traite TOUTES les sources
-actives malgré son nom) : **fonctionne sur n'importe quelle plateforme,
-ordinateur éteint ou non, Cowork ouvert ou non.** Brancher une source :
-dashboard, page Connexions, ou `mycelora_create_source` /
-`mycelora_google_consent_url` (ONBOARDING.md, étape 4).
-Détail architecture : REFERENCE.md § Collecte cloud mail/agenda.
-
-L'ancienne tâche planifiée macOS de collecte par Mail.app et Calendar.app
-(`mnemos-sync-mail-agenda`) est abandonnée : ne jamais la créer. Si un
-utilisateur l'a encore, lui proposer de la mettre en pause (geste manuel
-dans la liste des tâches planifiées).
+Collection runs on the Mycelora side, whether or not the user's computer is on. Connect a source from the dashboard (Connections page) or with `mycelora_create_source` / `mycelora_google_consent_url` (ONBOARDING.md, step 4). Details: REFERENCE.md § Cloud mail/calendar collection. Never create a local scheduled task for it.
 
 ---
 
-## TON
+## SCHEDULED TASKS
 
-Mycelora est le nom de l'app, l'utiliser librement.
-Dire "je me souviens que..." ou "dans le dossier X..." plutôt que détailler la mécanique.
-Ne pas mentionner les canaux techniques, outils MCP ou fichiers mémoire sauf demande explicite ou debug.
+A scheduled task that touches Mycelora (a check, a digest, a watch) is a probe, not a thread: it never calls `mycelora_session_start` or `mycelora_session_end`, and writes no handover and no codex. Its only write is at most one atom, through `mycelora_create_atom_manual`, in a workspace named in the task's prompt, and only when there is something worth keeping. Put the essential first (symptom, figure, gap): atoms are cut at 1,500 characters.
+
+## TONE
+
+Mycelora is the app's name, use it freely. Say "I remember that..." or "in the X folder..." rather than detailing the mechanics. Do not mention technical channels, MCP tools or memory files unless asked or for debugging.

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Hook PostToolUse : jalon d'impact (S-REFLEXES-2). Apres un geste
+# Hook PostToolUse : jalon d'impact. Apres un geste
 # structurant EXECUTE (Bash DDL/UPDATE-DELETE/infra deja repere par
 # mycelora-pretooluse.sh, OU edition d'un fichier sensible via Edit/Write/
 # MultiEdit — INFORMATION seule, jamais de refus a ce stade), pose un
-# additionalContext "JALON D'IMPACT : ..." et le marqueur .carte-perimee.
+# additionalContext "IMPACT CHECKPOINT: ..." et le marqueur .carte-perimee.
 # Sortie stdout = JSON de decision UNIQUEMENT quand il y a un jalon (rien du
 # tout sinon). exit 0 dans tous les cas.
 
@@ -12,10 +12,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/mycelora-common.sh"
 
-# Jeton hook : variable CLAUDE_PLUGIN_OPTION_HOOK_KEY (userConfig hook_key, canal
-# marketplace, saisie a l'activation et rangee dans le trousseau) si elle est
-# definie, sinon la valeur substituee dans le zip par build-plugin-zip.sh.
-MYCELORA_HOOK_TOKEN="${CLAUDE_PLUGIN_OPTION_HOOK_KEY:-__MYCELORA_HOOK_KEY__}"
+# Session token: read only from the thread cache built by session_start
+# (never from the environment or a plugin option).
+MYCELORA_HOOK_TOKEN=""
 
 CLEANUP_FILES=()
 cleanup_and_exit() {
@@ -34,8 +33,8 @@ cat > "$STDIN_FILE"
 # ----------------------------------------------------------------------------
 # CHEMIN RAPIDE (bash pur, AUCUN python demarre) : seuls Bash (niveau 1,
 # gestes deja repérés par mycelora-pretooluse.sh) et Edit/Write/MultiEdit
-# (niveau 2, fichiers sensibles) portent une regle en v1. Aucun outil MCP
-# n'a de regle de jalon definie (brief section 4.2) : tout le reste sort
+# (level 2, sensitive files) carry a rule in v1. No MCP tool has a
+# milestone rule defined: everything else exits here.
 # ici. mycelora_log est du bash pur (date/wc/printf, aucun python).
 # ----------------------------------------------------------------------------
 TOOL_NAME="$(grep -o '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$STDIN_FILE" | head -n 1 | sed -E 's/.*"tool_name"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/')"
@@ -87,10 +86,9 @@ CWD="$(python3 -c "import json; print(json.load(open('$META_FILE')).get('cwd',''
 TRANSCRIPT_PATH="$(python3 -c "import json; print(json.load(open('$META_FILE')).get('transcript_path',''))" 2>/dev/null || echo '')"
 FILE_PATH="$(python3 -c "import json; print(json.load(open('$META_FILE')).get('file_path',''))" 2>/dev/null || echo '')"
 
-# S-REFLEXES-6 : jeton de session hook. Priorite 1 (zip substitue) deja geree
-# par l'assignation de MYCELORA_HOOK_TOKEN ci-dessus ; sinon on tente le cache
-# v3 du fil. Sans jeton, le hook est inerte (premier message d'un fil, avant
-# l'ouverture : cas normal, jamais une erreur visible).
+# Hook session token, read from the cache. Without a token the hook is
+# inert (first message of a thread, before the opening: normal case, never
+# a visible error).
 mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
 if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
   mycelora_log "posttooluse" "auth" 0 "sans-jeton" 0
@@ -139,11 +137,11 @@ except Exception:
   CLEANUP_FILES+=("$SERVER_RESULT_FILE")
 
   if [ "$GESTE" = "infra" ]; then
-    ACTION="exécuté (geste d'infrastructure)"
+    ACTION="executed (infrastructure action)"
     printf '{"resultats": {}}' > "$LOCAL_RESULT_FILE"
     printf '{}' > "$SERVER_RESULT_FILE"
   else
-    ACTION="modifié"
+    ACTION="modified"
     mycelora_reflexe_grep_local "$REPO_ROOT" "$OBJETS_JSON" "$LOCAL_RESULT_FILE"
 
     NON_RESOLUS_FILE="$(mktemp /tmp/mycelora-hook-post-nonresolus.XXXXXX)"
@@ -171,10 +169,10 @@ except Exception:
       if [ -n "${MYCELORA_REFLEXE_LOOKUP_EVT:-}" ]; then
         mycelora_reflexe_log "$SESSION_ID" "${MYCELORA_REFLEXE_LOOKUP_EVT}" "$TOOL_NAME" "$OBJETS_JSON" "$EMPREINTE" "0"
       fi
-      # S-REFLEXES-6 : 401 typé sur ce lookup -> log dédié best-effort, ne
-      # change RIEN au jalon qui se construit normalement ensuite. Verifie
-      # LOCALEMENT (pas dans mycelora_reflexe_lookup_serveur, partagee avec
-      # mycelora-pretooluse.sh dont le comportement de refus est inchangé).
+      # Typed 401 on this lookup -> dedicated best-effort log, changes
+      # NOTHING about the milestone that is built normally afterwards.
+      # Checked LOCALLY (not in mycelora_reflexe_lookup_serveur, shared with
+      # mycelora-pretooluse.sh whose refusal behavior is unchanged).
       if [ "${MYCELORA_LAST_HTTP_CODE:-000}" = "401" ] && grep -q '"jeton_session_expire"' "$LOOKUP_CURL_RESP" 2>/dev/null; then
         AUTH_DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
         mycelora_log "posttooluse" "auth" "$AUTH_DURATION_MS" "jeton-expire" 0
@@ -211,8 +209,8 @@ else
       LOOKUP_CURL_RESP="$(mktemp /tmp/mycelora-hook-post-lookup-resp.XXXXXX)"
       CLEANUP_FILES+=("$LOOKUP_CURL_RESP")
       mycelora_reflexe_lookup_serveur "$SPACE_ID" "$OBJETS_JSON" "$SERVER_RESULT_FILE" "$LOOKUP_CFGFILE" "$LOOKUP_CURL_RESP"
-      # S-REFLEXES-6 : meme verification locale que le premier site d'appel
-      # (voir plus haut), best-effort, ne change rien au jalon.
+      # Same local check as the first call site (see above), best-effort,
+      # changes nothing about the milestone.
       if [ "${MYCELORA_LAST_HTTP_CODE:-000}" = "401" ] && grep -q '"jeton_session_expire"' "$LOOKUP_CURL_RESP" 2>/dev/null; then
         AUTH_DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
         mycelora_log "posttooluse" "auth" "$AUTH_DURATION_MS" "jeton-expire" 0
@@ -223,7 +221,7 @@ else
   else
     OBJETS_JSON="$(python3 -c "import json,sys; print(json.dumps([sys.argv[1]]))" "$FILE_PATH")"
   fi
-  ACTION="édité (fichier sensible : $CATEGORIE)"
+  ACTION="edited (sensitive file: $CATEGORIE)"
   EMPREINTE="$(printf '%s' "$FILE_PATH" | shasum -a 1 2>/dev/null | awk '{print $1}')"
 fi
 
