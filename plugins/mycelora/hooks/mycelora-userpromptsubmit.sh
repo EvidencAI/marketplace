@@ -36,9 +36,20 @@ CLEANUP_FILES+=("$PROMPT_FILE")
 # PROMPT_FILE + decision de filtrage (3 lignes sur stdout : session_id,
 # transcript_path, decision "OK" ou "FILTERED").
 EXTRACT_OUT="$(python3 - "$STDIN_FILE" "$PROMPT_FILE" <<'PYEOF'
-import json, sys
+import json, re, sys
 
 stdin_path, prompt_path = sys.argv[1], sys.argv[2]
+
+def retirer_rappels_tete(texte):
+    # Retire chaque bloc system-reminder place en tete du texte. Un bloc
+    # non ferme reste en place (il sera filtre plus loin).
+    while True:
+        m = re.match(r"\A\s*<system-reminder>.*?</system-reminder>", texte, re.S)
+        if not m:
+            break
+        texte = texte[m.end():]
+    return texte.lstrip()
+
 try:
     with open(stdin_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -51,6 +62,7 @@ except Exception:
 prompt = data.get("prompt", "")
 if not isinstance(prompt, str):
     prompt = ""
+prompt = retirer_rappels_tete(prompt)
 session_id = data.get("session_id", "") or ""
 transcript_path = data.get("transcript_path", "") or ""
 
