@@ -9,10 +9,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/mycelora-common.sh"
 
-# Jeton hook : variable CLAUDE_PLUGIN_OPTION_HOOK_KEY (userConfig hook_key, canal
-# marketplace, saisie a l'activation et rangee dans le trousseau) si elle est
-# definie, sinon la valeur substituee dans le zip par build-plugin-zip.sh.
-MYCELORA_HOOK_TOKEN="${CLAUDE_PLUGIN_OPTION_HOOK_KEY:-__MYCELORA_HOOK_KEY__}"
+# Session token: read only from the thread cache built by session_start
+# (never from the environment or a plugin option).
+MYCELORA_HOOK_TOKEN=""
 
 CLEANUP_FILES=()
 cleanup_and_exit() {
@@ -61,35 +60,32 @@ try:
 except Exception:
     pass
 
-# "Rappel interne :" est un prefixe conventionnel de nos automatismes
-# internes (wakeups send_later) : verifie en reel le 14/07, ces flux ne
-# portent NULLE PART le prefixe "[SYSTEM NOTIFICATION - NOT USER INPUT]" au
-# niveau des hooks (uniquement au niveau conversationnel du modele). Limite
-# assumee : un wakeup au libelle libre (pas prefixe "Rappel interne :")
-# passera quand meme ce filtre.
+# "Rappel interne :" is a conventional prefix of scheduled wakeup messages.
+# Those flows carry no "[SYSTEM NOTIFICATION - NOT USER INPUT]" prefix at
+# hook level (only at the conversation level of the model). Known limit: a
+# wakeup with a free-form label (no "Rappel interne :" prefix) still passes
+# this filter.
 # --------------------------------------------------------------------------
-# FILTRE DU BRUIT (27/07/2026, fil 20). Deux ajouts, motives par un retour
-# d'usage mesure sur le fil 19 (QUALITE-DES-ATOMES.md) : sur environ soixante
-# injections, trois seulement ont change une decision, et une large part des
-# messages declencheurs etaient des validations de trois mots.
+# NOISE FILTER. Two additions, motivated by usage measurements: out of about
+# sixty injections, only three changed a decision, and a large share of the
+# triggering messages were three-word validations.
 #
-# 1. RELANCES MACHINE. Le filtre existant ne couvrait que trois prefixes de
-#    relance. "Continue from where you left off." (32 caracteres, aucun
-#    marqueur) passait : PREUVE REELLE, quatre injections completes sont
-#    parties sur ce message pendant le fil 20 lui-meme, alors qu'il n'est pas
-#    de l'utilisateur.
+# 1. MACHINE RESTARTS. The previous filter covered only three restart
+#    prefixes. "Continue from where you left off." (32 characters, no
+#    marker) got through: four full injections were sent on that message
+#    although it does not come from the user.
 #
-# 2. VALIDATIONS SEULES. Un message compose UNIQUEMENT de marqueurs de
-#    validation ("ok go", "c'est fait", "parfait merci") ne porte aucun signal
-#    semantique : le recall y repond en servant des atomes lies au hasard des
-#    mots "ok", "go", "fait". Le contexte du tour precedent suffit.
+# 2. VALIDATIONS ONLY. A message made ONLY of validation markers
+#    ("ok go", "c'est fait", "parfait merci") carries no semantic signal:
+#    recall answers by serving atoms linked at random to the words "ok",
+#    "go", "fait". The context of the previous turn is enough.
 #
-# LA CONJONCTION EST ESSENTIELLE : on ne filtre PAS sur la brievete seule.
-# "et le DNS ?" est court mais porte une vraie question, il doit passer. Seul
-# un message dont TOUS les mots sont des marqueurs est ecarte.
+# THE CONJUNCTION IS ESSENTIAL: we do NOT filter on brevity alone.
+# "et le DNS ?" is short but carries a real question, it must pass. Only a
+# message whose words are ALL markers is dropped.
 #
-# CE FILTRE NE TOUCHE PAS LA COLLECTE : elle est faite par le hook Stop, qui
-# est un fichier distinct. On perd une injection, jamais un souvenir.
+# THIS FILTER DOES NOT AFFECT COLLECTION: collection is done by the Stop
+# hook, a separate file. An injection is lost, never a memory.
 # --------------------------------------------------------------------------
 
 RELANCES_MACHINE = (
@@ -153,10 +149,9 @@ SESSION_ID="$(printf '%s\n' "$EXTRACT_OUT" | sed -n '1p')"
 TRANSCRIPT_PATH="$(printf '%s\n' "$EXTRACT_OUT" | sed -n '2p')"
 DECISION="$(printf '%s\n' "$EXTRACT_OUT" | sed -n '3p')"
 
-# S-REFLEXES-6 : jeton de session hook. Priorite 1 (zip substitue) deja geree
-# par l'assignation de MYCELORA_HOOK_TOKEN ci-dessus ; sinon on tente le cache
-# v3 du fil. Sans jeton, le hook est inerte (premier message d'un fil, avant
-# l'ouverture : cas normal, jamais une erreur visible).
+# Hook session token, read from the cache. Without a token the hook is
+# inert (first message of a thread, before the opening: normal case, never
+# a visible error).
 mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
 if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
   mycelora_log "userpromptsubmit" "auth" 0 "sans-jeton" 0
@@ -190,7 +185,7 @@ except Exception:
 # utilise par ailleurs pour le filtrage.
 query = prompt[:2000]
 
-# Pas de userId : le serveur impose l'identite resolue du jeton (22/09/2026).
+# No userId: the server enforces the identity resolved from the token.
 arguments = {"query": query}
 if space_id:
     arguments["spaceId"] = space_id
@@ -229,12 +224,12 @@ fi
 case "$HTTP_CODE" in
   2??) : ;;
   401)
-    # S-REFLEXES-6 : 401 typé (jeton de session hook expiré ou révoqué) ->
-    # jamais silencieux, seul hook qui imprime du texte brut sur stdout.
-    # Un 401 générique (clé inconnue) reste dans le comportement de "*)".
+    # Typed 401 (hook session token expired or revoked): never silent, this
+    # is the only hook that prints plain text on stdout. A generic 401
+    # (unknown key) keeps the behavior of the "*)" branch.
     if grep -q '"jeton_session_expire"' "$RESP_FILE" 2>/dev/null; then
       mycelora_log "userpromptsubmit" "auth" "$DURATION_MS" "jeton-expire" "$RESP_SIZE"
-      printf '%s' "Mycelora : jeton de session expiré, relancez l'ouverture du fil (mycelora_session_start) pour rétablir la mémoire."
+      printf '%s' "Mycelora: session token expired, reopen the thread (mycelora_session_start) to restore memory."
       exit 0
     fi
     mycelora_log "userpromptsubmit" "recall" "$DURATION_MS" "error-http-$HTTP_CODE" "$RESP_SIZE"
@@ -277,12 +272,12 @@ try:
 except Exception:
     text = ""
 
-# S-ACK-1 (29/08/2026) : le serveur rend le lot du recall dans
-# result._meta.lot_id. Protocole de sortie sur le chemin ok : ligne 1 le
-# statut, ligne 2 le lot ("-" si absent), le bloc a partir de la ligne 3.
-# Les autres statuts gardent leur ligne unique. ATTENTION bash 3.2 : ce
-# bloc python vit dans une substitution $( ) ; PAS D APOSTROPHE dans les
-# commentaires, le vieux parseur la compte comme une quote ouvrante.
+# The server returns the recall batch in result._meta.lot_id. Output
+# protocol on the ok path: line 1 is the status, line 2 the batch ("-" if
+# absent), the block starts at line 3. Other statuses keep their single
+# line. WARNING bash 3.2: this python block lives inside a $( )
+# substitution; NO APOSTROPHE in comments, the old parser counts it as an
+# opening quote.
 meta = result.get("_meta")
 lot_id = ""
 if isinstance(meta, dict) and isinstance(meta.get("lot_id"), str):
@@ -303,11 +298,11 @@ TEXT="$(printf '%s\n' "$STATUS_AND_TEXT" | tail -n +3)"
 
 case "$STATUS" in
   ok)
-    # S-ACK-1 : le bloc part reellement sur stdout, donc le lot est a
-    # accuser en fin de tour. APPEND (jamais overwrite) : un message envoye
-    # en cours de tour declenche un second UPS avant le Stop, les deux lots
-    # doivent etre confirmes. Le fichier est lu puis supprime par
-    # mycelora-stop.sh apres un log_exchange en 2xx.
+    # The block is really written to stdout, so its batch must be
+    # acknowledged at the end of the turn. APPEND (never overwrite): a message
+    # sent mid-turn triggers a second UserPromptSubmit before Stop, and both
+    # batches must be confirmed. The file is read then deleted by
+    # mycelora-stop.sh after a successful log_exchange.
     case "$LOT_ID" in
       [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-*)
         # Nom de fichier assaini : le session_id vient du stdin du hook.

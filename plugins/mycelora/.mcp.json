@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mycelora": {
+      "type": "http",
+      "url": "https://api.mycelora.ai/functions/v1/mycelora-mcp"
+    }
+  }
+}

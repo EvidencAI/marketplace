@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hook PreToolUse : reflexe d'impact (S-REFLEXES-2). Avant un geste
+# Hook PreToolUse : reflexe d'impact. Avant un geste
 # structurant (DDL, UPDATE/DELETE de masse, operation prod), REFUSE une fois
 # avec un rapport de qui lit/ecrit l'objet touche, puis laisse passer les
 # gestes suivants sur le meme objet dans le meme fil. Sortie stdout = JSON de
@@ -11,10 +11,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/mycelora-common.sh"
 
-# Jeton hook : variable CLAUDE_PLUGIN_OPTION_HOOK_KEY (userConfig hook_key, canal
-# marketplace, saisie a l'activation et rangee dans le trousseau) si elle est
-# definie, sinon la valeur substituee dans le zip par build-plugin-zip.sh.
-MYCELORA_HOOK_TOKEN="${CLAUDE_PLUGIN_OPTION_HOOK_KEY:-__MYCELORA_HOOK_KEY__}"
+# Session token: read only from the thread cache built by session_start
+# (never from the environment or a plugin option).
+MYCELORA_HOOK_TOKEN=""
 
 CLEANUP_FILES=()
 cleanup_and_exit() {
@@ -32,8 +31,8 @@ cat > "$STDIN_FILE"
 
 # ----------------------------------------------------------------------------
 # CHEMIN RAPIDE (bash pur, AUCUN python demarre) : seul l'outil Bash peut
-# declencher un REFUS en v1 (le brief section 4.2 ne definit aucune regle de
-# refus sur le contenu d'un outil MCP, ni sur Edit/Write/MultiEdit qui
+# declencher un REFUS en v1 (aucune regle de
+# refus n'est definie sur le contenu d'un outil MCP, ni sur Edit/Write/MultiEdit qui
 # restent de niveau INFORMATION, PostToolUse seul). Extraction NAIVE
 # (grep/sed) du seul champ tool_name : suffisante ici, robuste tant que le
 # nom d'outil ne porte pas de guillemet echappe (jamais le cas dans le
@@ -92,20 +91,16 @@ FICHIER_LU="$(printf '%s\n' "$FIELDS" | sed -n '8p')"
 EMPREINTE="$(printf '%s\n' "$FIELDS" | sed -n '9p')"
 OBJETS_JSON="$(printf '%s\n' "$FIELDS" | sed -n '10p')"
 
-# S-REFLEXES-6 : jeton de session hook. Priorite 1 (zip substitue) deja geree
-# par l'assignation de MYCELORA_HOOK_TOKEN ci-dessus ; sinon on tente le cache
-# v3 du fil. Sans jeton, le hook est inerte (premier message d'un fil, avant
-# l'ouverture : cas normal, jamais une erreur visible — conséquence assumée :
-# aucun refus de geste structurant tant que le fil n'a pas ouvert, voir
-# .claude/v2-decisions/S-REFLEXES-6.md).
+# Hook session token, read from the cache. Without a token the hook is
+# inert (first message of a thread, before the opening: normal case, never
+# a visible error; accepted consequence: no refusal of a structuring
+# gesture until the thread has opened).
 DURATION_MS="$(python3 -c "import time; print(int(time.time()*1000) - $START_MS)")"
 
-# 0.11.3 : la detection se juge AVANT le jeton. Quand ok=false, le python
-# ci-dessus rend un session_id vide et la resolution du jeton echouait
-# forcement : le journal ecrivait "auth sans-jeton" pour un simple no-match,
-# ce qui masquait le vrai cas sans jeton (observe le 02/09 sur un fil
-# marketplace ouvert). Un no-match ne coute aucun appel et n'a pas besoin
-# de jeton.
+# Detection is judged BEFORE the token. When ok=false, the python above
+# returns an empty session_id and token resolution necessarily failed: the
+# log wrote "auth sans-jeton" for a simple no-match, which hid the real
+# no-token case. A no-match costs no call and needs no token.
 if [ "$OK" != "1" ]; then
   mycelora_log "pretooluse" "detect" "$DURATION_MS" "no-match" 0
   exit 0
@@ -178,17 +173,17 @@ if [ "$GESTE" = "infra" ]; then
 import sys
 sous_type, out_path = sys.argv[1], sys.argv[2]
 LIBELLES = {
-    "ssh_psql": "accès direct à la base de prod par SSH + docker exec + psql (hors migration versionnée)",
-    "rsync": "rsync vers volumes/functions (déploiement hors pipeline standard)",
-    "docker_restart": "redémarrage direct d'un conteneur docker en prod",
-    "coolify_patch": "modification directe d'une variable d'environnement Coolify (PATCH .../envs)",
+    "ssh_psql": "direct access to the production database via SSH + docker exec + psql (outside a versioned migration)",
+    "rsync": "rsync to volumes/functions (deployment outside the standard pipeline)",
+    "docker_restart": "direct restart of a docker container in production",
+    "coolify_patch": "direct change of a Coolify environment variable (PATCH .../envs)",
 }
-libelle = LIBELLES.get(sous_type, "geste d'infrastructure sensible")
+libelle = LIBELLES.get(sous_type, "sensitive infrastructure action")
 lignes = [
-    "RÉFLEXE D'IMPACT (refus unique, rejouez la commande telle quelle si les incidences sont traitées).",
-    f"Objet : {libelle}.",
-    "Portée : opération PROD directe, hors outillage habituel. Vérifiez vous-même l'impact avant de "
-    "rejouer (qui d'autre dépend de cet état, existe-t-il une procédure versionnée à la place).",
+    "IMPACT REFLEX (single refusal: rerun the command unchanged once the impacts are dealt with).",
+    f"Object: {libelle}.",
+    "Scope: direct PROD operation, outside the usual tooling. Check the impact for yourself before "
+    "rerunning (who else depends on this state, is there a versioned procedure to use instead).",
 ]
 with open(out_path, "w", encoding="utf-8") as f:
     f.write("\n".join(lignes))

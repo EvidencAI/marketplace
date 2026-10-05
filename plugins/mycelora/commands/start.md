@@ -1,97 +1,72 @@
 ---
 description: Start Mycelora — persistent memory for Claude
-argument-hint: [espace] ou "help"
+argument-hint: [space] or "help"
 ---
 
-# Commande /mycelora:start
+# Command /mycelora:start
 
-Initialise Mycelora, la memoire persistante de Claude.
+Initializes Mycelora, Claude's persistent memory.
 
-## Flux de decision
+## Decision flow
 
-### 1. Verifier la connexion (TOUJOURS en premier)
+### 1. Check the connection (always first)
 
-Les outils `mycelora_*` viennent du CONNECTEUR Mycelora (OAuth ou cle API),
-jamais du plugin : leur prefixe varie selon le nom du connecteur
-(`mcp__Mycelora__`, `mcp__Mycelora_OAuth__`...). Les charger si besoin
-(recherche d'outils), puis appeler `mycelora_list_spaces()` sans arguments.
-Il n'existe PAS d'outil `mycelora_whoami`, `mycelora_login` ni
-`mycelora_signup` (retires ; ne jamais les appeler).
+The `mycelora_*` tools come from the Mycelora connector (OAuth or API key), not from the plugin. Their prefix varies with the connector name (`mcp__Mycelora__`, `mcp__Mycelora_OAuth__`...). Load them if needed (tool search), then call `mycelora_list_spaces()` with no arguments. There is no `mycelora_whoami`, `mycelora_login` or `mycelora_signup` tool: never call them.
 
-**Si la liste des espaces revient :** l'utilisateur est connecte. Passer a
-l'etape 2. Ne jamais passer de `userId` : le serveur l'impose d'apres la
-connexion et ignore toute valeur recue.
+**If the list of spaces comes back:** the user is connected. Go to step 2. Never pass a `userId`: the server resolves the identity from the connection and ignores any value sent.
 
-**Si aucun outil `mycelora_*` n'est disponible, ou si l'appel echoue
-(401, erreur d'authentification) :** afficher :
+**If no `mycelora_*` tool is available, or the call fails (401, authentication error):** display:
 
 ```
-Mycelora — Memoire intelligente pour Claude
+Mycelora — Smart memory for Claude
 
-Mycelora donne a Claude une memoire persistante entre vos conversations :
-decisions, apprentissages, contacts, faits, reflexions...
+Mycelora gives Claude a persistent memory across your conversations:
+decisions, learnings, contacts, facts, reflections...
 
-Le connecteur Mycelora n'est pas encore branche.
-Ajoutez-le dans Parametres, Connecteurs (serveur
-https://api.mycelora.ai/functions/v1/mycelora-mcp), connectez-vous,
-puis relancez /mycelora:start. Pas encore de compte : creez-le sur
+The Mycelora connector is not plugged in yet.
+Add it in Settings, Connectors (server
+https://api.mycelora.ai/functions/v1/mycelora-mcp), sign in,
+then run /mycelora:start again. No account yet: create one at
 https://mycelora.ai
 
 Dashboard : https://mycelora.ai
 ```
 
-- STOP. Ne pas aller plus loin.
+Then stop.
 
-### 2. Utilisateur connecte — traiter les arguments
+### 2. User connected — handle the arguments
 
-Le brief rendu par `mycelora_session_start` peut porter en PREMIERE ligne
-(S-JETON-2, 12/09/2026 ; en derniere ligne avant) `[jeton-hook-session ...]` : ne jamais l'afficher ni la recopier, c'est un
-jeton d'authentification pour les hooks, jamais un element a montrer a
-l'utilisateur ou a citer dans une reponse.
+The brief returned by `mycelora_session_start` may carry a line `[jeton-hook-session ...]` on its first line. It is a technical token read by the local hooks: never display it, copy it or quote it.
 
-Le `sessionId` est choisi par toi (forme `surface-AAAA-MM-JJ-sujet`) ; le
-serveur peut le rendre horodate : reprendre alors CELUI qu'il rend dans tous
-les appels suivants, jusqu'a la cloture.
+Choose a `sessionId` of the form `surface-YYYY-MM-DD-topic`. The server may timestamp it: in that case use the one it returns in all later calls, until closing.
 
-Si `$ARGUMENTS` est vide ou absent :
-- Executer `mycelora_session_start(sessionId)`, sans `spaceId`
-- Afficher le bloc d'accueil avec espaces, commandes, lien Dashboard.
-- Demander "Sur quel espace on travaille ?"
+If `$ARGUMENTS` is empty or absent:
+- Run `mycelora_session_start(sessionId)` without `spaceId`.
+- Display the welcome block with spaces, commands and Dashboard link.
+- Ask "Which space are we working on?"
 
-Si `$ARGUMENTS` = "help" :
-- Lire le fichier `${CLAUDE_PLUGIN_ROOT}/skills/mycelora/SKILL.md`
-- Afficher la table "Commandes en langage naturel" reformatee en blocs thematiques.
+If `$ARGUMENTS` = "help":
+- Read `${CLAUDE_PLUGIN_ROOT}/skills/mycelora/SKILL.md`.
+- Display the "Natural-language commands" table reformatted into thematic blocks.
 
-Si `$ARGUMENTS` = un nom d'espace (ex: "Developpement Mycelora", "CodirIA") :
-- Retrouver l'UUID de l'espace dans la liste de l'etape 1 (nom exact, sinon
-  le plus proche ; en cas de doute, demander a l'utilisateur, ne jamais deviner)
-- Executer `mycelora_session_start(sessionId, spaceId: <UUID>)`
-- Charger read_memory(spaceId, type:"all")
-- Afficher le contexte et demander confirmation
+If `$ARGUMENTS` = a space name (e.g. "Product launch", "Marketing"):
+- Find the space's UUID in the list from step 1 (exact name, otherwise the closest; when in doubt, ask the user, never guess).
+- Run `mycelora_session_start(sessionId, spaceId: <UUID>)`.
+- Load `read_memory(spaceId, type:"all")`.
+- Display the context and ask for confirmation.
 
-Si `$ARGUMENTS` = "out" ou "fin" :
-- Executer le protocole de cloture du skill Mycelora (§ PROTOCOLE DE CLOTURE),
-  dans cet ordre :
-  1. `mycelora_session_end_atoms` avec le sessionId rendu a l'ouverture ;
-  2. `mycelora_session_end` avec `spaceId`, workSummary, decisions, pendingTasks,
-     les cinq listes structurees, ET le codex de l'espace MIS A JOUR dans le
-     champ `codex` (ancien format : codex servi a l'ouverture + delta du fil ;
-     codex MAP : champs sujets et enBref a la place de codex, seuls les sujets
-     touches, chacun relu avant par read_memory(sujets), voir skill § cloture bloc 2a).
-- Le serveur ne regenere JAMAIS le codex d'un fil pilote : sans codex fourni,
-  l'ancien est conserve tel quel. Verifier dans la reponse que le bloc `codex`
-  porte `accepte: true` ; sinon corriger d'apres ses raisons et resoumettre par
-  `mycelora_write_memory(type:"codex")`, sans relancer session_end.
-  Exception : si session_end LEVE une erreur "Sujets refuses" ou "codex et
-  sujets/enBref sont exclusifs", rien n'a ete ecrit (handover compris) :
-  corriger les sujets et rappeler session_end.
+If `$ARGUMENTS` = "out" or "fin":
+- Follow the skill's closing protocol (§ CLOSING PROTOCOL), in this order:
+  1. `mycelora_session_end_atoms` with the sessionId returned at opening;
+  2. `mycelora_session_end` with `spaceId`, workSummary, decisions, pendingTasks, the five structured lists, and the space's updated codex in the `codex` field (old form: the codex served at opening plus the thread's delta; MAP form: fields `sujets` and `enBref` instead of `codex`, only the topics touched, each reread beforehand with `read_memory(sujets)`; see the skill's Codex section).
+- Without a supplied codex, the server keeps the old one as is. Check in the response that the `codex` block carries `accepte: true`; otherwise fix it according to its reasons and resubmit through `mycelora_write_memory(type:"codex")`, without re-running `session_end`. Exception: if `session_end` raises "Sujets refusés" or "codex et sujets/enBref sont exclusifs", nothing was written (handover included): fix the `sujets` and call `session_end` again.
 
-Si `$ARGUMENTS` = "stats" :
-- Appeler mycelora_get_stats et afficher les compteurs.
+If `$ARGUMENTS` = "stats":
+- Call `mycelora_get_stats` and display the counters.
 
-### 3. Toujours afficher le lien Dashboard
+### 3. Always display the Dashboard link
 
-Chaque reponse de /mycelora:start DOIT inclure en fin de message :
+Every /mycelora:start response must end with:
 ```
 Dashboard : https://mycelora.ai
 ```
