@@ -103,9 +103,20 @@ fi
 find_last_user() {
   local transcript="$1" out_file="$2" prompt_id="$3"
   python3 - "$transcript" "$out_file" "$prompt_id" <<'PYEOF'
-import json, sys
+import json, re, sys
 
 transcript_path, out_path, prompt_id = sys.argv[1], sys.argv[2], sys.argv[3]
+
+def retirer_rappels_tete(texte):
+    # Retire chaque bloc system-reminder place en tete du texte. Un bloc
+    # non ferme reste en place (il sera filtre plus loin).
+    while True:
+        m = re.match(r"\A\s*<system-reminder>.*?</system-reminder>", texte, re.S)
+        if not m:
+            break
+        texte = texte[m.end():]
+    return texte.lstrip()
+
 candidate_a = None
 candidate_b = None
 try:
@@ -123,11 +134,31 @@ try:
             message = entry.get("message")
             if not isinstance(message, dict):
                 continue
+            if entry.get("isMeta") is True:
+                continue
             content = message.get("content")
-            if not isinstance(content, str):
+            if isinstance(content, list):
+                # Forme claude.ai : liste de parts. Une part tool_result
+                # exclut l entree ; sinon on joint les parts texte.
+                if any(isinstance(p, dict) and p.get("type") == "tool_result" for p in content):
+                    continue
+                content = "\n".join(
+                    p.get("text", "")
+                    for p in content
+                    if isinstance(p, dict) and p.get("type") == "text" and isinstance(p.get("text"), str)
+                )
+            elif not isinstance(content, str):
+                continue
+            content = retirer_rappels_tete(content)
+            meme_tour = bool(prompt_id) and entry.get("promptId") == prompt_id
+            if not content.strip():
+                # Entree purement systeme : jamais candidate au repli. Pour le
+                # tour courant, elle donne un message vide si rien d humain.
+                if meme_tour and candidate_a is None:
+                    candidate_a = ""
                 continue
             candidate_b = content
-            if prompt_id and entry.get("promptId") == prompt_id:
+            if meme_tour:
                 candidate_a = content
 except Exception:
     pass
@@ -139,7 +170,7 @@ if found is None:
 else:
     try:
         with open(out_path, "w", encoding="utf-8") as f:
-            f.write(found)
+            f.write(retirer_rappels_tete(found))
     except Exception:
         print("MISSING")
         sys.exit(0)
