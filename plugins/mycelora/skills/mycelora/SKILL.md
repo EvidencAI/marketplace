@@ -75,12 +75,12 @@ Which space are we working on?
 The Dashboard link must appear at every thread opening. If the space was unknown at step 1, wait for the answer, then call `session_start(sessionId:<identifier returned at step 1>, spaceId:X)`: the server attaches it to the thread already open, without creating a second one. `list_spaces` is only for showing the list to the user.
 
 ### Unclosed thread reported at opening
-If the opening block has a section « Fil non clôturé (…) », a previous thread of the same space was left open for more than 6 hours. Before answering on the substance:
+If the opening block has a section « Unclosed thread (…) », a previous thread of the same space was left open for more than 6 hours. Before answering on the substance:
 1. Read it: `mycelora_read_memory(type:"fil", sessionId:"<orphan thread>")`.
 2. Close it like a normal thread: `mycelora_session_end(sessionId:"<orphan thread>", clotureDifferee:true, ...)`; atoms are not required.
 3. Tell the user in one sentence and suggest saying "end of thread" when they finish a thread.
 
-Use the orphan's identifier only for these two calls. Other lines of the section (« non clôturé », « sans échange, abandonné ») are mentions: nothing to do.
+Use the orphan's identifier only for these two calls. Other lines of the section (« unclosed », « no exchange, abandoned ») are mentions: nothing to do.
 
 ---
 
@@ -107,7 +107,7 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
    - `nonVerifie`: what you assert without proof.
 
    An empty list is refused: if there is nothing to put, the justification is the entry (`["no refutation: read-only thread"]`). These fields come back at the next opening, and refutations and traps feed the codex.
-5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: if `session_end` raises « Sujets refusés » or « codex et sujets/enBref sont exclusifs », nothing was written: fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
+5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: if `session_end` raises « Topics refused » or « codex and sujets/enBref are mutually exclusive », NOTHING WAS WRITTEN: fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
 6. **Confirm**: "Thread closed. Handover (XXX words) and codex updated for [space]." and say whether the codex was accepted first time or resubmitted.
 
 ### Codex
