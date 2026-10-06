@@ -19,9 +19,9 @@ Knowledge graph: **atoms** (6 types), **spaces** (projects), **profile** (princi
 |------|--------|
 | Dashboard | https://mycelora.ai |
 | Plugin | Skills plus automatic hooks, nothing to configure. Active in any session where it is installed. |
-| Connector | The "Mycelora" connector (OAuth) in claude.ai / Claude Desktop provides the `mycelora_*` tools. |
+| Tools | The `mycelora_*` tools come from the connector bundled with the plugin ("Mycelora OAuth" on claude.ai), or from a connector added by hand when the plugin is not installed. Their prefix varies with the connector name (`mcp__Mycelora_OAuth__`, `mcp__Mycelora__`...). |
 
-- The tools come from the connector. `quick_boot` does not exist: never call it.
+- Before the first call to a Mycelora tool, load its definition (tool search) and read its schema: never guess a field name. `quick_boot` does not exist: never call it.
 - `userId`: omit it in all calls. The server resolves the identity from the connection and ignores any value sent.
 - Associated files (same folder): ONBOARDING.md, REFERENCE.md.
 
@@ -94,13 +94,15 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
 2. **Closing atoms**: before the handover, with the same `sessionId`, write the thread's memories in ONE call: `mycelora_session_end_atoms(sessionId:<identifier returned at opening>, atomes:[...])`, 1 to 20 entries. Each has `type` and `contenu`, plus `portee` (mandatory for `regle` and `refute`, otherwise refused) and optionally `perime_si`. The batch refuses `remplace`: to replace a memory that became false, use `create_atom_manual` one at a time. Types and criteria: see § Atoms. If the call is forgotten, the closing is accepted but marked INCOMPLETE and the response returns the `sessionId`: call `session_end_atoms` again right away. If the thread truly has nothing to retain, say so in the `sansAtomes` field of `session_end`, with the reason.
    **Safety reviewer.** Some clients run an automatic safety reviewer that reads tool inputs before they run. It can mistake a memory that *recounts* a sensitive action already done (a merge, a deletion or change in production, a deployment, a remote command) for the action itself, and refuse the write. This applies to every memory write, in the thread (`create_atom_manual`) and at closing. When a batch plainly narrates such an action, or after a first refusal, ask the user one line in their language ("Record these N memories? YES/NO") and, once they agree, send the same content unchanged. If they decline, do not write those memories and say so. Never reword a memory to get past the reviewer. In a scheduled task there is nobody to ask: write the atom as is; if it is refused, report the refusal in the task output.
 3. **Codex**: draft the space's up-to-date codex now (do not send it yet; step 4 carries it in `session_end`), BEFORE the closing call. It is an update, not a rewrite: start from the existing codex, apply the thread's delta (what happened, was settled, refuted, done), keep every line that is neither contradicted nor replaced, with its date and wording. Two forms exist, see § Codex.
-4. **Handover**: `mycelora_session_end(spaceId:<the thread's space>, workSummary, decisions, pendingTasks, refutations, pieges, pointeurs, correctionsUtilisateur, nonVerifie, codex or sujets/enBref, retraits if lines are removed)`.
+4. **Handover**: first load the definition of `mycelora_session_end` and read its schema (never guess a field name). Then call `mycelora_session_end(spaceId:<the thread's space>, workSummary, decisions, pendingTasks, refutations, pieges, pointeurs, correctionsUtilisateur, nonVerifie, codex or sujets/enBref, retraits if lines are removed)`.
+
+   **`workSummary` is required and cannot be empty**: without it the server refuses the closing and writes nothing, so you can simply call again. A field that is not in the schema is ignored, and the response names it (`champsIgnores`).
 
    **`spaceId` is mandatory at closing**, even if the thread was opened with it: without it the handover has no space and the codex is not updated. Pass the uuid returned at opening.
 
    Provide both lists, always. `decisions` = facts settled, with their reason. `pendingTasks` = what remains actionable, next action first. One of the two may be empty, not both. Write complete sentences: they are reinjected as is at the next opening. With both lists and a `workSummary` over 300 characters, the server makes no model call and the closing is fast.
 
-   **Five structured fields are required**; the server refuses the closing if any is absent or empty:
+   **Five structured fields are required on the client path** (a `workSummary` of at least 300 characters and both lists, sent in the same call): the server refuses the closing if any of the five is absent or empty. Without a codex, a shorter summary or a missing list sends the closing down a model-written handover. With a codex (`codex` or `sujets`/`enBref`), the server instead refuses the whole closing and NOTHING WAS WRITTEN: call `mycelora_session_end` again with everything. So always send everything in one call:
    - `refutations`: what was tried or asserted then found false, and why.
    - `pieges`: what must not be rediscovered (treacherous behaviors, tool limits).
    - `pointeurs`: paths, scripts, identifiers, commands useful to resume.
@@ -108,7 +110,7 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
    - `nonVerifie`: what you assert without proof.
 
    An empty list is refused: if there is nothing to put, the justification is the entry (`["no refutation: read-only thread"]`). These fields come back at the next opening, and refutations and traps feed the codex.
-5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: if `session_end` raises « Topics refused » or « codex and sujets/enBref are mutually exclusive », NOTHING WAS WRITTEN: fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
+5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: any error saying NOTHING WAS WRITTEN (e.g. « Topics refused », « codex and sujets/enBref are mutually exclusive », a missing `workSummary`, an incomplete closing): fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
 6. **Confirm**: "Thread closed. Handover (XXX words) and codex updated for [space]." and say whether the codex was accepted first time or resubmitted.
 
 ### Codex

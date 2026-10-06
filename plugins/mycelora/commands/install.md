@@ -5,7 +5,7 @@ description: "Install or update the Mycelora MCP server on this machine"
 # Mycelora — MCP server installation
 
 ## Context
-The Mycelora plugin provides the skills (behavior). The MCP tools (memory, recall, extraction) come from a separate remote connector: there is no local bundle to install.
+The Mycelora plugin provides the skills (behavior). The MCP tools (memory, recall, extraction) come from the remote connector bundled with the plugin (or one added by hand when the plugin is not installed): there is no local bundle to install.
 
 ## Detection
 Before displaying the instructions, check whether the `mycelora_*` tools are already available:
