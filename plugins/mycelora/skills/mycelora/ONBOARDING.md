@@ -45,11 +45,9 @@ Present:
 
 Collection runs on the Mycelora side every 2 hours, whether or not the computer is on. There is nothing to schedule or leave running locally.
 
-Explain: "Mycelora can read your mails and your calendar every two hours to keep track of your exchanges and commitments. The text of the mails is erased 7 days after sorting. Shall we connect a mailbox?"
+Explain: "Mycelora can read your mails and your calendar every two hours to keep track of your exchanges and commitments. The text of the mails is erased 7 days after sorting. Shall I show you where to connect one?"
 
-If the user accepts, two paths:
-- **Dashboard, Connections page** (https://mycelora.ai), the simplest: mail via IMAP (Gmail, Outlook, iCloud, OVH, Free, Orange and others), Google calendar by consent, CalDAV calendars.
-- **In conversation**: `mycelora_create_source` for an IMAP mailbox or a CalDAV calendar (the connection is tested first, and the secret is stored only if the test succeeds); `mycelora_google_consent_url` for the Google calendar (a consent link for the user to open).
+If the user accepts, send them to the **Sources** menu of the dashboard (https://mycelora.ai). Only they can connect a source there, no AI can do it for them: mail via IMAP (Gmail, Outlook, iCloud, OVH, Free, Orange and others), Google calendar by consent, CalDAV calendars.
 
 Password: for providers that offer one (Gmail, Outlook, iCloud), always an app password, never the account's main password; for the others (OVH, Free, Orange), the mailbox password.
 

@@ -48,13 +48,12 @@ Grouped by domain:
 **Memory**: write_memory, read_memory
 **Profile**: get_profile, update_profile, get_calibration
 **Contacts**: upsert_contact, search_contacts
-**Ingestion**: ingest_document, ingest_events, process_events, collect_events
-**Sources**: create_source, disconnect_source, test_source_connection, google_consent_url
+**Ingestion**: ingest_events, process_events, collect_events
 **API keys**: create_api_key, list_api_keys, revoke_api_key
 **Insights and tensions**: cross_insights, analyze_space, ack_tension, ack_alerte, close_topic, reopen_topic
-**Documents**: list_documents
 **Connections**: create_connection
-**Extraction**: log_exchange, extract_atoms (called by the hooks)
+**Exchanges**: log_exchange (called by the hooks)
+**Notes**: extract_atoms, injecter_note (called by Claude on a note the user pastes)
 **Sync**: sync_status
 **Export**: export_memory, export_status
 **Feedback**: submit_feedback
@@ -117,15 +116,11 @@ Each account is a separate source, with its own sync status and error counter. A
 
 **Impact reflex.** Before a structuring command-line action (schema change, mass deletion or update, production operation), the plugin refuses the first time and shows a report (who reads and writes the targeted object, or the scope of the production operation). The same action, replayed as is, goes through: the refusal does not repeat for the same object in the same thread. Limited to shell commands; other tools are only noted, without blocking.
 
-**Thread state.** The plugin keeps a short state of the thread (objective, scope in progress, decided, ruled out, open, corrections), regenerated at regular intervals. It is visible in the dashboard, **Réflexes** tab, **Fils en cours** block.
+**Thread state.** The plugin keeps a short state of the thread (objective, scope in progress, decided, ruled out, open, corrections), regenerated at regular intervals. It may appear in the recall when it has changed.
 
-**Contradiction reflex.** When a reply contradicts a decision made elsewhere (another project, an earlier thread), an alert appears in the conversation's recall and in the dashboard, Réflexes tab, **Alertes** block.
+**Contradiction reflex.** When a reply contradicts a decision made elsewhere (another project, an earlier thread), an alert appears in the conversation's recall.
 
-**Acknowledging an alert**, two equivalent paths:
-- In conversation: ask Claude to acknowledge it; it uses `mycelora_ack_alerte` with the short identifier given in the alert text and a verdict, useful or noise.
-- In the dashboard: Réflexes tab, Alertes block, buttons **Utile** / **Bruit**.
-
-Both mark the alert, never delete it. The verdict is a supplementary signal; the user decides. It feeds the reliability counters of the same tab (**Compteurs** block, dashboard only).
+**Acknowledging an alert.** In conversation: ask Claude to acknowledge it; it uses `mycelora_ack_alerte` with the short identifier given in the alert text and a verdict, useful or noise. This marks the alert, never deletes it. The verdict is a supplementary signal; the user decides.
 
 None of these reflexes asks the user to paste a key or token: the plugin's hooks authenticate automatically.
 
