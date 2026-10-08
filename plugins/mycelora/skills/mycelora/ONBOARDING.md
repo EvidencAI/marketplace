@@ -37,7 +37,7 @@ Present:
 - "remember that..." → store a piece of information
 - "search [topic]" → dig through the memory
 - "morning brief" → summary of the day (mails, appointments, insights)
-- "end of thread" → save and close
+- "end of thread" → save and close (optional: with the plugin the thread opens by itself and memories are written as you go; for a long project, opening and closing explicitly is still best practice)
 
 ---
 
@@ -62,6 +62,6 @@ It lets you view your spaces, atoms, connections and the activity of your memory
 
 ## End of onboarding
 
-Present the standard welcome block (SKILL.md § Opening protocol, Step 2) with the Dashboard link, then:
+This is an explicit opening: present the standard welcome block (SKILL.md § Opening protocol, Step 2) with the Dashboard link, then:
 
 "You're ready. Say 'open [your space]' to get started, or 'mycelora help' to see all the commands."

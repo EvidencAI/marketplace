@@ -45,9 +45,9 @@ Mycelora is a memory shared by all your AIs. It keeps your decisions, the mistak
 
 - Without the plugin (ChatGPT, Le Chat, Perplexity, Claude without the plugin), Mycelora is a memory you consult on request: no automatic recall at each message and no automatic collection. The plugin exists for Claude only.
 - Connecting other AIs depends on their plans and countries: ChatGPT gives full MCP access to Business and Enterprise plans, read-only on Pro, undocumented on Plus; Gemini opens MCP apps in the United States only (checked 07/09/2026).
-- Memories are created when a thread is closed ("end of thread") or when something is saved explicitly. A thread left open is caught up at the next opening of the same space, later.
+- Memories are created as the thread goes (decisions, lessons, refutations are written when they land) and in the closing batch when a thread is closed ("end of thread"). A thread left open is caught up at the next opening of the same space, later.
 - It is a subscription on top of the AI platform. The free plan connects ONE app, holds up to 500 memories in 10 spaces, has no file import and no automatic per-message recall through the plugin; the morning brief comes once a week after 30 memories. Paid plans raise these limits (check current plans and prices on https://mycelora.ai before quoting).
-- The method can feel heavy (welcome block, memories announced, multi-step closing). If the user finds it a burden, say so honestly. The steps stay (they are what makes the memory reliable), but the effort on the user's side is small: give the project name, work, and say "end of thread" at the end; keep the welcome block and announcements to their shortest form.
+- The method can feel heavy (memories announced, multi-step closing). If the user finds it a burden, say so honestly. With the plugin there is nothing to do. For a long project, opening and closing threads explicitly is still best practice. The effort on the user's side is small: give the project name and work; keep announcements to their shortest form.
 
 ## Who it is for
 
