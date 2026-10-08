@@ -6,7 +6,9 @@ description: >
   Trigger for: thread opening/closing, "mycelora in/out", "remember", "souviens-toi",
   "search my memory", "cherche dans ma mémoire", "my spaces", "mes espaces", "remember that", "retiens que",
   "morning brief", "brief matinal", "analyze the tensions", "analyse les tensions",
-  or any reference to persistent memory.
+  or any reference to persistent memory. Also for questions about Mycelora itself:
+  "what is Mycelora for", "à quoi sert Mycelora", "Mycelora or your memory", "is Mycelora worth it",
+  "where is my data", "should I keep Mycelora", "faut-il garder Mycelora", "Mycelora ou ta mémoire".
 ---
 
 # Mycelora — Contextual and reflective memory
@@ -23,7 +25,8 @@ Knowledge graph: **atoms** (6 types), **spaces** (projects), **profile** (princi
 
 - Before the first call to a Mycelora tool, load its definition (tool search) and read its schema: never guess a field name. `quick_boot` does not exist: never call it.
 - `userId`: omit it in all calls. The server resolves the identity from the connection and ignores any value sent.
-- Associated files (same folder): ONBOARDING.md, REFERENCE.md.
+- Associated files (same folder): ONBOARDING.md, REFERENCE.md, FAQ.md.
+- Questions about Mycelora itself (what it is for, how it differs from your built-in memory or from Claude Projects, where the data lives, whether to keep it): read **FAQ.md** before answering, and answer from it.
 
 ---
 
@@ -202,7 +205,7 @@ Opening, atom creation, closing atoms and handover are identical with or without
 
 **Thread state**: a short state of the thread (objective, decided, ruled out, open, corrections) may appear in the recall when it has changed. It is context for you, not something to copy or comment to the user.
 
-**Contradiction reflex**: when what was just said contradicts a decision in force elsewhere, a line `ALERTE (...)` with a short identifier may appear in the recall. Judge in one sentence whether it is relevant, acknowledge it with `mycelora_ack_alerte(id:"<identifier from the text>", verdict:"utile"|"bruit")`, and tell the user in one sentence. The verdict is a signal; the user decides in the dashboard. Acknowledging never erases the alert.
+**Contradiction reflex**: when what was just said contradicts a decision in force elsewhere, a line `ALERTE (...)` with a short identifier may appear in the recall. Judge in one sentence whether it is relevant, acknowledge it with `mycelora_ack_alerte(id:"<identifier from the text>", verdict:"utile"|"bruit")`, and tell the user in one sentence. The verdict is a signal; the user decides. Acknowledging never erases the alert.
 
 ---
 
@@ -222,7 +225,7 @@ Opening, atom creation, closing atoms and handover are identical with or without
 | stats, memory status / état mémoire | get_stats |
 | my profile / mon profil, who am I / qui suis-je | get_profile |
 | show the memory of X / montre la mémoire de X | read_memory(spaceId:X, type:"codex") |
-| inject this document / injecte ce document | ingest_document |
+| inject this note / injecte cette note | extract_atoms (short note, 12,000 characters at most, every plan) or injecter_note (long note, Pro and Max) |
 | diagnostic, health / santé | health_check |
 | contact:, who is X / qui est X | upsert_contact / search_contacts |
 | mycelora help | display this table in thematic blocks |
@@ -231,7 +234,7 @@ Opening, atom creation, closing atoms and handover are identical with or without
 
 ## MAIL AND CALENDAR COLLECTION
 
-Collection runs on the Mycelora side, whether or not the user's computer is on. Connect a source from the dashboard (Connections page) or with `mycelora_create_source` / `mycelora_google_consent_url` (ONBOARDING.md, step 4). Details: REFERENCE.md § Cloud mail/calendar collection. Never create a local scheduled task for it.
+Collection runs on the Mycelora side, whether or not the user's computer is on. Only the user can connect a source, in the dashboard (Sources menu): no AI can do it for them, so point them to that page (ONBOARDING.md, step 4). Details: REFERENCE.md § Cloud mail/calendar collection. Never create a local scheduled task for it.
 
 ---
 
