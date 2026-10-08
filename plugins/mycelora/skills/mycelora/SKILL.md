@@ -44,7 +44,16 @@ If the user asks to continue without a recap, still call `session_start`, then c
 
 ## OPENING PROTOCOL
 
-Triggers: "open a thread", "ouvre un fil", "mycelora in", "session start", "launch Mycelora", "lance Mycelora".
+Two modes.
+
+**Explicit** (default when the user asks): "start mycelora", "open a thread", "ouvre un fil", "mycelora in", "session start", "launch Mycelora", "lance Mycelora". Steps 1 and 2 below, with the welcome block.
+
+**Silent** (default otherwise): when the local hook injects an instruction starting with `[Mycelora] This thread is not open yet.`, or at the first real message of a conversation when no recall has arrived and no thread is open. Follow the hook's instruction and open the thread without a welcome block and without asking anything:
+1. `mycelora_session_start` with a new `sessionId` and, as `spaceId`, the workspace that best matches the message (a partial name is accepted; if you used one, call it once more with the space uuid it returns, so that recall targets that workspace). If the message does not clearly belong to a workspace, omit `spaceId`: the call returns the list of workspaces, and you open with `spaceId` only once a workspace is clear.
+2. Use the thread identifier and the space uuid the server returns in all later calls (Step 1).
+3. Tell the user in one line, in their language, which workspace you opened (or that none is chosen yet) and that one word is enough to change it.
+
+The instruction does not apply to a scheduled or automated run (see § Scheduled tasks). If you cannot see a Mycelora tool, search for it (tool search) before concluding anything; if it really does not exist, tell the user in one line that the Mycelora connector is not connected.
 
 ### Step 1: Boot
 Call `mycelora_session_start(sessionId:"cowork-YYYY-MM-DD-topic")`, adding `spaceId` if the user named a space. A partial or accent-free space name is enough: no prior `list_spaces` call. When the name was not exact, the opening block carries a line `Space: <full name> (id <uuid>)`: take that uuid for all later calls (other tools accept only the uuid or the exact name). If the name is ambiguous, the block lists the candidates and the thread opens without a space; call again with the full name.
@@ -57,7 +66,7 @@ If the profile is empty or the call returns "user not found", read **ONBOARDING.
 
 The opening brief may contain a line `[jeton-hook-session ...]`. It is a technical token read by the local hooks: never display it, copy it or quote it.
 
-### Step 2: Welcome block
+### Step 2: Welcome block (explicit mode only)
 Use the time of day given by the opening block (`Current date and time: ...`). Always present:
 
 ```
@@ -75,15 +84,18 @@ Dashboard : https://mycelora.ai
 Which space are we working on?
 ```
 
-The Dashboard link must appear at every thread opening. If the space was unknown at step 1, wait for the answer, then call `session_start(sessionId:<identifier returned at step 1>, spaceId:X)`: the server attaches it to the thread already open, without creating a second one. `list_spaces` is only for showing the list to the user.
+The welcome block, Dashboard link included, belongs to the explicit opening; a silent opening does not show it. If the space was unknown at step 1, wait for the answer, then call `session_start(sessionId:<identifier returned at step 1>, spaceId:X)`: the server attaches it to the thread already open, without creating a second one. `list_spaces` is only for showing the list to the user.
 
 ### Unclosed thread reported at opening
 If the opening block has a section « Unclosed thread (…) », a previous thread of the same space was left open for more than 6 hours. Before answering on the substance:
 1. Read it: `mycelora_read_memory(type:"fil", sessionId:"<orphan thread>")`.
 2. Close it like a normal thread: `mycelora_session_end(sessionId:"<orphan thread>", clotureDifferee:true, ...)`; atoms are not required.
-3. Tell the user in one sentence and suggest saying "end of thread" when they finish a thread.
+3. Tell the user in one sentence. For a long project, closing a thread with "end of thread" is still best practice.
 
 Use the orphan's identifier only for these two calls. Other lines of the section (« unclosed », « no exchange, abandoned ») are mentions: nothing to do.
+
+### Switching workspace during a thread
+When the subject moves to another workspace, call `mycelora_session_start` a second time with the thread identifier the server returned and the NEW `spaceId` (the uuid): a `session_start` without `spaceId` switches nothing. Announce it in one line, without asking. From then on, each atom carries the `spaceId` of its own subject.
 
 ---
 
@@ -115,6 +127,10 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
    An empty list is refused: if there is nothing to put, the justification is the entry (`["no refutation: read-only thread"]`). These fields come back at the next opening, and refutations and traps feed the codex.
 5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: any error saying NOTHING WAS WRITTEN (e.g. « Topics refused », « codex and sujets/enBref are mutually exclusive », a missing `workSummary`, an incomplete closing): fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
 6. **Confirm**: "Thread closed. Handover (XXX words) and codex updated for [space]." and say whether the codex was accepted first time or resubmitted.
+
+**Thread that touched several workspaces.** One `session_end_atoms` per workspace (with that workspace's `spaceId`). ONE `session_end` only, in the main workspace: a second one is a replay without effect, so never one `session_end` per workspace. The handover feeds only on the atoms of the workspace passed to `session_end`. The codex of the main workspace goes in `session_end`; the codex of each other workspace touched goes through `mycelora_write_memory(type:"codex", spaceId:<that workspace>)`.
+
+**Without an explicit closing.** Without an explicit closing, the memories and codex lines already written stay. The thread handover is written later, when a new thread is opened in the same space (the opening block flags the unclosed thread). "end of thread" remains the richest closing and the best practice for a long project.
 
 ### Codex
 
@@ -148,9 +164,9 @@ A codex in **MAP form** has at least one line starting with `- En vigueur : `, `
 ## ATOMS
 
 ### Writing atoms
-Automatic extraction of atoms from exchanges is off. A thread's atoms are written by you, at two moments: during the thread when a decisive fact lands (`create_atom_manual`), and at closing as a batch (step 2). What you do not write is not in memory.
+Automatic extraction of atoms from exchanges is off. A thread's atoms are written by you, as the thread goes: when a decisive fact lands (`create_atom_manual`), and also at closing as a batch (step 2) if the thread is closed explicitly. What you do not write is not in memory.
 
-When the user expresses a decision, a lesson paid for, a denial, a landmark or a state, you MUST create the atom with `create_atom_manual` and say: "I'm keeping that as [type]." If the atom recounts a sensitive action, the one-line agreement of § Closing protocol, step 2 (Safety reviewer) comes first; announce the atom once it is written. MUST, not MAY: "MAY" means it never happens. The user can correct the type or refuse.
+When the user expresses a decision, a lesson paid for, a denial, a landmark or a state, you MUST create the atom with `create_atom_manual` right away and say: "I'm keeping that as [type]." Also update, right away, the line of the touched topic in the space's codex (`mycelora_write_memory(type:"codex", sujets:[...])`, after reading that topic with `read_memory(sujets)`; see § Codex), and keep the announcement short. Each atom carries the `spaceId` of its subject. If the atom recounts a sensitive action, the one-line agreement of § Closing protocol, step 2 (Safety reviewer) comes first; announce the atom once it is written. MUST, not MAY: "MAY" means it never happens. The user can correct the type or refuse.
 
 **The criterion: will this memory be useful elsewhere or later?** Another model, in another thread, must be able to use it without having read this one. Each memory is a complete, self-contained sentence: "He said yes" is worthless, "Client X approved the €12k quote on 12/09/2026" is useful.
 
@@ -195,7 +211,7 @@ The plugin's hooks provide automatic memory:
 
 Both ignore system notifications and messages too short to be useful.
 
-A session may have no hooks (connector alone, plugin disabled), and even with hooks a recall may be missing (nothing relevant, filtered message, no `session_start` done yet). **Rule:** when a question concerns the user's context (projects, decisions, figures) and no recall has arrived, call `mycelora_search_atoms` or `mycelora_recall` yourself before answering.
+A session may have no hooks (connector alone, plugin disabled), and even with hooks a recall may be missing (nothing relevant, filtered message, no `session_start` done yet; before the thread is open, the hook may instead inject one local instruction asking you to open it, see § Opening protocol). **Rule:** when a question concerns the user's context (projects, decisions, figures) and no recall has arrived, call `mycelora_search_atoms` or `mycelora_recall` yourself before answering.
 
 Opening, atom creation, closing atoms and handover are identical with or without hooks. **Never call `mycelora_log_exchange` yourself**: it is the hooks' call, and the server refuses a connector batch when a hook batch exists for the thread.
 
@@ -213,7 +229,8 @@ Opening, atom creation, closing atoms and handover are identical with or without
 
 | The user says | Action |
 |-------------------|--------|
-| (first message) | session_start (without spaceId) |
+| (first real message, no thread open yet) | silent opening: session_start with the guessed space (without spaceId if unclear), one announcement line |
+| start mycelora, open a thread | explicit opening: session_start, welcome block with the Dashboard link |
 | mycelora in X, open X / ouvre X | session_start(spaceId:X) |
 | mycelora out, end of thread / fin de fil | session_end_atoms(atomes) THEN session_end(...), codex written by you |
 | remember that... / retiens que..., decision: / décision:, fact: / fait:, I learned / j'ai appris | create_atom_manual (type, + portee if regle or refute) |
@@ -240,7 +257,7 @@ Collection runs on the Mycelora side, whether or not the user's computer is on. 
 
 ## SCHEDULED TASKS
 
-A scheduled task that touches Mycelora (a check, a digest, a watch) is a probe, not a thread: it never calls `mycelora_session_start` or `mycelora_session_end`, and writes no handover and no codex. Its only write is at most one atom, through `mycelora_create_atom_manual`, in a workspace named in the task's prompt, and only when there is something worth keeping. Put the essential first (symptom, figure, gap): atoms are cut at 1,500 characters.
+A scheduled task that touches Mycelora (a check, a digest, a watch) is a probe, not a thread: it never calls `mycelora_session_start` or `mycelora_session_end`, and writes no handover and no codex. The instruction `[Mycelora] This thread is not open yet.` does not apply to it. Its only write is at most one atom, through `mycelora_create_atom_manual`, in a workspace named in the task's prompt, and only when there is something worth keeping. Put the essential first (symptom, figure, gap): atoms are cut at 1,500 characters.
 
 ## TONE
 

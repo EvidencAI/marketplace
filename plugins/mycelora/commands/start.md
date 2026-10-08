@@ -44,7 +44,7 @@ The brief returned by `mycelora_session_start` may carry a line `[jeton-hook-ses
 Choose a `sessionId` of the form `surface-YYYY-MM-DD-topic`. The server may timestamp it: in that case use the one it returns in all later calls, until closing.
 
 If `$ARGUMENTS` is empty or absent:
-- Run `mycelora_session_start(sessionId)` without `spaceId`.
+- This is an explicit opening. Run `mycelora_session_start(sessionId)` without `spaceId`.
 - Display the welcome block with spaces, commands and Dashboard link.
 - Ask "Which space are we working on?"
 
@@ -59,7 +59,7 @@ If `$ARGUMENTS` = a space name (e.g. "Product launch", "Marketing"):
 - Display the context and ask for confirmation.
 
 If `$ARGUMENTS` = "out" or "fin":
-- Follow the skill's closing protocol (§ CLOSING PROTOCOL), in this order:
+- Follow the skill's closing protocol (§ CLOSING PROTOCOL; for a thread that touched several workspaces, see its paragraph on several workspaces: one `session_end_atoms` per workspace, ONE `session_end` in the main workspace), in this order:
   1. `mycelora_session_end_atoms` with the sessionId returned at opening;
   2. `mycelora_session_end` with `spaceId`, workSummary, decisions, pendingTasks, the five structured lists, and the space's updated codex in the `codex` field (old form: the codex served at opening plus the thread's delta; MAP form: fields `sujets` and `enBref` instead of `codex`, only the topics touched, each reread beforehand with `read_memory(sujets)`; see the skill's Codex section).
 - Language: write the handover lists and the codex in the user's language, structure keywords included (French: EN BREF / - En vigueur / - À faire / - Piège / - Réfuté / - Chiffre; English: IN SHORT / - In force / - To do / - Pitfall / - Refuted / - Figure, "(ref. x)"). Never translate existing content.
@@ -68,9 +68,9 @@ If `$ARGUMENTS` = "out" or "fin":
 If `$ARGUMENTS` = "stats":
 - Call `mycelora_get_stats` and display the counters.
 
-### 3. Always display the Dashboard link
+### 3. Dashboard link
 
-Every /mycelora:start response must end with:
+This command is an explicit opening: its response ends with the Dashboard link (a silent opening, triggered by the hook, does not show it):
 ```
 Dashboard : https://mycelora.ai
 ```

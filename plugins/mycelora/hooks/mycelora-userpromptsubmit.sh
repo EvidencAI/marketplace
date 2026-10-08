@@ -164,8 +164,31 @@ DECISION="$(printf '%s\n' "$EXTRACT_OUT" | sed -n '3p')"
 # Hook session token, read from the cache. Without a token the hook is
 # inert (first message of a thread, before the opening: normal case, never
 # a visible error).
-mycelora_resolve_hook_token "$SESSION_ID" "$TRANSCRIPT_PATH"
+#
+# Opening instruction (S-FRICTION-FILS-1): without a token, if the message
+# passes the filter and no mycelora_session_start was seen in the thread
+# (SESSION_LABEL empty), the hook asks the model to open the thread silently.
+# At most once per thread (local marker), never any network call here.
+# One single read of the thread cache: line 2 = SESSION_LABEL, line 4 = token.
+FIL_META="$(_mycelora_charger_fil "$SESSION_ID" "$TRANSCRIPT_PATH")"
+SESSION_LABEL="$(printf '%s\n' "$FIL_META" | sed -n '2p')"
+MYCELORA_HOOK_TOKEN="$(printf '%s\n' "$FIL_META" | sed -n '4p')"
 if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
+  if [ "${MYCELORA_OUVERTURE_AUTO:-1}" != "0" ] \
+    && [ "$DECISION" = "OK" ] \
+    && [ -z "$SESSION_LABEL" ]; then
+    OUVERTURE_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
+    if [ -n "$OUVERTURE_SESSION" ]; then
+      OUVERTURE_MARQUEUR="/tmp/mycelora-ouverture-${OUVERTURE_SESSION}"
+      find /tmp -maxdepth 1 -name 'mycelora-ouverture-*' -type f -mmin +1440 -delete 2>/dev/null || true
+      # noclobber: the creation fails if the marker already exists.
+      if [ ! -e "$OUVERTURE_MARQUEUR" ] && ( set -C; : > "$OUVERTURE_MARQUEUR" ) 2>/dev/null; then
+        mycelora_log "userpromptsubmit" "auth" 0 "consigne-ouverture" 0
+        printf '%s' '[Mycelora] This thread is not open yet. Before answering, open it silently: call mycelora_session_start with a new sessionId (surface-YYYY-MM-DD-topic, e.g. chat-2026-10-08-dns) and, as spaceId, the workspace that best matches this message (a partial name is accepted; if you used one, call it once more with the space uuid it returns, so that recall targets that workspace). If the message does not clearly belong to a workspace, omit spaceId: the call returns the list of workspaces, and you open with spaceId only once a workspace is clear. Use the thread id and the space id the server returns in every later call. No welcome block. Then tell the user in one line, in their language, which workspace you opened (or that none is chosen yet) and that one word is enough to change it. If you cannot see a Mycelora tool, search for it first (tool search) before concluding anything; if it really does not exist, tell the user in one line that the Mycelora connector is not connected. Skip all this for scheduled or automated runs.'
+        exit 0
+      fi
+    fi
+  fi
   mycelora_log "userpromptsubmit" "auth" 0 "sans-jeton" 0
   exit 0
 fi
