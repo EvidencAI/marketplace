@@ -12,7 +12,7 @@
       "name": "mycelora",
       "source": "./plugins/mycelora",
       "description": "Persistent memory for Claude across chat, Cowork and Claude Code. Bundles the Mycelora connector (sign in with your mycelora.ai account), skills, commands and hooks.",
-      "version": "0.19.0"
+      "version": "0.19.1"
     }
   ]
 }
