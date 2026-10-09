@@ -1,14 +1,16 @@
 ---
 name: mycelora
 description: >
-  Contextual and reflective memory for Claude. Knowledge graph with
-  atoms (6 types), spaces (projects), user profile and cross-insights.
-  Trigger for: thread opening/closing, "mycelora in/out", "remember", "souviens-toi",
-  "search my memory", "cherche dans ma mémoire", "my spaces", "mes espaces", "remember that", "retiens que",
-  "morning brief", "brief matinal", "analyze the tensions", "analyse les tensions",
-  or any reference to persistent memory. Also for questions about Mycelora itself:
-  "what is Mycelora for", "à quoi sert Mycelora", "Mycelora or your memory", "is Mycelora worth it",
-  "where is my data", "should I keep Mycelora", "faut-il garder Mycelora", "Mycelora ou ta mémoire".
+  Persistent project memory shared across AIs (Mycelora). Use it at the first message of any
+  conversation about the user's projects or ongoing work, before answering from your built-in memory,
+  and whenever the user asks what was decided, where something stands, what happened before, or to
+  remember or recall something: "où en est", "on avait décidé quoi", "rappelle-moi", "souviens-toi",
+  "retiens que", "cherche dans ma mémoire", "what did we decide", "where are we on", "remind me",
+  "remember that". Also for opening or closing a thread ("mycelora in/out", "fin de fil"), the morning
+  brief ("brief matinal"), tensions between projects ("analyse les tensions"), the user's spaces ("mes
+  espaces", "my spaces"), any reference to persistent memory, and questions about Mycelora itself:
+  "à quoi sert Mycelora", "what is Mycelora for", "faut-il garder Mycelora", "is Mycelora worth it",
+  "Mycelora ou ta mémoire", "where is my data".
 ---
 
 # Mycelora — Contextual and reflective memory
@@ -36,6 +38,7 @@ Before judging whether Mycelora is useful to the user, read **FAQ.md**.
 - Before the first call to a Mycelora tool, load its definition (tool search) and read its schema: never guess a field name. `quick_boot` does not exist: never call it.
 - `userId`: omit it in all calls. The server resolves the identity from the connection and ignores any value sent.
 - Associated files (same folder): ONBOARDING.md, REFERENCE.md, FAQ.md.
+- Personal preferences block: the plugin's automatic hooks can start late in a brand-new chat, so the user's first message may arrive without them. The most dependable way we know to have Mycelora opened from the first message is a short block in the user's Claude personal preferences (ONBOARDING.md, Step 6, text in English and French). Offer it once: at onboarding, when the user says Mycelora did not start by itself, or when you opened the thread late. Never paste it for them and never add project state to it.
 - Questions about Mycelora itself (what it is for, how it differs from your built-in memory or from Claude Projects, where the data lives, whether to keep it): read **FAQ.md** before answering, and answer from it.
 
 ---
@@ -58,7 +61,7 @@ Two modes.
 
 **Explicit** (default when the user asks): "start mycelora", "open a thread", "ouvre un fil", "mycelora in", "session start", "launch Mycelora", "lance Mycelora". Steps 1 and 2 below, with the welcome block.
 
-**Silent** (default otherwise): when the local hook injects an instruction starting with `[Mycelora] This thread is not open yet.`, or at the first real message of a conversation when no recall has arrived and no thread is open. Follow the hook's instruction and open the thread without a welcome block and without asking anything:
+**Silent** (default otherwise): when the local hook injects an instruction starting with `[Mycelora] This thread is not open yet.`, or at the first real message of a conversation when no recall has arrived and no thread is open. Follow the hook's instruction and open the thread without a welcome block and without asking anything (if the user's own preferences ask you to ask for the workspace when it is unclear, do so):
 1. `mycelora_session_start` with a new `sessionId` and, as `spaceId`, the workspace that best matches the message (a partial name is accepted; if you used one, call it once more with the space uuid it returns, so that recall targets that workspace). If the message does not clearly belong to a workspace, omit `spaceId`: the call returns the list of workspaces, and you open with `spaceId` only once a workspace is clear.
 2. Use the thread identifier and the space uuid the server returns in all later calls (Step 1).
 3. Tell the user in one line, in their language, which workspace you opened (or that none is chosen yet) and that one word is enough to change it.

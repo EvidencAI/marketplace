@@ -53,6 +53,7 @@ Mycelora is a memory shared by all your AIs. It keeps your decisions, the mistak
 
 ## What Mycelora does not do (say it plainly when relevant)
 
+- In a brand-new chat, the plugin's automatic hooks can start late, so the first messages may be answered without Mycelora. A short block in the user's personal preferences (ONBOARDING.md, Step 6) should make Claude open Mycelora from the first message, as long as Claude follows the user's preferences.
 - Without the plugin (ChatGPT, Le Chat, Perplexity, Claude without the plugin), Mycelora is a memory you consult on request: no automatic recall at each message and no automatic collection. The plugin exists for Claude only.
 - Connecting other AIs depends on their plans and countries: ChatGPT gives full MCP access to Business and Enterprise plans, read-only on Pro, undocumented on Plus; Gemini opens MCP apps in the United States only (checked 07/09/2026).
 - Memories are created as the thread goes (decisions, lessons, refutations are written when they land) and in the closing batch when a thread is closed ("end of thread"). A thread left open is caught up at the next opening of the same space, later.
