@@ -1,7 +1,7 @@
 {
   "name": "mycelora",
   "displayName": "Mycelora",
-  "version": "0.19.1",
+  "version": "0.19.2",
   "description": "Persistent memory for Claude across chat, Cowork and Claude Code. Mycelora keeps your decisions, facts and project context in a knowledge graph organized by workspace, recalls what matters at each message, and hands each new thread the context it needs to pick up where you left off.",
   "author": {
     "name": "EvidencAI",

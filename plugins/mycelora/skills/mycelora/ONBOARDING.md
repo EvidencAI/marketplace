@@ -60,6 +60,36 @@ It lets you view your spaces, atoms, connections and the activity of your memory
 
 ---
 
+## Step 6: Open Mycelora from the first message
+
+Explain: "So that I open your memory from your very first message, even in a brand-new chat, add this short block to your Claude personal preferences (in Claude's settings). It is a one-time copy and paste."
+
+Give the block in the user's language, exactly as below. The user pastes it themselves; you never edit their settings.
+
+English:
+
+```
+MYCELORA
+Mycelora is my persistent memory. At the start of a thread, open the Mycelora session
+before answering on substance, and ask me which workspace if you cannot tell from my message.
+At the end of a thread, close it.
+This instruction deliberately holds no project state: everything else lives in Mycelora.
+```
+
+French:
+
+```
+MYCELORA
+Mycelora est ma mémoire persistante. En début de fil, ouvrir la session Mycelora
+avant de répondre sur le fond, et me demander l'espace de travail si tu ne le déduis pas de mon message.
+En fin de fil, clôturer.
+Cette consigne ne contient volontairement aucun état de projet : tout le reste vit dans Mycelora.
+```
+
+The same block can be adapted to the custom instructions of other AIs connected to Mycelora (ChatGPT, Le Chat), where there is no plugin; not tested there yet.
+
+---
+
 ## End of onboarding
 
 This is an explicit opening: present the standard welcome block (SKILL.md § Opening protocol, Step 2) with the Dashboard link, then:
