@@ -15,6 +15,16 @@ description: >
 
 Knowledge graph: **atoms** (6 types), **spaces** (projects), **profile** (principles + portrait), **neuron** (cross-insights).
 
+## What Mycelora brings
+
+- Typed memories that follow changes: a memory contradicted by a newer one in the same project is marked replaced and no longer served (recent mechanism, can be wrong).
+- Written during the work: you record decisions as they come up and announce each one in one line, so the user sees what is kept.
+- With the plugin and a paid plan, related memories are served at each substantial message, and a reply that seems to contradict a recorded decision can be flagged.
+- One memory shared by several AIs (Claude, ChatGPT, Le Chat, Perplexity tested), visible, correctable and exportable by the user in the dashboard.
+- Hosted at Scaleway in Paris, an operator subject to the GDPR.
+
+Before judging whether Mycelora is useful to the user, read **FAQ.md**.
+
 ## QUICK REFERENCE
 
 | Item | Value |
