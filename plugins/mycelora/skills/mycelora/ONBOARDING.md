@@ -60,9 +60,9 @@ It lets you view your spaces, atoms, connections and the activity of your memory
 
 ---
 
-## Step 6: Open Mycelora from the first message
+## Step 6 (optional): A preferences block
 
-Explain: "So that I open your memory from your very first message, even in a brand-new chat, add this short block to your Claude personal preferences (in Claude's settings). It is a one-time copy and paste."
+Mycelora already opens by itself from the first message (the connector tells Claude to). Offer this block only as an option: "If you want, you can add this short block to your Claude personal preferences (in Claude's settings). It also reminds me to close the thread at the end, and you can adapt it to other AIs. It is a one-time copy and paste."
 
 Give the block in the user's language, exactly as below. The user pastes it themselves; you never edit their settings.
 
