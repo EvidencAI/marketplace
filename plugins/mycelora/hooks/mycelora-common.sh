@@ -286,6 +286,62 @@ if transcript_path and os.path.exists(transcript_path):
                                 modifie = True
                     continue
 
+                # Format Codex (app ChatGPT desktop) : l'appel ET le
+                # resultat de l'outil MCP sont dans UNE seule ligne
+                # event_msg/item_completed (item.type == McpToolCall). La
+                # correlation est donnee par la ligne elle-meme : attenteJeton
+                # n'est ni lu ni alimente ici. Jamais de jeton lu ailleurs
+                # (CommandExecution, custom_tool_call_output, autre outil).
+                if entry.get("type") == "event_msg":
+                    payload = entry.get("payload")
+                    if not isinstance(payload, dict) or payload.get("type") != "item_completed":
+                        continue
+                    item = payload.get("item")
+                    if not isinstance(item, dict) or item.get("type") != "McpToolCall":
+                        continue
+                    if item.get("status") != "completed":
+                        continue
+                    if item.get("server") != "mycelora":
+                        continue
+                    outil = item.get("tool")
+                    if not (isinstance(outil, str) and outil.endswith("mycelora_session_start")):
+                        continue
+                    resultat = item.get("result")
+                    if not isinstance(resultat, dict):
+                        continue
+                    # 1) arguments (memes regles que input cote Claude)
+                    arguments = item.get("arguments")
+                    if not isinstance(arguments, dict):
+                        arguments = {}
+                    sid = arguments.get("spaceId")
+                    if isinstance(sid, str) and sid.strip():
+                        etat["spaceId"] = sid
+                        modifie = True
+                    label = propre(arguments.get("sessionId"))
+                    if label:
+                        etat["sessionLabel"] = label
+                        modifie = True
+                    # 2) texte du resultat : le Fil rendu par le serveur
+                    # PRIME sur arguments.sessionId, puis le jeton.
+                    morceaux = []
+                    contenu = resultat.get("content")
+                    if isinstance(contenu, list):
+                        for sous_bloc in contenu:
+                            if isinstance(sous_bloc, dict) and sous_bloc.get("type") == "text":
+                                t = sous_bloc.get("text")
+                                if isinstance(t, str):
+                                    morceaux.append(t)
+                    texte_codex = "\n".join(morceaux)
+                    fil = extraire_fil(texte_codex)
+                    if fil:
+                        etat["sessionLabel"] = fil
+                        modifie = True
+                    jeton = extraire_jeton(texte_codex)
+                    if jeton:
+                        etat["hookToken"] = jeton
+                        modifie = True
+                    continue
+
                 if entry.get("type") != "assistant":
                     continue
                 message = entry.get("message") or {}

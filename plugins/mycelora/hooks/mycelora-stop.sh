@@ -84,6 +84,95 @@ if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
   exit 0
 fi
 
+# codex_transcript <mode> <transcript_path> <out_file>
+# Format Codex (app ChatGPT desktop, rollout JSONL) ; mode "user" = dernier
+# UserMessage reel, mode "reponse" = reponse finale du tour courant. Ecrit
+# le texte dans out_file et affiche FOUND, sinon MISSING. Un transcript Claude
+# ne porte jamais d'entree event_msg : sans effet.
+# La reponse ne retient que des lignes POSTERIEURES au dernier UserMessage
+# (ou du meme turn_id) : jamais la reponse d'un tour precedent. Une
+# AgentMessage phase commentary n'est jamais retenue.
+codex_transcript() {
+  python3 - "$1" "$2" "$3" <<'PYEOF'
+import json, sys
+
+mode, transcript_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
+
+def texte_de(contenu):
+    if not isinstance(contenu, list):
+        return ""
+    morceaux = []
+    for p in contenu:
+        if isinstance(p, dict) and isinstance(p.get("text"), str):
+            morceaux.append(p["text"])
+    return "\n".join(morceaux)
+
+lignes = []
+try:
+    with open(transcript_path, "r", encoding="utf-8", errors="replace") as f:
+        for brut in f:
+            brut = brut.strip()
+            if not brut:
+                continue
+            try:
+                e = json.loads(brut)
+            except Exception:
+                continue
+            if isinstance(e, dict) and e.get("type") == "event_msg" and isinstance(e.get("payload"), dict):
+                lignes.append(e["payload"])
+except Exception:
+    pass
+
+idx_user, turn_user, texte_user = None, None, ""
+for i, p in enumerate(lignes):
+    item = p.get("item")
+    if p.get("type") == "item_completed" and isinstance(item, dict) and item.get("type") == "UserMessage":
+        # Tout UserMessage avance la borne de tour, meme sans texte (image
+        # seule) : la question du tour precedent n'est jamais couplee a la
+        # reponse du tour courant.
+        idx_user, turn_user, texte_user = i, p.get("turn_id"), texte_de(item.get("content"))
+
+resultat = ""
+if idx_user is not None:
+    if mode == "user":
+        resultat = texte_user
+    else:
+        finale, complete = "", ""
+        for i, p in enumerate(lignes):
+            if not (i > idx_user or (turn_user and p.get("turn_id") == turn_user)):
+                continue
+            if p.get("type") == "task_complete":
+                m = p.get("last_agent_message")
+                if isinstance(m, str) and m.strip():
+                    complete = m
+                continue
+            item = p.get("item")
+            if p.get("type") == "item_completed" and isinstance(item, dict) and item.get("type") == "AgentMessage":
+                if item.get("phase") == "commentary":
+                    continue
+                t = texte_de(item.get("content"))
+                if t.strip():
+                    finale = t
+        resultat = complete or finale
+
+if resultat.strip():
+    try:
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(resultat)
+        print("FOUND")
+    except Exception:
+        print("MISSING")
+else:
+    print("MISSING")
+PYEOF
+}
+
+# Repli Codex : last_assistant_message vide dans l'entree du hook -> reponse
+# finale du transcript Codex. Une valeur non vide de l'entree PRIME toujours.
+if [ ! -s "$ASSISTANT_FILE" ] && [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+  codex_transcript reponse "$TRANSCRIPT_PATH" "$ASSISTANT_FILE" >/dev/null
+fi
+
 # find_last_user <transcript_path> <out_file> <prompt_id>
 # Sur un tour Cowork qui utilise des outils (la quasi-totalite des tours),
 # la DERNIERE entree type=user au moment du Stop est un tool_result
@@ -164,6 +253,33 @@ except Exception:
     pass
 
 found = candidate_a if candidate_a is not None else candidate_b
+
+if found is None:
+    # Repli Codex, seulement quand aucun message user Claude n'est trouve :
+    # dernier UserMessage reel (event_msg/item_completed).
+    try:
+        with open(transcript_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(entry, dict) or entry.get("type") != "event_msg":
+                    continue
+                payload = entry.get("payload")
+                item = payload.get("item") if isinstance(payload, dict) else None
+                if not (isinstance(payload, dict) and payload.get("type") == "item_completed"
+                        and isinstance(item, dict) and item.get("type") == "UserMessage"):
+                    continue
+                morceaux = [p["text"] for p in (item.get("content") or [])
+                            if isinstance(p, dict) and isinstance(p.get("text"), str)]
+                texte = retirer_rappels_tete("\n".join(morceaux))
+                # Un UserMessage sans texte (image seule) avance quand meme
+                # la borne : message vide -> empty-message, jamais la
+                # question du tour precedent.
+                found = texte if texte.strip() else ""
+    except Exception:
+        pass
 
 if found is None:
     print("MISSING")
