@@ -57,14 +57,16 @@ If the user asks to continue without a recap, still call `session_start`, then c
 
 ## OPENING PROTOCOL
 
-Two modes.
+Two modes. Both start with Step 0.
+
+**Step 0, before `mycelora_session_start` (both modes): run `date`.** If a shell or Bash tool is in your tool list (never a tool that reaches the user's computer, such as a remote-device or Desktop Commander tool), call it once with `date`. This is required: on claude.ai a conversation starts in a light mode without the plugin's hooks, and the first call to your own shell starts the environment where Mycelora's automatic memory (recall at each message, collection of exchanges) runs. It also gives the real time. With no such tool (ChatGPT in the browser, for instance), skip this step.
 
 **Explicit** (default when the user asks): "start mycelora", "open a thread", "ouvre un fil", "mycelora in", "session start", "launch Mycelora", "lance Mycelora". Steps 1 and 2 below, with the welcome block.
 
 **Silent** (default otherwise): when the local hook injects an instruction starting with `[Mycelora] This thread is not open yet.`, or at the first real message of a conversation when no recall has arrived and no thread is open. Follow the hook's instruction and open the thread without a welcome block and without asking anything (if the user's own preferences ask you to ask for the workspace when it is unclear, do so):
 1. `mycelora_session_start` with a new `sessionId` and, as `spaceId`, the workspace that best matches the message (a partial name is accepted; if you used one, call it once more with the space uuid it returns, so that recall targets that workspace). If the message does not clearly belong to a workspace, omit `spaceId`: the call returns the list of workspaces, and you open with `spaceId` only once a workspace is clear.
 2. Use the thread identifier and the space uuid the server returns in all later calls (Step 1).
-3. Tell the user in one line, in their language, which workspace you opened (or that none is chosen yet) and that one word is enough to change it.
+3. Tell the user in one line, in their language, which workspace you opened (or that none is chosen yet), at what time (as given by the opening block, e.g. "Mycelora ouvert à 12h54"), and that one word is enough to change it.
 
 The instruction does not apply to a scheduled or automated run (see § Scheduled tasks). If you cannot see a Mycelora tool, search for it (tool search) before concluding anything; if it really does not exist, tell the user in one line that the Mycelora connector is not connected.
 
@@ -73,7 +75,7 @@ Call `mycelora_session_start(sessionId:"cowork-YYYY-MM-DD-topic")`, adding `spac
 
 **The thread identifier to use is the one the server returns, not the one you sent.** The server timestamps it at local time and announces it on the `Fil : ...` line at the top of the opening block. Do not compute or guess it: reread that line and use that identifier in ALL later calls, up to the closing. It is the key that attaches memories to the thread; two threads with the same identifier would mix their memory.
 
-The block also returns the current date, time and weekday in the user's time zone (read them, never recompute a weekday), the space instructions, the profile, the active spaces, the last handover and the space codex. A long codex comes as a summary: read one topic in full with `mycelora_read_memory(type:"codex", sujets:["<title>"])` (10 titles per call at most).
+The block also returns the current date, time and weekday in the user's time zone (use them for any greeting or time reference and never work out a weekday yourself; this does not replace Step 0, whose purpose is to start the automatic memory), the space instructions, the profile, the active spaces, the last handover and the space codex. A long codex comes as a summary: read one topic in full with `mycelora_read_memory(type:"codex", sujets:["<title>"])` (10 titles per call at most).
 
 If the profile is empty or the call returns "user not found", read **ONBOARDING.md** and follow it.
 
