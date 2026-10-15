@@ -1,0 +1,39 @@
+{
+  "name": "mycelora",
+  "version": "0.19.6",
+  "description": "Mycelora is a persistent memory shared by Claude, ChatGPT and your other AIs. It keeps your decisions, facts and project context organized by workspace, recalls what matters at each message, and hands each new thread the context it needs to pick up where you left off. Hosted in Paris.",
+  "author": {
+    "name": "EvidencAI",
+    "email": "contact@evidencai.com",
+    "url": "https://mycelora.ai"
+  },
+  "homepage": "https://mycelora.ai",
+  "repository": "https://github.com/EvidencAI/mycelora-plugin",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "persistent-memory",
+    "knowledge-graph",
+    "recall",
+    "context",
+    "workspaces"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Mycelora",
+    "shortDescription": "One shared memory for all your AIs",
+    "longDescription": "Mycelora is a persistent memory shared by Claude, ChatGPT and your other AIs. It keeps your decisions, facts and project context organized by workspace, recalls what matters at each message, and hands each new thread the context it needs to pick up where you left off. Hosted in Paris.",
+    "developerName": "EvidencAI",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": ["Open my Mycelora workspace"],
+    "brandColor": "#EE9578",
+    "logo": "./assets/logo.png",
+    "composerIcon": "./assets/composer-icon.png",
+    "websiteURL": "https://mycelora.ai",
+    "privacyPolicyURL": "https://mycelora.ai/en/legal/privacy-policy",
+    "termsOfServiceURL": "https://mycelora.ai/en/legal/terms",
+    "screenshots": []
+  }
+}
