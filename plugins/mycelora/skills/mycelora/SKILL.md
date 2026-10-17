@@ -151,6 +151,8 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
 
 **Language.** Write content (codex, handover lists, memories) in the user's language, structure keywords included (French: EN BREF / - En vigueur / - À faire / - Piège / - Réfuté / - Chiffre; English: IN SHORT / - In force / - To do / - Pitfall / - Refuted / - Figure, "(ref. x)"). Never translate existing content: an existing codex keeps its language.
 
+**Reason of a rule.** A rule or prohibition (« jamais », « aucun », « ne pas », « interdit », never, no, do not) carries its reason on the same line (`… car …` / `… because …`) or a `réf.` to the memory that holds it. If you do not know the reason, ask the user; never invent one: a plausible but false reason is worse than none.
+
 A codex in **MAP form** has at least one line starting with `- En vigueur : `, `- À faire : `, `- Piège : `, `- Réfuté : ` or `- Chiffre : ` (French), or `- In force : `, `- To do : `, `- Pitfall : `, `- Refuted : ` or `- Figure : ` (English). Otherwise it is in the **old form**. Never convert a space on your own; only at the user's request (total rewrite).
 
 **MAP codex (by topic)**
@@ -235,6 +237,8 @@ Opening, atom creation, closing atoms and handover are identical with or without
 **Impact reflex** (shell commands only): before a structuring action (schema change, mass deletion or update, production operation), the call is refused once, with a report of who reads and writes the targeted object. Read the report, handle what it flags, then replay the same command as is: the refusal does not repeat for the same object in the same thread. Never work around it.
 
 **Thread state**: a short state of the thread (objective, decided, ruled out, open, corrections) may appear in the recall when it has changed. It is context for you, not something to copy or comment to the user.
+
+**Reason reflex**: when you are about to act against an « En vigueur » / « In force » line of the codex (the user's request goes against it, or you judge it outdated), look for its reason first: its `réf.` through `mycelora_read_memory(type:"ref", refs:["<id>"])`, otherwise `mycelora_search_atoms` on its subject. Then tell the user in one sentence, in their language: « Le JJ/MM tu avais décidé X parce que Y : on passe outre ? » (or that the reason was not found), and wait for the answer before acting. Not for a line the request does not touch. The opening block repeats this line above the codex.
 
 **Contradiction reflex**: when what was just said contradicts a decision in force elsewhere, a line `ALERTE (...)` with a short identifier may appear in the recall. Judge in one sentence whether it is relevant, acknowledge it with `mycelora_ack_alerte(id:"<identifier from the text>", verdict:"utile"|"bruit")`, and tell the user in one sentence. The verdict is a signal; the user decides. Acknowledging never erases the alert.
 
