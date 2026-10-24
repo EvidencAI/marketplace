@@ -212,6 +212,8 @@ Deserves an atom:
 
 Does not deserve one: "Yes, good idea"; "Pass me file X"; a transient technical discussion that the handover will cover.
 
+**Date of the fact.** When the fact has a date of its own (an appointment, a deadline, a dated event, something that happened on a known day), give it in `date_fait` as `YYYY-MM-DD`, on `create_atom_manual`, on each entry of `session_end_atoms`, or on `update_atom` to correct it (`null` clears it). Omit it when the fact has no date of its own: the writing date is kept anyway. An invalid date is ignored with a warning in the response; the memory is still written.
+
 **Size: 1,500 characters, hard ceiling.** A longer atom is cut at write time and the excess is lost. Write under the limit, or make two atoms. One fact per atom is also found better by recall.
 
 ### Replacing a memory
