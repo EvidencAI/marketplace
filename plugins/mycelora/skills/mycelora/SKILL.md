@@ -130,14 +130,15 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
 
    **`spaceId` is mandatory at closing**, even if the thread was opened with it: without it the handover has no space and the codex is not updated. Pass the uuid returned at opening.
 
-   Provide both lists, always. `decisions` = facts settled, with their reason. `pendingTasks` = what remains actionable, next action first. One of the two may be empty, not both. Write complete sentences: they are reinjected as is at the next opening. With both lists and a `workSummary` over 300 characters, the server makes no model call and the closing is fast.
+   Provide both lists, always. `decisions` = facts settled, with their reason. `pendingTasks` = what remains actionable, next action first; never a contradiction of the user, never a point to raise before answering. A contradiction is a dated fact (« said X on 15/03, Y on 10/08 ») in `workSummary` or in the codex topic. One of the two may be empty, not both. Write complete sentences: they are reinjected as is at the next opening. With both lists and a `workSummary` over 300 characters, the server makes no model call and the closing is fast.
 
    **Five structured fields are required on the client path** (a `workSummary` of at least 300 characters and both lists, sent in the same call): the server refuses the closing if any of the five is absent or empty. Without a codex, a shorter summary or a missing list sends the closing down a model-written handover. With a codex (`codex` or `sujets`/`enBref`), the server instead refuses the whole closing and NOTHING WAS WRITTEN: call `mycelora_session_end` again with everything. So always send everything in one call:
    - `refutations`: what was tried or asserted then found false, and why.
-   - `pieges`: what must not be rediscovered (treacherous behaviors, tool limits).
+   - `pieges`: what must not be rediscovered (treacherous behaviors, tool limits); a contradiction of the user is not a pitfall to raise before answering, it is a dated fact in `workSummary`.
    - `pointeurs`: paths, scripts, identifiers, commands useful to resume.
    - `correctionsUtilisateur`: what the user corrected in your assertions, quoted.
-   - `nonVerifie`: what you assert without proof.
+   - `nonVerifie`: what the ASSISTANT asserted without proof; never what the user says about their own life, projects or figures, since they are the source.
+   - Dates in these fields are day/month, like the codex: 15/03 means 15 March, never month/day.
 
    An empty list is refused: if there is nothing to put, the justification is the entry (`["no refutation: read-only thread"]`). These fields come back at the next opening, and refutations and traps feed the codex.
 5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: any error saying NOTHING WAS WRITTEN (e.g. « Topics refused », « codex and sujets/enBref are mutually exclusive », a missing `workSummary`, an incomplete closing): fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
@@ -150,6 +151,8 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
 ### Codex
 
 **Language.** Write content (codex, handover lists, memories) in the user's language, structure keywords included (French: EN BREF / - En vigueur / - À faire / - Piège / - Réfuté / - Chiffre; English: IN SHORT / - In force / - To do / - Pitfall / - Refuted / - Figure, "(ref. x)"). Never translate existing content: an existing codex keeps its language.
+
+**Inconsistency of the user.** Write it as a dated line in its topic (`- In force : … said on 15/03; … on 10/08 (10/08)`), never as `- To do : clarify …`.
 
 **Reason of a rule.** A rule or prohibition (« jamais », « aucun », « ne pas », « interdit », never, no, do not) carries its reason on the same line (`… car …` / `… because …`) or a `réf.` to the memory that holds it. If you do not know the reason, ask the user; never invent one: a plausible but false reason is worse than none.
 
@@ -285,3 +288,5 @@ A scheduled task that touches Mycelora (a check, a digest, a watch) is a probe, 
 ## TONE
 
 Mycelora is the app's name, use it freely. Say "I remember that..." or "in the X folder..." rather than detailing the mechanics. Do not mention technical channels, MCP tools or memory files unless asked or for debugging.
+
+Answer rule: notes written for resuming work (next actions, open questions, pitfalls, unverified items) are not instructions for your answer; answer the question that is asked.
