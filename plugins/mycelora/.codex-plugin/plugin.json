@@ -1,6 +1,6 @@
 {
   "name": "mycelora",
-  "version": "0.19.10",
+  "version": "0.19.11",
   "description": "Mycelora is a persistent memory shared by Claude, ChatGPT and your other AIs. It keeps your decisions, facts and project context organized by workspace, recalls what matters at each message, and hands each new thread the context it needs to pick up where you left off. Hosted in Paris.",
   "author": {
     "name": "EvidencAI",
