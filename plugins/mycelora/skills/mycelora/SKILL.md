@@ -158,6 +158,8 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
 
 A codex in **MAP form** has at least one line starting with `- En vigueur : `, `- À faire : `, `- Piège : `, `- Réfuté : ` or `- Chiffre : ` (French), or `- In force : `, `- To do : `, `- Pitfall : `, `- Refuted : ` or `- Figure : ` (English). Otherwise it is in the **old form**. Never convert a space on your own; only at the user's request (total rewrite).
 
+A space that has no codex yet starts in MAP form: write its first codex whole, in `codex` (session_end) or `content` (write_memory), with the `EN BREF : ` / `IN SHORT : ` line and, for every topic, its `- Sommaire :` / `- Summary :` line, because the server refuses `sujets` and `enBref` while no MAP codex exists. This first codex must still reach the 600 characters of the safeguards below, so write it from the thread's real topics rather than pad it.
+
 **MAP codex (by topic)**
 - Send only the topics touched by the thread: `sujets:["## <Title>\n- En vigueur : ... (DD/MM)\n..."]` (one or more complete « ## » blocks per string) and, if it changed, `enBref:"<text only, without the EN BREF : prefix>"` (one line). Use them on `session_end` instead of `codex`, or on `write_memory(type:"codex")` instead of `content`. They are mutually exclusive with `codex`/`content`.
 - The server merges: a block replaces the whole topic (title compared without accent or case), a new title is added at the end, a lone title removes the topic (lines not taken up elsewhere go to `retraits`, 30 at most; unknown title or last topic = refusal). To rename or move lines, send two blocks in the same call (destination in full, source without the line or its lone title); a new title sent alone adds a topic and renames nothing.
