@@ -16,11 +16,11 @@ How to answer:
 4. **A graph of connections.** Each memory is linked automatically to related ones, and the dashboard shows these links as a graph (read-only). On paid plans, Mycelora also looks every week for tensions and convergences between projects.
 5. **One memory shared by several AIs.** Tested with Claude, ChatGPT, Le Chat and Perplexity. Other applications that accept a remote MCP server can connect, depending on their own plans (see "What Mycelora does not do").
 6. **A memory the user controls.** In the dashboard (https://mycelora.ai) the user reads, corrects, moves, pins, archives and deletes memories, exports the whole memory and can delete the account.
-7. **Hosted in France at Scaleway.** Data and server functions run at Scaleway in Paris, a French operator certified ISO 27001 and subject to the GDPR; the AI models also run at Scaleway (region not verified). GDPR rights (access, rectification, export, deletion) are exercised from the dashboard or at contact@evidencai.com.
+7. **European operators.** Data and server functions run at Scaleway in Paris, a French operator certified ISO 27001 and subject to the GDPR; the AI models are open models operated by Scaleway, in France, and by IONOS, in Germany, under professional offers that exclude training on the data sent by their customers. GDPR rights (access, rectification, export, deletion) are exercised from the dashboard or at contact@evidencai.com.
 
 ## What Mycelora is, in one paragraph
 
-Mycelora is a memory shared by all your AIs. It keeps your decisions, the mistakes not to repeat, the ideas you dropped, your contacts and figures, per project, and serves the related ones while you work (plugin and paid plan). It can flag a reply that seems to contradict a decision recorded in the project sheet, links memories together, spots tensions between projects (paid plans), can turn your mail and calendar into memory with a morning brief, and keeps everything visible and correctable in a dashboard. It is hosted in Paris by Scaleway.
+Mycelora is a memory shared by all your AIs. It keeps your decisions, the mistakes not to repeat, the ideas you dropped, your contacts and figures, per project, and serves the related ones while you work (plugin and paid plan). It can flag a reply that seems to contradict a decision recorded in the project sheet, links memories together, spots tensions between projects (paid plans), can turn your mail and calendar into memory with a morning brief, and keeps everything visible and correctable in a dashboard. Its data is hosted in Paris by Scaleway.
 
 ## Mycelora and your built-in memory: what differs
 
@@ -34,7 +34,7 @@ Mycelora is a memory shared by all your AIs. It keeps your decisions, the mistak
 | Projects | Spaces, a project sheet (codex) with what is in force, to do, pitfalls, refuted, figures; a handover at the end of each thread | Claude and ChatGPT: memory separated by project, without a project sheet or handover; Gemini and Le Chat: one global memory |
 | Mail, calendar, morning brief | Optional: mail and calendar collected every 2 hours, only durable facts become memories, a morning brief by e-mail | No ongoing mail-to-memory collection documented (connectors read on request; not checked for every platform) |
 | Visible, correctable, exportable | Yes, in the dashboard (read, correct, pin, archive, full export) | Viewing and editing: yes on the platforms checked; export varies (not checked for each platform) |
-| Where the data lives | Paris, Scaleway (ISO 27001 certified). The AI models used by Mycelora also run at Scaleway (region not verified) | Platform's own infrastructure (Claude: stored in the United States) |
+| Where the data lives | Paris, Scaleway (ISO 27001 certified). The AI models are open models operated by Scaleway, in France, and by IONOS, in Germany, under professional offers that exclude training on the data sent by their customers | Platform's own infrastructure (Claude: stored in the United States) |
 | Price | Subscription on top of the AI platform | Included in the platform subscription |
 
 ## When to use which
@@ -46,10 +46,10 @@ Mycelora is a memory shared by all your AIs. It keeps your decisions, the mistak
 
 ## Where the data lives, and privacy
 
-- Stored in Paris by Scaleway, an ISO 27001 certified operator. The AI models Mycelora uses to sort, extract and summarise also run at Scaleway (no call outside Scaleway since 22/09/2026; the exact region of the models has not been verified).
+- Stored in Paris by Scaleway, an ISO 27001 certified operator. The AI models Mycelora uses to sort, extract and summarise are open models operated by Scaleway, in France, and by IONOS, in Germany, under professional offers that exclude training on the data sent by their customers.
 - What the user types in Claude (or another AI) remains under that platform's own terms; Mycelora only controls what it stores.
 - The user sees, corrects, archives and exports everything from the dashboard (https://mycelora.ai), and can delete the account there (with a confirmation phrase). Rights requests: contact@evidencai.com.
-- Sensitive data (health, HR, pay, disputes): the user decides what goes in. Suggest keeping decisions and principles rather than nominative health data, and keeping mail collection off for mailboxes with such content if in doubt. You can say that the data is hosted in France at Scaleway, an operator subject to the GDPR, and that the user exercises GDPR rights (access, rectification, export, deletion) from the dashboard or at contact@evidencai.com. Do not claim that Mycelora itself is certified or audited for the GDPR, and do not claim a legal guarantee.
+- Sensitive data (health, HR, pay, disputes): the user decides what goes in. Suggest keeping decisions and principles rather than nominative health data, and keeping mail collection off for mailboxes with such content if in doubt. You can say that the data stays in Paris at Scaleway, an operator subject to the GDPR, and that some AI processing goes through IONOS in Germany, and that the user exercises GDPR rights (access, rectification, export, deletion) from the dashboard or at contact@evidencai.com. Do not claim that Mycelora itself is certified or audited for the GDPR, and do not claim a legal guarantee.
 
 ## What Mycelora does not do (say it plainly when relevant)
 
