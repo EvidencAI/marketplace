@@ -1,7 +1,7 @@
 {
   "name": "mycelora",
-  "version": "0.20.0",
-  "description": "Mycelora is a persistent memory shared by Claude, ChatGPT and your other AIs. It keeps your decisions, facts and project context organized by workspace, recalls what matters at each message, and hands each new thread the context it needs to pick up where you left off. Hosted in Paris.",
+  "version": "0.20.1",
+  "description": "Mycelora is a persistent memory shared by Claude, ChatGPT and your other AIs. It keeps your decisions, facts and project context organized by workspace, recalls what matters at each message, and hands each new thread the context it needs to pick up where you left off. Data hosted in Paris; AI processing stays in Europe.",
   "author": {
     "name": "EvidencAI",
     "email": "contact@evidencai.com",
@@ -23,7 +23,7 @@
   "interface": {
     "displayName": "Mycelora",
     "shortDescription": "One shared memory for all your AIs",
-    "longDescription": "Mycelora is a persistent memory shared by Claude, ChatGPT and your other AIs. It keeps your decisions, facts and project context organized by workspace, recalls what matters at each message, and hands each new thread the context it needs to pick up where you left off. Hosted in Paris.",
+    "longDescription": "Mycelora is a persistent memory shared by Claude, ChatGPT and your other AIs. It keeps your decisions, facts and project context organized by workspace, recalls what matters at each message, and hands each new thread the context it needs to pick up where you left off. Data hosted in Paris; AI processing stays in Europe.",
     "developerName": "EvidencAI",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],

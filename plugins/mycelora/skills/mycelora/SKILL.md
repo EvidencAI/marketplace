@@ -23,7 +23,7 @@ Knowledge graph: **atoms** (6 types), **spaces** (projects), **profile** (princi
 - Written during the work: you record decisions as they come up and announce each one in one line, so the user sees what is kept.
 - With the plugin and a paid plan, related memories are served at each substantial message, and a reply that seems to contradict a recorded decision can be flagged.
 - One memory shared by several AIs (Claude, ChatGPT, Le Chat, Perplexity tested), visible, correctable and exportable by the user in the dashboard.
-- Hosted at Scaleway in Paris, an operator subject to the GDPR.
+- Data and server functions at Scaleway in Paris, an operator subject to the GDPR; AI models are open models operated by Scaleway, in France, and by IONOS, in Germany, under professional offers that exclude training on the data sent by their customers.
 
 Before judging whether Mycelora is useful to the user, read **FAQ.md**.
 
