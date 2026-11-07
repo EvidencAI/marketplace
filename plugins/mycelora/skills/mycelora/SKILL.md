@@ -104,7 +104,7 @@ The welcome block, Dashboard link included, belongs to the explicit opening; a s
 ### Unclosed thread reported at opening
 If the opening block has a section « Unclosed thread (…) », a previous thread of the same space was left open for more than 6 hours. Before answering on the substance:
 1. Read it: `mycelora_read_memory(type:"fil", sessionId:"<orphan thread>")`.
-2. Close it like a normal thread: `mycelora_session_end(sessionId:"<orphan thread>", clotureDifferee:true, ...)`; atoms are not required.
+2. Close it like a normal thread: `mycelora_session_end(sessionId:"<orphan thread>", clotureDifferee:true, ...)`; atoms are not required, but the codex rule of step 4 applies (codex, or `codexInchange` with the reason).
 3. Tell the user in one sentence. For a long project, closing a thread with "end of thread" is still best practice.
 
 Use the orphan's identifier only for these two calls. Other lines of the section (« unclosed », « no exchange, abandoned ») are mentions: nothing to do.
@@ -126,6 +126,8 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
 3. **Codex**: draft the space's up-to-date codex now (do not send it yet; step 4 carries it in `session_end`), BEFORE the closing call. It is an update, not a rewrite: start from the existing codex, apply the thread's delta (what happened, was settled, refuted, done), keep every line that is neither contradicted nor replaced, with its date and wording. Two forms exist, see § Codex.
 4. **Handover**: first load the definition of `mycelora_session_end` and read its schema (never guess a field name). Then call `mycelora_session_end(spaceId:<the thread's space>, workSummary, decisions, pendingTasks, refutations, pieges, pointeurs, correctionsUtilisateur, nonVerifie, codex or sujets/enBref, retraits if lines are removed)`.
 
+   **A closing without codex needs a reason.** If you send neither `codex` nor `sujets`/`enBref`, the server accepts the closing only when the space's codex was already written during this thread (topic updates through `mycelora_write_memory`); otherwise it refuses and NOTHING WAS WRITTEN. When the thread truly changed nothing in the space's state, send `codexInchange: "<reason in plain words>"` instead.
+
    **`workSummary` is required and cannot be empty**: without it the server refuses the closing and writes nothing, so you can simply call again. A field that is not in the schema is ignored, and the response names it (`champsIgnores`).
 
    **`spaceId` is mandatory at closing**, even if the thread was opened with it: without it the handover has no space and the codex is not updated. Pass the uuid returned at opening.
@@ -141,7 +143,7 @@ Order: codex drafted (not sent), then closing atoms sent through `session_end_at
    - Dates in these fields are day/month, like the codex: 15/03 means 15 March, never month/day.
 
    An empty list is refused: if there is nothing to put, the justification is the entry (`["no refutation: read-only thread"]`). These fields come back at the next opening, and refutations and traps feed the codex.
-5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: any error saying NOTHING WAS WRITTEN (e.g. « Topics refused », « codex and sujets/enBref are mutually exclusive », a missing `workSummary`, an incomplete closing): fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
+5. **Verify the response.** `context_snapshot.source_listes` must be `client`. The `codex` block must carry `source:"client", accepte:true`. If the codex was refused, tell the user the `raisons`, fix the codex accordingly and resubmit through `mycelora_write_memory(type:"codex", ...)`. Never re-run `session_end` to retry: the handover is already written and the server returns it unchanged (`rejeu:true`). Exception: any error saying NOTHING WAS WRITTEN (e.g. « Topics refused », « codex and sujets/enBref are mutually exclusive », a missing `workSummary`, an incomplete closing, a closing without codex nor `codexInchange`): fix and call `session_end` again. On other failures see REFERENCE.md § Error handling.
 6. **Confirm**: "Thread closed. Handover (XXX words) and codex updated for [space]." and say whether the codex was accepted first time or resubmitted.
 
 **Thread that touched several workspaces.** One `session_end_atoms` per workspace (with that workspace's `spaceId`). ONE `session_end` only, in the main workspace: a second one is a replay without effect, so never one `session_end` per workspace. The handover feeds only on the atoms of the workspace passed to `session_end`. The codex of the main workspace goes in `session_end`; the codex of each other workspace touched goes through `mycelora_write_memory(type:"codex", spaceId:<that workspace>)`.
