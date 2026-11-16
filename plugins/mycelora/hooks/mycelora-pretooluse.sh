@@ -212,7 +212,7 @@ except Exception:
 
   if [ "${A_INTERROGER_COUNT:-0}" -gt 0 ] 2>/dev/null; then
     SPACE_ID=""
-    if [ -n "$TRANSCRIPT_PATH" ]; then
+    if [ -n "$SESSION_ID" ]; then
       SPACE_ID="$(mycelora_resolve_space_id "$SESSION_ID" "$TRANSCRIPT_PATH")"
     fi
     A_INTERROGER_JSON="$(cat "$NON_RESOLUS_FILE")"

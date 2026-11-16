@@ -75,6 +75,26 @@ TRANSCRIPT_PATH="$(printf '%s\n' "$META_OUT" | sed -n '2p')"
 PROMPT_ID="$(printf '%s\n' "$META_OUT" | sed -n '3p')"
 CWD="$(printf '%s\n' "$META_OUT" | sed -n '4p')"
 
+# Sans transcript (vide ou absent du disque) : le message a ete garde par
+# UserPromptSubmit dans /tmp/mycelora-hook-prompt-<session>-<prompt>. On ne
+# prend QUE le fichier du meme prompt_id (absent des deux cotes : meme nom).
+# Pas de repli sur un autre tour. Un lien symbolique ou un fichier qui
+# n appartient pas a l utilisateur courant est refuse. Le fichier choisi est
+# supprime sur TOUTES les sorties (CLEANUP_FILES, trap EXIT).
+KEPT_PROMPT_FILE=""
+if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
+  mycelora_purger_prompts_tmp
+  KEEP_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
+  KEEP_PROMPT="$(printf '%s' "$PROMPT_ID" | tr -cd 'A-Za-z0-9._-')"
+  if [ -n "$KEEP_SESSION" ]; then
+    CANDIDAT="/tmp/mycelora-hook-prompt-${KEEP_SESSION}-${KEEP_PROMPT}"
+    if [ -f "$CANDIDAT" ] && [ ! -L "$CANDIDAT" ] && [ -O "$CANDIDAT" ]; then
+      KEPT_PROMPT_FILE="$CANDIDAT"
+      CLEANUP_FILES+=("$KEPT_PROMPT_FILE")
+    fi
+  fi
+fi
+
 # Hook session token, read from the cache. Without a token the hook is
 # inert (first message of a thread, before the opening: normal case, never
 # a visible error).
@@ -299,7 +319,14 @@ CLEANUP_FILES+=("$LAST_USER_FILE")
 
 USER_DECISION="$(find_last_user "$TRANSCRIPT_PATH" "$LAST_USER_FILE" "$PROMPT_ID")"
 
-if [ "$USER_DECISION" != "FOUND" ]; then
+# Sans transcript : message garde par UserPromptSubmit (pas de nouvel essai).
+if [ "$USER_DECISION" != "FOUND" ] && [ -n "$KEPT_PROMPT_FILE" ] && [ -f "$KEPT_PROMPT_FILE" ]; then
+  if cat "$KEPT_PROMPT_FILE" > "$LAST_USER_FILE" 2>/dev/null; then
+    USER_DECISION="FOUND"
+  fi
+fi
+
+if [ "$USER_DECISION" != "FOUND" ] && [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
   sleep 0.4
   USER_DECISION="$(find_last_user "$TRANSCRIPT_PATH" "$LAST_USER_FILE" "$PROMPT_ID")"
 fi

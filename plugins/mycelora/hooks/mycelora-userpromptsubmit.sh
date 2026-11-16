@@ -50,6 +50,24 @@ def retirer_rappels_tete(texte):
         texte = texte[m.end():]
     return texte.lstrip()
 
+def retirer_rappels_queue(texte):
+    # Retire chaque bloc system-reminder place en queue du texte (boucle).
+    # Le bloc ne contient aucun autre system-reminder ouvrant : on ne retire
+    # jamais du texte humain situe entre deux blocs.
+    # Sans bloc en queue, le texte est rendu tel quel (saut de ligne final
+    # compris).
+    # rfind : pas de regex a retour arriere (cout lineaire sur les espaces).
+    ouv, fer = "<system-reminder>", "</system-reminder>"
+    while True:
+        fin = texte.rstrip()
+        if not fin.endswith(fer):
+            break
+        i = fin.rfind(ouv)
+        if i < 0 or i > len(fin) - len(fer):
+            break
+        texte = texte[:i].rstrip()
+    return texte
+
 try:
     with open(stdin_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -62,7 +80,7 @@ except Exception:
 prompt = data.get("prompt", "")
 if not isinstance(prompt, str):
     prompt = ""
-prompt = retirer_rappels_tete(prompt)
+prompt = retirer_rappels_queue(retirer_rappels_tete(prompt))
 session_id = data.get("session_id", "") or ""
 transcript_path = data.get("transcript_path", "") or ""
 
@@ -173,6 +191,39 @@ DECISION="$(printf '%s\n' "$EXTRACT_OUT" | sed -n '3p')"
 FIL_META="$(_mycelora_charger_fil "$SESSION_ID" "$TRANSCRIPT_PATH")"
 SESSION_LABEL="$(printf '%s\n' "$FIL_META" | sed -n '2p')"
 MYCELORA_HOOK_TOKEN="$(printf '%s\n' "$FIL_META" | sed -n '4p')"
+
+# Sans transcript (transcript_path vide ou absent du disque) : garder le
+# message nettoye pour le Stop du meme tour (il ne peut pas le relire).
+# Fichier 0600, identifiants assainis ; purge des fichiers de plus de 24 h.
+if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
+  mycelora_purger_prompts_tmp
+  if [ "$DECISION" = "OK" ]; then
+    KEEP_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
+    KEEP_PROMPT="$(printf '%s' "$(python3 -c 'import json,sys
+try:
+    print(json.load(open(sys.argv[1])).get("prompt_id","") or "")
+except Exception:
+    print("")' "$STDIN_FILE")" | tr -cd 'A-Za-z0-9._-')"
+    if [ -n "$KEEP_SESSION" ]; then
+      # Temporaire mktemp (0600, nom aleatoire) puis os.replace : jamais d ecriture
+      # sur un nom previsible. os.replace (rename) remplace un fichier ou un lien
+      # symbolique SANS le suivre et ECHOUE si la cible est un dossier ; mv -f, lui,
+      # deposait le fichier DANS un dossier (ou un lien vers un dossier) pre-cree
+      # par un tiers. En cas d echec : rien n est garde, le temporaire est supprime.
+      KEEP_TMP="$(mktemp /tmp/mycelora-hook-prompt-tmp.XXXXXX 2>/dev/null)" || KEEP_TMP=""
+      if [ -n "$KEEP_TMP" ]; then
+        if cat "$PROMPT_FILE" > "$KEEP_TMP" 2>/dev/null \
+          && python3 -c 'import os, sys
+os.replace(sys.argv[1], sys.argv[2])' "$KEEP_TMP" "/tmp/mycelora-hook-prompt-${KEEP_SESSION}-${KEEP_PROMPT}" 2>/dev/null; then
+          :
+        else
+          rm -f "$KEEP_TMP"
+        fi
+      fi
+    fi
+  fi
+fi
+
 if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
   if [ "${MYCELORA_OUVERTURE_AUTO:-1}" != "0" ] \
     && [ "$DECISION" = "OK" ] \
@@ -180,7 +231,7 @@ if [ -z "${MYCELORA_HOOK_TOKEN:-}" ]; then
     OUVERTURE_SESSION="$(printf '%s' "$SESSION_ID" | tr -cd 'A-Za-z0-9._-')"
     if [ -n "$OUVERTURE_SESSION" ]; then
       OUVERTURE_MARQUEUR="/tmp/mycelora-ouverture-${OUVERTURE_SESSION}"
-      find /tmp -maxdepth 1 -name 'mycelora-ouverture-*' -type f -mmin +1440 -delete 2>/dev/null || true
+      find /tmp/ -maxdepth 1 -name 'mycelora-ouverture-*' -type f -mmin +1440 -delete 2>/dev/null || true
       # noclobber: the creation fails if the marker already exists.
       if [ ! -e "$OUVERTURE_MARQUEUR" ] && ( set -C; : > "$OUVERTURE_MARQUEUR" ) 2>/dev/null; then
         mycelora_log "userpromptsubmit" "auth" 0 "consigne-ouverture" 0
