@@ -91,6 +91,54 @@ mycelora_log() {
 # Format : {"v":3,"offset":<int>,"spaceId":"","sessionLabel":"","customTitle":"","hookToken":"","attenteJeton":[]}
 # (attenteJeton est optionnel a la lecture)
 
+# Bloc python PARTAGE (regex et extracteurs du jeton et du fil), une seule
+# definition : charge par exec() dans le heredoc de _mycelora_charger_fil ET
+# dans celui de mycelora_capturer_ouverture. Pas d apostrophe dans ce bloc.
+_MYCELORA_PY_EXTRACTION='import re
+
+
+# The hook session token travels in the TEXT of the opening summary returned
+# by mycelora_session_start (the tool_result), on a dedicated line. PURE
+# function.
+_RE_JETON = re.compile(r"^\[jeton-hook-session[^\]]*\][ \t]+(mk_sess_[A-Za-z0-9_-]+)[ \t]*$", re.MULTILINE)
+
+
+def extraire_jeton(texte, premier=False):
+    """str -> str | None. Dernier match si plusieurs lignes candidates dans
+    le meme texte (rare, mais coherent avec « le dernier vu gagne »).
+    premier=True : le PREMIER match (reponse d un outil : le serveur place
+    le jeton en tete du bloc)."""
+    if not isinstance(texte, str):
+        return None
+    matches = _RE_JETON.findall(texte)
+    if not matches:
+        return None
+    return matches[0] if premier else matches[-1]
+
+
+# The server stamps the sessionId sent to mycelora_session_start itself and
+# announces the FINAL identifier on the "Fil : ..." line of the opening
+# summary (tool_result). That identifier, not the one of the call, signs the
+# handover at closing. Reading sessionLabel from input.sessionId of the
+# call made the alias (session_aliases.session_label) diverge from the
+# handover, which broke the batch / report matching this field must make
+# exact. Same form as extraire_jeton: pure function, dedicated line, last
+# seen wins, nothing spanning two lines.
+_RE_FIL = re.compile(r"^Fil[ \t]*:[ \t]+([A-Za-z0-9._-]+)(?:[ \t]|$)", re.MULTILINE)
+
+
+def extraire_fil(texte, premier=False):
+    """str -> str | None. Identifiant de fil rendu par le serveur sur la
+    ligne « Fil : <id> ... » du brief de l ouverture ; dernier match si
+    plusieurs, ou le premier avec premier=True."""
+    if not isinstance(texte, str):
+        return None
+    matches = _RE_FIL.findall(texte)
+    if not matches:
+        return None
+    return matches[0] if premier else matches[-1]
+'
+
 # _mycelora_charger_fil <session_id> <transcript_path>
 # Rend QUATRE lignes sur stdout, dans cet ordre, chacune eventuellement vide :
 #   spaceId / sessionLabel / customTitle / hookToken
@@ -102,7 +150,7 @@ _mycelora_charger_fil() {
     cache_file="/tmp/mycelora-hook-${session_id}.json"
   fi
 
-  python3 - "$cache_file" "$transcript_path" <<'PYEOF'
+  MYCELORA_PY_EXTRACTION="$_MYCELORA_PY_EXTRACTION" python3 - "$cache_file" "$transcript_path" <<'PYEOF'
 import json, os, re, sys
 
 cache_path, transcript_path = sys.argv[1], sys.argv[2]
@@ -140,40 +188,7 @@ def propre(valeur):
     return " ".join(valeur.split()).strip()
 
 
-# The hook session token travels in the TEXT of the opening summary returned
-# by mycelora_session_start (the tool_result), on a dedicated line. PURE
-# function.
-_RE_JETON = re.compile(r"^\[jeton-hook-session[^\]]*\][ \t]+(mk_sess_[A-Za-z0-9_-]+)[ \t]*$", re.MULTILINE)
-
-
-def extraire_jeton(texte):
-    """str -> str | None. Dernier match si plusieurs lignes candidates dans
-    le meme texte (rare, mais coherent avec 'le dernier vu gagne')."""
-    if not isinstance(texte, str):
-        return None
-    matches = _RE_JETON.findall(texte)
-    return matches[-1] if matches else None
-
-
-# The server stamps the sessionId sent to mycelora_session_start itself and
-# announces the FINAL identifier on the "Fil : ..." line of the opening
-# summary (tool_result). That identifier, not the one of the call, signs the
-# handover at closing. Reading sessionLabel from input.sessionId of the
-# call made the alias (session_aliases.session_label) diverge from the
-# handover, which broke the batch / report matching this field must make
-# exact. Same form as extraire_jeton: pure function, dedicated line, last
-# seen wins, nothing spanning two lines.
-_RE_FIL = re.compile(r"^Fil[ \t]*:[ \t]+([A-Za-z0-9._-]+)(?:[ \t]|$)", re.MULTILINE)
-
-
-def extraire_fil(texte):
-    """str -> str | None. Identifiant de fil rendu par le serveur sur la
-    ligne « Fil : <id> ... » du brief d'ouverture ; dernier match si
-    plusieurs."""
-    if not isinstance(texte, str):
-        return None
-    matches = _RE_FIL.findall(texte)
-    return matches[-1] if matches else None
+exec(os.environ["MYCELORA_PY_EXTRACTION"])
 
 
 modifie = False
@@ -405,6 +420,121 @@ print(etat.get("hookToken", "") or "")
 PYEOF
 }
 
+# mycelora_purger_prompts_tmp : supprime les fichiers prompt gardes depuis
+# plus de 24 h (/tmp est un lien sous macOS : find /tmp/).
+mycelora_purger_prompts_tmp() {
+  find /tmp/ -maxdepth 1 -name 'mycelora-hook-prompt-*' -type f -mmin +1440 -delete 2>/dev/null || true
+}
+
+# mycelora_capturer_ouverture <session_id> <stdin_file>
+# Sans transcript (conteneur Claude Code recent : transcript_path vide), le
+# cache du fil n'est plus rempli par la lecture du transcript. Cette fonction
+# le remplit depuis l'entree d'un hook PostToolUse de mycelora_session_start :
+# hookToken, sessionLabel, spaceId (le dernier gagne). Elle RELIT le cache
+# existant et CONSERVE offset, customTitle, attenteJeton ; ecriture 0600 par
+# fichier temporaire au nom unique puis os.replace. Controle obligatoire sur la
+# cle racine tool_name. Forme de reponse inconnue ou sans jeton ni ligne
+# « Fil : » : rien n'est ecrit (le jeton en cache n'est jamais ecrase).
+# Ne leve jamais, n'ecrit jamais sur stdout ni stderr.
+mycelora_capturer_ouverture() {
+  local session_id="$1" stdin_file="$2"
+  [ -n "$session_id" ] || return 0
+  [ -f "$stdin_file" ] || return 0
+  MYCELORA_PY_EXTRACTION="$_MYCELORA_PY_EXTRACTION" python3 - "/tmp/mycelora-hook-${session_id}.json" "$stdin_file" <<'PYEOF' 2>/dev/null || true
+import json, os, sys
+
+try:
+    exec(os.environ["MYCELORA_PY_EXTRACTION"])
+    cache_path, stdin_path = sys.argv[1], sys.argv[2]
+    with open(stdin_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise SystemExit(0)
+    nom = data.get("tool_name")
+    if not (isinstance(nom, str) and nom.endswith("mycelora_session_start")):
+        raise SystemExit(0)
+
+    def blocs_texte(liste):
+        morceaux = []
+        for b in liste:
+            if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str):
+                morceaux.append(b["text"])
+        return "\n".join(morceaux) if morceaux else None
+
+    rep = data.get("tool_response")
+    texte = None
+    if isinstance(rep, str):
+        texte = rep
+    elif isinstance(rep, list):
+        texte = blocs_texte(rep)
+    elif isinstance(rep, dict):
+        c = rep.get("content")
+        if isinstance(c, str):
+            texte = c
+        elif isinstance(c, list):
+            texte = blocs_texte(c)
+    if texte is None:
+        raise SystemExit(0)
+
+    # Serveur : si mcp_server est present, son nom doit contenir mycelora.
+    if "mcp_server" in data:
+        srv = data.get("mcp_server")
+        if isinstance(srv, dict):
+            srv = srv.get("name")
+        if not (isinstance(srv, str) and "mycelora" in srv.lower()):
+            raise SystemExit(0)
+
+    jeton = extraire_jeton(texte, premier=True)
+    fil = extraire_fil(texte, premier=True)
+    if not jeton and not fil:
+        raise SystemExit(0)
+
+    entree = data.get("tool_input")
+    if not isinstance(entree, dict):
+        entree = {}
+
+    etat = {"v": 3, "offset": 0, "spaceId": "", "sessionLabel": "", "customTitle": "", "hookToken": "", "attenteJeton": []}
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                ancien = json.load(f)
+            if isinstance(ancien, dict) and ancien.get("v") == 3:
+                for cle in ("offset", "spaceId", "sessionLabel", "customTitle", "hookToken", "attenteJeton"):
+                    if cle in ancien:
+                        etat[cle] = ancien[cle]
+        except Exception:
+            pass
+
+    sid = entree.get("spaceId")
+    if isinstance(sid, str) and sid.strip():
+        etat["spaceId"] = sid
+    label = entree.get("sessionId")
+    if isinstance(label, str) and " ".join(label.split()):
+        etat["sessionLabel"] = " ".join(label.split())
+    if fil:
+        etat["sessionLabel"] = fil
+    if jeton:
+        etat["hookToken"] = jeton
+
+    import tempfile
+    tmp_path = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(prefix="mycelora-hook-tmp-", dir=os.path.dirname(cache_path) or ".")
+        with os.fdopen(fd, "w") as f:
+            json.dump(etat, f)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        try:
+            if tmp_path:
+                os.remove(tmp_path)
+        except Exception:
+            pass
+except BaseException:
+    pass
+PYEOF
+}
+
 # mycelora_resolve_space_id <session_id> <transcript_path>
 # Affiche le spaceId resolu sur stdout (chaine vide si inconnu).
 # Contrat de sortie INCHANGE depuis la v1 : une seule ligne.
@@ -528,7 +658,7 @@ mycelora_reflexe_desarme() {
 # marqueur (contrat figé : "purge des marqueurs de plus de 24h au demarrage
 # du hook").
 mycelora_purge_markers_anciens() {
-  find /tmp -maxdepth 1 -name 'mycelora-impact-*' -type f -mmin +1440 -delete 2>/dev/null || true
+  find /tmp/ -maxdepth 1 -name 'mycelora-impact-*' -type f -mmin +1440 -delete 2>/dev/null || true
 }
 
 # mycelora_reflexe_log <session_id> <evt> <outil> <objets_json_array> <empreinte> <rapport_vide 0|1> [carte_age_jours]

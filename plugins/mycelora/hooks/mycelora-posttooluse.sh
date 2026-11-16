@@ -42,6 +42,15 @@ TOOL_NAME="$(grep -o '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' "$STDIN_FILE"
 # d'une commande (jalon niveau 1), vide pour Edit/Write/MultiEdit (niveau 2)
 # et pour tout le reste, qui sort ici. Le journal des reflexes recoit
 # l'etiquette courte, jamais le nom MCP complet.
+# Capture de l'ouverture du fil sans transcript : garde bash grossiere, puis
+# controle exact de tool_name en python (common.sh). Tout autre outil garde le
+# chemin rapide sans python.
+case "$TOOL_NAME" in
+  *mycelora_session_start*)
+    CAPTURE_SID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('session_id','') if isinstance(d,dict) and isinstance(d.get('session_id'),str) else '')" "$STDIN_FILE" 2>/dev/null || echo '')"
+    mycelora_capturer_ouverture "$CAPTURE_SID" "$STDIN_FILE"
+    ;;
+esac
 OUTIL="$(mycelora_outil_commande "$TOOL_NAME")"
 case "$TOOL_NAME" in
   Edit|Write|MultiEdit) ;;
@@ -157,7 +166,7 @@ except Exception:
 
     if [ "${A_INTERROGER_COUNT:-0}" -gt 0 ] 2>/dev/null; then
       SPACE_ID=""
-      if [ -n "$TRANSCRIPT_PATH" ]; then
+      if [ -n "$SESSION_ID" ]; then
         SPACE_ID="$(mycelora_resolve_space_id "$SESSION_ID" "$TRANSCRIPT_PATH")"
       fi
       A_INTERROGER_JSON="$(cat "$NON_RESOLUS_FILE")"
@@ -201,7 +210,7 @@ else
     if [ -n "$EDGE_NOM" ] && [ "$EDGE_NOM" != "$FILE_PATH" ]; then
       OBJETS_JSON="$(python3 -c "import json,sys; print(json.dumps([sys.argv[1]]))" "$EDGE_NOM")"
       SPACE_ID=""
-      if [ -n "$TRANSCRIPT_PATH" ]; then
+      if [ -n "$SESSION_ID" ]; then
         SPACE_ID="$(mycelora_resolve_space_id "$SESSION_ID" "$TRANSCRIPT_PATH")"
       fi
       LOOKUP_CFGFILE="$(mktemp /tmp/mycelora-hook-post-lookup-cfg.XXXXXX)"
